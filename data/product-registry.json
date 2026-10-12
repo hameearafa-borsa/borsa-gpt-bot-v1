@@ -1,0 +1,34 @@
+{
+  "version": 2,
+  "status": "source-seeded",
+  "commercial_rule": "package_sale_price_is_primary",
+  "notes": [
+    "الأوزان قد تتغير بمرور الوقت ولا تغيّر هوية المنتج التاريخية.",
+    "العروض ذات الوزن الزائد تحفظ كنسخة/عرض مستقل.",
+    "سعر بيع العبوة هو المؤشر التجاري الأساسي؛ سعر الكيلو/الوحدة مشتق.",
+    "لا تُثبت علاقة شركة/علامة إلا إذا دعمتها القوائم أو مصدر موثوق لاحقًا."
+  ],
+  "brands": [
+    {"key":"arial","name_ar":"أريال","aliases":["اريال","أريال"]},
+    {"key":"tide","name_ar":"تايد","aliases":["تايد"]},
+    {"key":"bonux","name_ar":"بونكس","aliases":["بونكس"]},
+    {"key":"oxy","name_ar":"أوكسي","aliases":["اوكسى","اوكسى","أوكسي"]},
+    {"key":"jawy","name_ar":"جوي","aliases":["جوي"]},
+    {"key":"bricks","name_ar":"بريكس","aliases":["بريكس","بريكس منظفات"]},
+    {"key":"pearl","name_ar":"بيرل","aliases":["بيرل"]},
+    {"key":"leader","name_ar":"ليدر","aliases":["LEADER","ليدر"]}
+  ],
+  "families": [
+    {"brand_key":"oxy","key":"oxy-powder","name_ar":"أوكسي مسحوق","aliases":["مسحوق أوكسي"]},
+    {"brand_key":"oxy","key":"oxy-liquid","name_ar":"أوكسي سائل","aliases":["سائل أوكسي"]},
+    {"brand_key":"oxy","key":"oxy-dish-capsules","name_ar":"أوكسي كبسولات أطباق","aliases":["كبسولات أطباق أوكسي"]},
+    {"brand_key":"oxy","key":"oxy-gel","name_ar":"أوكسي جيل","aliases":["جيل أوكسي"]},
+    {"brand_key":"bricks","key":"bricks-surfaces","name_ar":"بريكس متعدد الأسطح","aliases":["بريكس منظف أسطح"]},
+    {"brand_key":"bricks","key":"bricks-floors","name_ar":"بريكس أرضيات","aliases":["بريكس ارضيات"]},
+    {"brand_key":"bricks","key":"bricks-bathrooms","name_ar":"بريكس حمامات","aliases":["بريكس منظف حمامات"]},
+    {"brand_key":"bricks","key":"bricks-stain-remover","name_ar":"بريكس مزيل بقع","aliases":["مزيل بقع بريكس"]},
+    {"brand_key":"bricks","key":"bricks-chlorine","name_ar":"بريكس كلور","aliases":["بريكس كلور أبيض","بريكس كلور ألوان"]},
+    {"brand_key":"jawy","key":"jawy-soap","name_ar":"جوي صابون","aliases":["جوي صابون"]},
+    {"brand_key":"jawy","key":"jawy-handwash","name_ar":"جوي هاند ووش","aliases":["جوي هاند ووش"]}
+  ]
+}

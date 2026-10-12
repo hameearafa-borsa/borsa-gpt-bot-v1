@@ -1,0 +1,14 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { privatePanelKeyboard, panelText, actionKeyboard } = require("../modules/admin-panel");
+const keyboard = privatePanelKeyboard();
+const labels = keyboard.inline_keyboard.flat().map(x => x.text);
+const callbacks = keyboard.inline_keyboard.flat().map(x => x.callback_data);
+assert.ok(labels.includes("🧪 المساعد الكيميائي"));
+assert.ok(labels.includes("🌐 اختبار مصدر العروض"));
+assert.ok(labels.includes("📄 آخر تقارير الأخطاء"));
+assert.ok(callbacks.every(x => /^panel:[a-z_]+$/.test(x)));
+assert.ok(!JSON.stringify(keyboard).includes("https://"));
+assert.match(panelText("1.0.0-rc1", ["openai"]), /مدعوم بتقنيات ChatGPT/);
+assert.equal(actionKeyboard().inline_keyboard[0][0].callback_data, "panel:home");
+console.log("private admin panel keyboard tests: OK");

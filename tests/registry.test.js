@@ -1,0 +1,11 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { resolve } = require("../core/product-registry");
+const registry = require("../data/product-registry.json");
+const a = resolve("بريكس ارضيات ٢٥ جم", registry);
+assert.equal(a.matched, true);
+assert.equal(a.brand.key, "bricks");
+assert.equal(a.family.key, "bricks-floors");
+const b = resolve("منتج غير معروف 2 كيلو", registry);
+assert.equal(b.matched, false);
+console.log("registry tests: OK");

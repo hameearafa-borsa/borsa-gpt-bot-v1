@@ -2,6 +2,7 @@
 
 const { validateDeal } = require("./deals");
 const { normalizeArabic, toAsciiDigits } = require("../core/normalization");
+const { redactString } = require("../core/diagnostics");
 
 const SOURCES = Object.freeze({
   amazon: { host: "www.amazon.eg", base: "https://www.amazon.eg/s?k=" },
@@ -76,7 +77,7 @@ async function fetchSearch(sourceName, query, { timeoutMs = 25000, fetchImpl = g
     if (!response.ok) return { source: sourceName, ok: false, reason: `http_${response.status}`, deals: [] };
     const html = await response.text();
     return { source: sourceName, ok: true, deals: extractCards(html, sourceName, query) };
-  } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: error.message, deals: [] }; }
+  } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
   finally { clearTimeout(timer); }
 }
 async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], fetchImpl } = {}) {

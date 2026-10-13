@@ -1,5 +1,5 @@
 "use strict";
-const { log } = require("./diagnostics");
+const { log, redactString } = require("./diagnostics");
 const { normalizeArabic } = require("./normalization");
 
 function deterministicType(input) {
@@ -25,8 +25,8 @@ function createGPTCore({ ai, registry, diagnostics = log }) {
       diagnostics({ module: "gpt-core", stage: "classify", status: "ok", input, details: { type, provider: result?.provider }, durationMs: Date.now() - started, ...context });
       return { type, confidence: 0.75, method: "ai", raw: result };
     } catch (error) {
-      diagnostics({ module: "gpt-core", stage: "classify", severity: "error", status: "failed", input, details: { error: error.message }, durationMs: Date.now() - started, ...context });
-      return { type: "other", confidence: 0, method: "fallback", error };
+      diagnostics({ module: "gpt-core", stage: "classify", severity: "error", status: "failed", input, details: { error: redactString(error?.message || "AI classification failed") }, durationMs: Date.now() - started, ...context });
+      return { type: "other", confidence: 0, method: "fallback", error: { name: redactString(error?.name || "Error"), message: redactString(error?.message || "AI classification failed") } };
     }
   }
   return { classify, registry };

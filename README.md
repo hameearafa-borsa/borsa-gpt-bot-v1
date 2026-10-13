@@ -1,4 +1,4 @@
-# Borsa GPT Bot V1 — Release Candidate 1
+# Borsa GBT Bot V1 Mona Lisa — Release Candidate 1
 
 **الحالة: مرشح اختبار داخلي (RC1)، ليس جاهزًا للنشر بعد.** لا ترفع هذه الحزمة إلى Railway قبل إكمال قائمة الفجوات أدناه.
 

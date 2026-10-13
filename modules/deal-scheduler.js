@@ -1,7 +1,7 @@
 "use strict";
 const { collectDealCandidates } = require("./deal-sources");
 const { filterRecentDeals, distributeDeals } = require("./deal-publication");
-const { dealFingerprint, validateDeal } = require("./deals");
+const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
 
 function cairoParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
@@ -38,10 +38,10 @@ async function persistDeals(pool, deals) {
   let saved = 0;
   for (const d of deals) {
     const valid = validateDeal(d); if (!valid.ok) continue;
-    await pool.query(`INSERT INTO deal_observations(merchant,title,url,category,price,old_price,discount_pct,fingerprint,observed_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW())
-      ON CONFLICT(fingerprint) DO UPDATE SET observed_at=NOW(), price=EXCLUDED.price, old_price=EXCLUDED.old_price, discount_pct=EXCLUDED.discount_pct`,
-      [d.merchant,d.title,d.url,d.category,d.price,d.old_price || null,d.discount_pct || 0,dealFingerprint(d)]);
+    await pool.query(`INSERT INTO deal_observations(merchant,title,url,category,price,old_price,discount_pct,fingerprint,product_fingerprint,observed_at)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
+      ON CONFLICT(fingerprint) DO UPDATE SET observed_at=NOW(), price=EXCLUDED.price, old_price=EXCLUDED.old_price, discount_pct=EXCLUDED.discount_pct, product_fingerprint=EXCLUDED.product_fingerprint`,
+      [d.merchant,d.title,d.url,d.category,d.price,d.old_price || null,d.discount_pct || 0,dealFingerprint(d),dealProductFingerprint(d)]);
     saved++;
   }
   return saved;

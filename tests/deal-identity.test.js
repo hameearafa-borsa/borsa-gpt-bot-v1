@@ -1,0 +1,21 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { dealFingerprint, dealProductFingerprint, validateDeal, isRecentDuplicate } = require("../modules/deals");
+const { filterRecentDeals } = require("../modules/deal-publication");
+const base = { merchant: "Amazon", title: "مسحوق بيرل 2 كجم", url: "https://www.amazon.eg/dp/B012345678", price: 100, old_price: 120, discount_pct: 17, category: "detergent" };
+assert.equal(validateDeal(base).ok, true);
+assert.notEqual(dealFingerprint(base), dealFingerprint({ ...base, price: 95 }), "price observation fingerprint changes with price");
+assert.equal(dealProductFingerprint(base), dealProductFingerprint({ ...base, price: 95, old_price: 110, discount_pct: 14 }), "same retailer product remains same product across price changes");
+assert.notEqual(dealProductFingerprint(base), dealProductFingerprint({ ...base, url: "https://www.amazon.eg/dp/B012345679" }), "different retailer product IDs must remain distinct");
+assert.notEqual(dealProductFingerprint(base), dealProductFingerprint({ ...base, title: "مسحوق بيرل 5 كجم", url: "https://www.amazon.eg/dp/B012345679" }), "different pack sizes must remain distinct");
+(async () => {
+  let args;
+  const pool = { query: async (_sql, values) => { args = values; return { rowCount: 1, rows: [{}] }; } };
+  assert.equal(await isRecentDuplicate(pool, "deal-fp", 7, "product-fp"), true);
+  assert.deepEqual(args, ["deal-fp", "product-fp", 7]);
+  let calls = 0;
+  const fakePool = { query: async () => ({ rowCount: calls++ === 0 ? 1 : 0, rows: [] }) };
+  const deals = await filterRecentDeals(fakePool, [base, { ...base, title: "عرض جديد", url: "https://www.amazon.eg/dp/B098765432" }], 7);
+  assert.equal(deals.length, 1, "recent product identity is excluded while a distinct product remains");
+  console.log("deal product identity + weekly duplicate tests: OK");
+})().catch(error => { console.error(error); process.exit(1); });

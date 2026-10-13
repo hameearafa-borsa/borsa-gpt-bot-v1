@@ -1,6 +1,7 @@
 "use strict";
 
 const { Pool } = require("pg");
+const { redactString } = require("./diagnostics");
 
 const url = String(process.env.DATABASE_URL || "").trim();
 const hasDatabase = Boolean(url);
@@ -19,7 +20,7 @@ const pool = hasDatabase
 
 if (pool) {
   pool.on("error", (err) => {
-    console.error("[DB_POOL_ERROR]", err?.stack || err);
+    console.error("[DB_POOL_ERROR]", redactString(err?.stack || err?.message || "database_pool_error"));
   });
 }
 

@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { buildChemicalLinks, validChemicalLinks, renderChemicalLinks } = require("../core/links");
-const { makeReport, formatReport, safeValue } = require("../core/diagnostics");
+const { makeReport, formatReport, safeValue, redactString } = require("../core/diagnostics");
 const links = buildChemicalLinks("صابون سائل ٢ لتر");
 assert.ok(validChemicalLinks(links));
 assert.match(links.google, /%D8/);

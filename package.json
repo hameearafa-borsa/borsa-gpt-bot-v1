@@ -1,7 +1,7 @@
 {
   "name": "borsa-gpt-bot-v1",
   "version": "1.0.0-rc1",
-  "description": "Borsa GPT Bot V1 — GPT Core, price intelligence, merchant intelligence, chemical assistant, and diagnostics",
+  "description": "Borsa GBT Bot V1 Mona Lisa — GPT Core, price intelligence, merchant intelligence, chemical assistant, and diagnostics",
   "main": "index.js",
   "scripts": {
     "start": "node index.js",

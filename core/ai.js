@@ -1,4 +1,5 @@
 "use strict";
+const { redactString } = require("./diagnostics");
 
 const https = require("node:https");
 
@@ -19,7 +20,7 @@ function requestJson(url, body, headers = {}) {
         let parsed = null;
         try { parsed = JSON.parse(data); } catch {}
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(parsed || {});
-        reject(new Error(`AI HTTP ${res.statusCode}: ${String(data).slice(0, 500)}`));
+        reject(new Error(`AI HTTP ${res.statusCode}: ${redactString(parsed?.error?.code || parsed?.error?.type || "provider_error")}`));
       });
     });
     req.on("timeout", () => req.destroy(new Error("AI timeout")));
@@ -84,7 +85,7 @@ function createAI() {
     let last;
     for (const p of providers) {
       try { return await p.run(prompt, options); }
-      catch (e) { last = e; console.warn(`[AI_FAIL] ${p.name}: ${e.message}`); }
+      catch (e) { last = e; console.warn(`[AI_FAIL] ${p.name}: ${redactString(e?.message || "provider_error")}`); }
     }
     throw last || new Error("لا يوجد مزود AI مضبوط");
   }

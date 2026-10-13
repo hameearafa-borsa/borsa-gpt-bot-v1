@@ -32,8 +32,8 @@ async function filterRecentDeals(pool, deals, days = 7) {
   for (const deal of deals) {
     const check = validateDeal(deal);
     if (!check.ok) continue;
-    if (await isRecentDuplicate(pool, check.fingerprint, days)) continue;
-    output.push({ ...deal, fingerprint: check.fingerprint, score: scoreDeal(deal) });
+    if (await isRecentDuplicate(pool, check.fingerprint, days, check.productFingerprint)) continue;
+    output.push({ ...deal, fingerprint: check.fingerprint, product_fingerprint: check.productFingerprint, score: scoreDeal(deal) });
   }
   return output;
 }

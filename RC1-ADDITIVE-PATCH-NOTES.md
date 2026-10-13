@@ -1,4 +1,4 @@
-# Borsa GPT Bot V1 — RC1 additive completion notes
+# Borsa GBT Bot V1 Mona Lisa — RC1 additive completion notes
 
 ## Preservation rule
 This patch was applied to the supplied `Borsa-GPT-Bot-V1-RC1.zip` working copy. Existing project files were not deleted. The old source files used for reference are preserved under `legacy/reference/` and are not loaded into the runtime.
@@ -49,3 +49,12 @@ The attempt to create a fresh `package-lock.json` using `npm install --package-l
 ## Still-open release gates
 - A new root `package-lock.json` is still not generated. The npm registry request timed out again in the lab; the legacy lockfile was not copied and no placeholder lockfile was fabricated. Generate the real RC1 lock in the network-enabled Node/npm environment, then require `npm ci` and the full test suite to pass.
 - The ScraperAPI button can perform a real source request once a valid `SCRAPER_API_KEY` is set in the runtime. This environment has no user key, so live source access remains unverified here.
+
+## Follow-up review patch — product identity and weekly duplicate suppression
+- Added `dealProductFingerprint()` to separate stable product identity from the price/discount observation fingerprint.
+- Weekly filtering now checks both the exact observation fingerprint and the stable product fingerprint.
+- Retailer IDs are preferred for supported Amazon Egypt, Jumia Egypt, and Noon URL patterns. If no recognized ID exists, the conservative fallback uses merchant/host, normalized title, and category; pack/size wording in the title is retained.
+- Added additive migration `005_deal_product_identity.sql` with nullable `product_fingerprint` and a recent-observation index; added it to the startup migration list.
+- Added `tests/deal-identity.test.js` covering price changes, distinct retailer product IDs, pack-size distinction, and weekly filtering behavior.
+- Validation: `npm run check` passed; full `npm test` passed, including the new deal identity tests.
+- Limitations: this remains deterministic product matching, not proof that every retailer URL exposes a stable product ID. Existing historical rows have a NULL `product_fingerprint` until the same offer is observed and persisted again; their original exact-fingerprint deduplication remains active. No live database or Telegram test was run.

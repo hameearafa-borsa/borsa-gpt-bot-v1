@@ -8,7 +8,7 @@ const { createGPTCore } = require("./core/gpt-core");
 const { loadRegistry } = require("./core/product-registry");
 const { claimMessage, isBotMessage, isLogChat } = require("./core/message-gate");
 const { cacheMessage, getMessageByRef } = require("./core/message-cache");
-const { log, makeReport, emitReport } = require("./core/diagnostics");
+const { log, makeReport, emitReport, redactString } = require("./core/diagnostics");
 const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
 const { canManage, isMaster } = require("./core/permissions");
@@ -42,6 +42,9 @@ const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
 const core = createGPTCore({ ai, registry, diagnostics: log });
 let botUserId = null;
+let stopScheduledMessages = () => {};
+let stopDeals = () => {};
+let shutdownPromise = null;
 
 function messageData(ctx) {
   const m = ctx.message || ctx.editedMessage || ctx.channelPost || ctx.callbackQuery?.message;
@@ -142,7 +145,7 @@ async function configureCommandMenus() {
 
 async function ensureDb() {
   if (!db.pool) return;
-  const files = ["migrations/000_legacy_compat.sql", "migrations/001_core.sql", "migrations/002_operational.sql", "migrations/003_message_cache.sql", "migrations/004_legacy_services.sql"];
+  const files = ["migrations/000_legacy_compat.sql", "migrations/001_core.sql", "migrations/002_operational.sql", "migrations/003_message_cache.sql", "migrations/004_legacy_services.sql", "migrations/005_deal_product_identity.sql"];
   const fs = require("node:fs");
   const path = require("node:path");
   for (const file of files) {
@@ -155,10 +158,10 @@ bot.use(async (ctx, next) => {
   const m = messageData(ctx);
   if (!m.chatId || isLogChat(m.chatId)) return;
   const isMessageUpdate = Boolean(ctx.message || ctx.editedMessage || ctx.channelPost);
-  if (isMessageUpdate && m.messageId) await cacheMessage(db.pool, m).catch(e => console.warn("[CACHE_FAIL]", e.message));
+  if (isMessageUpdate && m.messageId) await cacheMessage(db.pool, m).catch(e => console.warn("[CACHE_FAIL]", redactString(e?.message || "cache_error")));
   if (isMessageUpdate && m.messageId && !(await claimMessage(db.pool, { chatId: m.chatId, messageId: m.messageId, updateType: ctx.updateType }))) return;
   if (["group", "supergroup"].includes(m.chatType) && m.userId && !isBotMessage(ctx, botUserId)) {
-    legacyAdmin.recordActivity(db.pool, { chatId: m.chatId, userId: m.userId, username: ctx.from?.username, displayName: [ctx.from?.first_name,ctx.from?.last_name].filter(Boolean).join(" ") }).catch(e => console.warn("[ACTIVITY_TRACK_FAIL]", e.message));
+    legacyAdmin.recordActivity(db.pool, { chatId: m.chatId, userId: m.userId, username: ctx.from?.username, displayName: [ctx.from?.first_name,ctx.from?.last_name].filter(Boolean).join(" ") }).catch(e => console.warn("[ACTIVITY_TRACK_FAIL]", redactString(e?.message || "activity_track_error")));
   }
   // Legacy protection is additive and audit-first. Destructive enforcement is opt-in.
   if (["group", "supergroup"].includes(m.chatType) && m.text && !/^\s*\//.test(m.text) && !isBotMessage(ctx, botUserId)) {
@@ -202,7 +205,7 @@ bot.on("my_chat_member", async ctx => {
   const allowed = isMaster(actor) || actorIsCreator;
   if (!allowed) {
     await sendLog({ module: "security", stage: "unauthorized_add", severity: "warn", status: "rejected", details: { chatId: chat.id, actor, chatType: chat.type } });
-    try { await ctx.telegram.leaveChat(chat.id); } catch (e) { console.warn("[LEAVE_FAIL]", e.message); }
+    try { await ctx.telegram.leaveChat(chat.id); } catch (e) { console.warn("[LEAVE_FAIL]", redactString(e?.message || "leave_error")); }
     return;
   }
   await authorizeChat(chat.id, chat.type, creatorId || actor);
@@ -437,15 +440,15 @@ process.on("uncaughtException", async err => {
   const me = await bot.telegram.getMe();
   botUserId = me.id;
   await configureCommandMenus().catch(error => sendLog({ module: "security", stage: "command_menu_setup", severity: "warn", status: "failed", details: { code: error.code || null, message: error.message } }));
-  console.log(`Borsa GPT Bot V1 ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
+  console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
   console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
   await scheduler.ensureSchedulerSchema(db.pool);
-  scheduler.startScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, job) => {
+  stopScheduledMessages = scheduler.startScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, job) => {
     const report = makeReport({ module: "scheduler", stage: "dispatch_due", severity: "ERROR", action: "scheduled_message", error, details: { jobId: job?.id, chatId: job?.chat_id }, chatId: job?.chat_id });
     await emitReport({ bot, db, report });
   } });
   if (process.env.DEALS_CHAT_ID) {
-    startDealScheduler({ pool: db.pool, telegram: bot.telegram, chatId: Number(process.env.DEALS_CHAT_ID), onError: async (error, details) => {
+    stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, chatId: Number(process.env.DEALS_CHAT_ID), onError: async (error, details) => {
       const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
       await emitReport({ bot, db, report });
     } });
@@ -453,7 +456,19 @@ process.on("uncaughtException", async err => {
     console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
   }
   await bot.launch({ dropPendingUpdates: false });
-})().catch(err => { console.error("STARTUP_FAILED", err?.stack || err); process.exit(1); });
+})().catch(err => { console.error("STARTUP_FAILED", redactString(err?.stack || err?.message || "startup_error")); process.exit(1); });
 
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+async function shutdown(signal) {
+  if (shutdownPromise) return shutdownPromise;
+  shutdownPromise = (async () => {
+    console.log(`[SHUTDOWN] ${signal}: stopping schedulers and closing connections`);
+    try { stopScheduledMessages(); } catch (error) { console.error("[SHUTDOWN_SCHEDULER_ERROR]", error?.message || error); }
+    try { stopDeals(); } catch (error) { console.error("[SHUTDOWN_DEALS_ERROR]", error?.message || error); }
+    try { bot.stop(signal); } catch (error) { console.error("[SHUTDOWN_BOT_ERROR]", error?.message || error); }
+    try { await db.close(); } catch (error) { console.error("[SHUTDOWN_DATABASE_ERROR]", error?.message || error); process.exitCode = 1; }
+  })();
+  return shutdownPromise;
+}
+
+process.once("SIGINT", () => { void shutdown("SIGINT"); });
+process.once("SIGTERM", () => { void shutdown("SIGTERM"); });

@@ -12,7 +12,7 @@ const ROWS = [
 
 function privatePanelKeyboard() { return { inline_keyboard: ROWS.map(row => row.map(button => ({ ...button }))) }; }
 function panelText(version, providers = []) {
-  return `🛡️ لوحة Borsa GPT Bot V1 — ${version}\n\nاختر الخدمة. هذه اللوحة خاصة ولا تُرسل أزرارها إلى المجموعة.\nمحركات الذكاء المضبوطة: ${providers.length ? providers.join("، ") : "لا يوجد مزود مضبوط"}\n\n${"مدعوم بتقنيات ChatGPT"}`;
+  return `🛡️ لوحة Borsa GBT Bot V1 Mona Lisa — ${version}\n\nاختر الخدمة. هذه اللوحة خاصة ولا تُرسل أزرارها إلى المجموعة.\nمحركات الذكاء المضبوطة: ${providers.length ? providers.join("، ") : "لا يوجد مزود مضبوط"}\n\n${"مدعوم بتقنيات ChatGPT"}`;
 }
 function actionKeyboard() { return { inline_keyboard: [[{ text: "⬅️ القائمة الرئيسية", callback_data: "panel:home" }]] }; }
 module.exports = { privatePanelKeyboard, panelText, actionKeyboard };

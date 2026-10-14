@@ -1,106 +1,41 @@
-"use strict";
-const { redactString } = require("./diagnostics");
+const { GoogleGenAI } = require('@google/genai');
 
-const https = require("node:https");
+const apiKey = process.env.GEMINI_API_KEY;
+const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const DEFAULT_MODEL = 'gemini-1.5-flash';
 
-function requestJson(url, body, headers = {}) {
-  return new Promise((resolve, reject) => {
-    const u = new URL(url);
-    const req = https.request({
-      hostname: u.hostname,
-      path: u.pathname + u.search,
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      timeout: Number(process.env.AI_TIMEOUT_MS || 20000),
-    }, res => {
-      let data = "";
-      res.setEncoding("utf8");
-      res.on("data", c => { data += c; });
-      res.on("end", () => {
-        let parsed = null;
-        try { parsed = JSON.parse(data); } catch {}
-        if (res.statusCode >= 200 && res.statusCode < 300) return resolve(parsed || {});
-        reject(new Error(formatProviderError(res.statusCode, parsed?.error)));
-      });
+async function generateAIResponse(prompt, systemInstruction = '', modelName = DEFAULT_MODEL) {
+  if (!ai) {
+    throw new Error('GEMINI_API_KEY is not configured in environment variables.');
+  }
+
+  try {
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents: prompt,
+      config: {
+        systemInstruction: systemInstruction || 'أنت مساعد ذكي لإدارة وتنسيق بورصة المنظفات ومساعدة أصحاب المحلات.',
+        temperature: 0.7,
+      }
     });
-    req.on("timeout", () => req.destroy(new Error("AI timeout")));
-    req.on("error", reject);
-    req.write(JSON.stringify(body));
-    req.end();
-  });
-}
 
-
-function formatProviderError(statusCode, providerError) {
-  const error = providerError && typeof providerError === "object" ? providerError : {};
-  const clean = (value, fallback, max) => redactString(String(value || fallback).replace(/\s+/g, " ").slice(0, max));
-  const code = clean(error.code, "unknown", 100);
-  const type = clean(error.type, "unknown", 100);
-  const param = clean(error.param, "unknown", 100);
-  const message = clean(error.message, "No provider error message supplied", 350);
-  return `AI HTTP ${Number(statusCode)}: code=${code}; type=${type}; param=${param}; message=${message}`;
-}
-
-function openAIProvider(key, model) {
-  return async (prompt, options = {}) => {
-    const data = await requestJson("https://api.openai.com/v1/responses", {
-      model: model || "gpt-6-luna",
-      temperature: options.temperature ?? 0,
-      instructions: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية. أخرج المطلوب بدقة وبالعربية عند الحاجة.",
-      input: String(prompt || "")
-    }, { authorization: `Bearer ${key}` });
-    const text = data.output_text || (data.output || []).flatMap(item => item.content || []).filter(part => part.type === "output_text").map(part => part.text || "").join("");
-    return { text, provider: "openai", model: model || "gpt-6-luna" };
-  };
-}
-
-function xaiProvider(key, model) {
-  return async (prompt, options = {}) => {
-    const data = await requestJson("https://api.x.ai/v1/chat/completions", {
-      model: model || "grok-4.7",
-      temperature: options.temperature ?? 0,
-      messages: [{ role: "system", content: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية." }, { role: "user", content: prompt }]
-    }, { authorization: `Bearer ${key}` });
-    return { text: data.choices?.[0]?.message?.content || "", provider: "xai", model };
-  };
-}
-
-function geminiProvider(key, model) {
-  return async (prompt, options = {}) => {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model || "gemini-2.5-flash")}:generateContent?key=${encodeURIComponent(key)}`;
-    const data = await requestJson(endpoint, {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: options.temperature ?? 0 }
-    });
-    return { text: data.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("") || "", provider: "gemini", model };
-  };
-}
-
-function providersFromEnv() {
-  const out = [];
-  for (const keyName of ["OPENAI_API_KEY", "OPENAI_API_KEY_2"]) {
-    if (process.env[keyName]) out.push({ name: keyName, run: openAIProvider(process.env[keyName], process.env.OPENAI_MODEL || "gpt-6-luna") });
-  }
-  for (const [keyName, modelName] of [["XAI_API_KEY","XAI_MODEL"],["XAI_API_KEY_2","XAI_MODEL"]]) {
-    if (process.env[keyName]) out.push({ name: keyName, run: xaiProvider(process.env[keyName], process.env[modelName] || "grok-4.7") });
-  }
-  for (const keyName of ["GEMINI_API_KEY_1","GEMINI_API_KEY_2","GEMINI_API_KEY_3"]) {
-    if (process.env[keyName]) out.push({ name: keyName, run: geminiProvider(process.env[keyName], process.env.GEMINI_MODEL || "gemini-2.5-flash") });
-  }
-  return out;
-}
-
-function createAI() {
-  const providers = providersFromEnv();
-  async function generate(prompt, options = {}) {
-    let last;
-    for (const p of providers) {
-      try { return await p.run(prompt, options); }
-      catch (e) { last = e; console.warn(`[AI_FAIL] ${p.name}: ${redactString(e?.message || "provider_error")}`); }
+    if (!response || !response.text) {
+      throw new Error('Received empty response from Gemini API.');
     }
-    throw last || new Error("لا يوجد مزود AI مضبوط");
+
+    return response.text();
+  } catch (error) {
+    console.error('[AI Error]: Failed to generate content from Gemini API:', error.message);
+    throw error;
   }
-  return { generate, providers: providers.map(x => x.name) };
 }
 
-module.exports = { createAI, providersFromEnv, formatProviderError };
+async function parseMerchantData(messageText) {
+  const systemPrompt = `استخرج بيانات التاجر أو المنتجات من النص التالي بدقة وأرجعها بصيغة JSON تحتوي على الحقول المناسبة (اسم المحل، السلع، الأسعار، الملاحظات). إذا لم تجد بيانات واضحة أرجع كائن فارغ.`;
+  return await generateAIResponse(messageText, systemPrompt);
+}
+
+module.exports = {
+  generateAIResponse,
+  parseMerchantData
+};

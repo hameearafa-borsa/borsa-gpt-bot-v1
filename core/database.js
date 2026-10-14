@@ -1,52 +1,25 @@
-"use strict";
+const { Pool } = require('pg');
 
-const { Pool } = require("pg");
-const { redactString } = require("./diagnostics");
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+});
 
-const url = String(process.env.DATABASE_URL || "").trim();
-const hasDatabase = Boolean(url);
+pool.on('error', (err, client) => {
+  console.error('[Database Error]: Unexpected error on idle PostgreSQL client', err);
+});
 
-const pool = hasDatabase
-  ? new Pool({
-      connectionString: url,
-      ssl: /localhost|127\.0\.0\.1/.test(url) ? false : { rejectUnauthorized: false },
-      max: Number(process.env.DB_POOL_MAX || 8),
-      idleTimeoutMillis: 30_000,
-      connectionTimeoutMillis: 10_000,
-      keepAlive: true,
-      keepAliveInitialDelayMillis: 10_000,
-    })
-  : null;
-
-if (pool) {
-  pool.on("error", (err) => {
-    console.error("[DB_POOL_ERROR]", redactString(err?.stack || err?.message || "database_pool_error"));
-  });
-}
-
-async function query(sql, params = []) {
-  if (!pool) throw new Error("DATABASE_URL غير مضبوط");
-  return pool.query(sql, params);
-}
-
-async function withTransaction(fn) {
-  if (!pool) throw new Error("DATABASE_URL غير مضبوط");
-  const client = await pool.connect();
+async function query(text, params) {
   try {
-    await client.query("BEGIN");
-    const result = await fn(client);
-    await client.query("COMMIT");
-    return result;
-  } catch (err) {
-    try { await client.query("ROLLBACK"); } catch {}
-    throw err;
-  } finally {
-    client.release();
+    const res = await pool.query(text, params);
+    return res;
+  } catch (error) {
+    console.error('[Database Query Error]:', { text, error: error.message });
+    throw error;
   }
 }
 
-async function close() {
-  if (pool) await pool.end();
-}
-
-module.exports = { pool, hasDatabase, query, withTransaction, close };
+module.exports = {
+  query,
+  pool
+};

@@ -149,7 +149,7 @@ async function ensureDb() {
   const fs = require("node:fs");
   const path = require("node:path");
   for (const file of files) {
-    const sql = fs.readFileSync(path.join(__dirname, file), "utf8");
+    const sql = fs.readFileSync(path?.join(__dirname, file), "utf8");
     await db.query(sql);
   }
 }
@@ -161,7 +161,7 @@ bot.use(async (ctx, next) => {
   if (isMessageUpdate && m.messageId) await cacheMessage(db.pool, m).catch(e => console.warn("[CACHE_FAIL]", redactString(e?.message || "cache_error")));
   if (isMessageUpdate && m.messageId && !(await claimMessage(db.pool, { chatId: m.chatId, messageId: m.messageId, updateType: ctx.updateType }))) return;
   if (["group", "supergroup"].includes(m.chatType) && m.userId && !isBotMessage(ctx, botUserId)) {
-    legacyAdmin.recordActivity(db.pool, { chatId: m.chatId, userId: m.userId, username: ctx.from?.username, displayName: [ctx.from?.first_name,ctx.from?.last_name].filter(Boolean).join(" ") }).catch(e => console.warn("[ACTIVITY_TRACK_FAIL]", redactString(e?.message || "activity_track_error")));
+    legacyAdmin.recordActivity(db.pool, { chatId: m.chatId, userId: m.userId, username: ctx.from?.username, displayName: [ctx.from?.first_name,ctx.from?.last_name].filter(Boolean)?.join(" ") }).catch(e => console.warn("[ACTIVITY_TRACK_FAIL]", redactString(e?.message || "activity_track_error")));
   }
   // Legacy protection is additive and audit-first. Destructive enforcement is opt-in.
   if (["group", "supergroup"].includes(m.chatType) && m.text && !/^\s*\//.test(m.text) && !isBotMessage(ctx, botUserId)) {
@@ -172,7 +172,7 @@ bot.use(async (ctx, next) => {
       if (opts.anti_spam_enabled) {
         const result = protection.inspectMessage({ text: m.text, caption: m.caption, isForward: Boolean(ctx.message?.forward_origin || ctx.message?.forward_from || ctx.message?.forward_from_chat), trustedForward: false }, { maxLinks: opts.block_excessive_links ? opts.max_links : 999, maxLength: opts.max_message_length, blockUntrustedForwards: opts.block_untrusted_forwards });
         if (!result.allowed) {
-          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, process.env.PROTECTION_ENFORCE === "true" ? "delete_attempt" : "flagged", result.reasons.join(","), JSON.stringify({ length: result.length, linkCount: result.linkCount })]).catch(() => {});
+          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, process.env.PROTECTION_ENFORCE === "true" ? "delete_attempt" : "flagged", result.reasons?.join(","), JSON.stringify({ length: result.length, linkCount: result.linkCount })]).catch(() => {});
           await sendLog({ module: "protection", stage: "message_flagged", severity: "warn", status: process.env.PROTECTION_ENFORCE === "true" ? "enforce_requested" : "audit_only", details: { chatId: m.chatId, messageId: m.messageId, userId: m.userId, reasons: result.reasons } });
           if (process.env.PROTECTION_ENFORCE === "true" && m.messageId) {
             try { await ctx.telegram.deleteMessage(m.chatId, m.messageId); } catch (e) { await sendLog({ module: "protection", stage: "delete_message", severity: "error", status: "failed", details: { code: e.code, message: e.message } }); }
@@ -223,7 +223,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
   if (action === "health") {
     let dbState = "غير متاح";
     try { await db.query("SELECT 1"); dbState = "متصل"; } catch (e) { dbState = `فشل (${String(e.code || e.message).slice(0,80)})`; }
-    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || []).join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nDEALS_CHAT_ID: ${process.env.DEALS_CHAT_ID ? "مضبوط" : "غير مضبوط"}\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
+    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || [])?.join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nDEALS_CHAT_ID: ${process.env.DEALS_CHAT_ID ? "مضبوط" : "غير مضبوط"}\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
     await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
   if (action === "scraper_test") {
@@ -236,7 +236,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
   }
   if (action === "diagnostics") {
     const r = await db.query("SELECT ts,module,stage,severity,status,details FROM diagnostic_events ORDER BY ts DESC LIMIT 8").catch(() => ({ rows: [] }));
-    const body = r.rows.length ? r.rows.map((x,i)=>`${i+1}. ${new Date(x.ts).toLocaleString("ar-EG")} — ${x.severity}/${x.module}/${x.stage} — ${x.status}`).join("\n") : "لا توجد تقارير محفوظة أو تعذر قراءة جدول التشخيص.";
+    const body = r.rows.length ? r.rows.map((x,i)=>`${i+1}. ${new Date(x.ts).toLocaleString("ar-EG")} — ${x.severity}/${x.module}/${x.stage} — ${x.status}`)?.join("\n") : "لا توجد تقارير محفوظة أو تعذر قراءة جدول التشخيص.";
     await ctx.editMessageText(`📄 آخر تقارير الأخطاء\n${body}\n\nللحصول على التقرير الكامل، راجع قناة السجلات باستخدام Report ID.`, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
   if (action === "reports") {
@@ -249,7 +249,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
     ];
     const lines=[];
     for (const [label,sql] of checks) { try { const q=await db.query(sql); lines.push(`${label}: ${q.rows[0]?.n ?? 0}`); } catch { lines.push(`${label}: الجدول/الاستعلام غير متاح في هذا المخطط`); } }
-    await ctx.editMessageText(`📊 ملخص التقارير\n${lines.join("\n")}\n\nالأعداد وصفية حسب السجلات الموجودة ولا تعني أن جميع مصادر البيانات الحية تعمل.`, { reply_markup: adminPanel.actionKeyboard() }); return;
+    await ctx.editMessageText(`📊 ملخص التقارير\n${lines?.join("\n")}\n\nالأعداد وصفية حسب السجلات الموجودة ولا تعني أن جميع مصادر البيانات الحية تعمل.`, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
   const guides = {
     chemical: "🧪 المساعد الكيميائي\nأرسل سؤالك هنا في الخاص، أو اكتب /مساعد متبوعًا بالسؤال. سيولّد البوت إجابة وروابط بحث آمنة؛ التركيبات الخطرة تخضع لبوابة السلامة.",
@@ -317,7 +317,7 @@ bot.on("text", async ctx => {
     const question = args || "اكتب سؤالك الكيميائي بوضوح.";
     const answer = await chemical.answer(ai, question);
     const links = buildChemicalLinks(question);
-    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean).join("\n\n"), { disable_web_page_preview: true });
+    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean)?.join("\n\n"), { disable_web_page_preview: true });
     return;
   }
 
@@ -363,7 +363,7 @@ bot.on("text", async ctx => {
     if (cmd === "inactive") {
       const days = Number(args) || 30;
       const rows = await legacyAdmin.listInactive(db.pool, m.chatId, days, 20);
-      const body = rows.length ? rows.map((r,i)=>`${i+1}. ${r.display_name || r.username || r.user_id} — ${r.inactive_days} يوم — ${r.message_count} رسالة`).join("\n") : "لا توجد بيانات أعضاء مسجلة خاملة لهذه المدة. التقرير يعتمد على الأعضاء الذين رصد البوت نشاطهم منذ تفعيل التتبع، وليس تعدادًا كاملًا لأعضاء تيليجرام.";
+      const body = rows.length ? rows.map((r,i)=>`${i+1}. ${r.display_name || r.username || r.user_id} — ${r.inactive_days} يوم — ${r.message_count} رسالة`)?.join("\n") : "لا توجد بيانات أعضاء مسجلة خاملة لهذه المدة. التقرير يعتمد على الأعضاء الذين رصد البوت نشاطهم منذ تفعيل التتبع، وليس تعدادًا كاملًا لأعضاء تيليجرام.";
       await ctx.reply(`📊 تقرير النشاط (أكثر من ${Math.max(1,Math.min(365,days))} يوم):\n${body}`);
       return;
     }
@@ -376,7 +376,7 @@ bot.on("text", async ctx => {
       await ctx.reply(`⚠️ تم تسجيل الإنذار رقم ${result.id} للعضو ${targetUserId}.\nالإنذارات النشطة: ${result.count}\n${result.count >= 3 ? "وصل العضو إلى 3 إنذارات؛ راجع الحالة قبل أي إجراء تقييدي." : ""}`);
     } else if (cmd === "warnings") {
       const rows = await legacyAdmin.listWarnings(db.pool, m.chatId, targetUserId);
-      await ctx.reply(rows.length ? `⚠️ إنذارات العضو ${targetUserId}:\n${rows.map(r=>`#${r.id} — ${r.reason} — ${new Date(r.created_at).toLocaleString("ar-EG")}`).join("\n")}` : `لا توجد إنذارات نشطة للعضو ${targetUserId}.`);
+      await ctx.reply(rows.length ? `⚠️ إنذارات العضو ${targetUserId}:\n${rows.map(r=>`#${r.id} — ${r.reason} — ${new Date(r.created_at).toLocaleString("ar-EG")}`)?.join("\n")}` : `لا توجد إنذارات نشطة للعضو ${targetUserId}.`);
     } else {
       const count = await legacyAdmin.clearWarnings(db.pool, { chatId: m.chatId, userId: targetUserId, clearedBy: m.userId });
       await ctx.reply(`تم إغلاق ${count} إنذارًا للعضو ${targetUserId}.`);
@@ -390,7 +390,7 @@ bot.on("text", async ctx => {
   if (m.chatType === "private" && /(كلور|مطهر|تركيبه|مادة|خلط|pH|حمض|قلوي)/i.test(text)) {
     const answer = await chemical.answer(ai, text);
     const links = buildChemicalLinks(text);
-    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean).join("\n\n"), { disable_web_page_preview: true });
+    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean)?.join("\n\n"), { disable_web_page_preview: true });
     return;
   }
 
@@ -401,7 +401,7 @@ bot.on("text", async ctx => {
   if (phone && /(سعر|جنيه|ج\s|مسحوق|جيل|منظف|تاجر|محل)/i.test(text)) {
     try {
       const saved = await saveMerchant(db.pool, {
-        name: [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(" ") || "تاجر غير مسمى",
+        name: [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean)?.join(" ") || "تاجر غير مسمى",
         activity: "مرصد أسعار",
         location: "غير محدد",
         phone,
@@ -441,7 +441,7 @@ process.on("uncaughtException", async err => {
   botUserId = me.id;
   await configureCommandMenus().catch(error => sendLog({ module: "security", stage: "command_menu_setup", severity: "warn", status: "failed", details: { code: error.code || null, message: error.message } }));
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
-  console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
+  console.log(`AI providers configured: ${ai.providers?.join(", ") || "none"}`);
   await scheduler.ensureSchedulerSchema(db.pool);
   stopScheduledMessages = scheduler.startScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, job) => {
     const report = makeReport({ module: "scheduler", stage: "dispatch_due", severity: "ERROR", action: "scheduled_message", error, details: { jobId: job?.id, chatId: job?.chat_id }, chatId: job?.chat_id });

@@ -1,16 +1,16 @@
 const { GoogleGenAI } = require('@google/genai');
 
 const apiKey = process.env.GEMINI_API_KEY;
-const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
+const aiClient = apiKey ? new GoogleGenAI({ apiKey }) : null;
 const DEFAULT_MODEL = 'gemini-1.5-flash';
 
 async function generateAIResponse(prompt, systemInstruction = '', modelName = DEFAULT_MODEL) {
-  if (!ai) {
+  if (!aiClient) {
     throw new Error('GEMINI_API_KEY is not configured in environment variables.');
   }
 
   try {
-    const response = await ai.models.generateContent({
+    const response = await aiClient.models.generateContent({
       model: modelName,
       contents: prompt,
       config: {
@@ -35,17 +35,24 @@ async function parseMerchantData(messageText) {
   return await generateAIResponse(messageText, systemPrompt);
 }
 
-// إضافة الدالة createAI لتتوافق مع ما يستدعيه index.js
+// دالة generate المتوافقة مع gpt-core.js
+async function generate(prompt, systemInstruction, modelName) {
+  return await generateAIResponse(prompt, systemInstruction, modelName);
+}
+
+// مصنع الكائن لتلبية كافة المتطلبات
 function createAI() {
   return {
+    generate,
     generateAIResponse,
     parseMerchantData,
-    ai
+    aiClient
   };
 }
 
 module.exports = {
   createAI,
+  generate,
   generateAIResponse,
   parseMerchantData
 };

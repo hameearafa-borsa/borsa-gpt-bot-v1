@@ -101,12 +101,12 @@ async function canControl(ctx, m = messageData(ctx)) {
 
 async function showPrivatePanel(ctx, edit = false) {
   if (ctx.chat?.type !== "private" || !(await isPrivateController(ctx.from?.id))) {
-    if (ctx.answerCbQuery) await ctx.answerCbQuery("هذه اللوحة خاصة بالمالك فقط.", { show_alert: true }).catch(() => {});
+    if (ctx.callbackQuery && ctx.answerCbQuery) await ctx.answerCbQuery("هذه اللوحة خاصة بالمالك فقط.", { show_alert: true }).catch(() => {});
     return false;
   }
   const text = adminPanel.panelText(APP_VERSION, ai.providers || []);
   const extra = { reply_markup: adminPanel.privatePanelKeyboard(), disable_web_page_preview: true };
-  if (ctx.answerCbQuery) await ctx.answerCbQuery().catch(() => {});
+  if (ctx.callbackQuery && ctx.answerCbQuery) await ctx.answerCbQuery().catch(() => {});
   if (edit && ctx.editMessageText) {
     try { await ctx.editMessageText(text, extra); return true; } catch {}
   }

@@ -20,7 +20,7 @@ function requestJson(url, body, headers = {}) {
         let parsed = null;
         try { parsed = JSON.parse(data); } catch {}
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(parsed || {});
-        reject(new Error(`AI HTTP ${res.statusCode}: ${redactString(parsed?.error?.code || parsed?.error?.type || "provider_error")}`));
+        reject(new Error(formatProviderError(res.statusCode, parsed?.error)));
       });
     });
     req.on("timeout", () => req.destroy(new Error("AI timeout")));
@@ -28,6 +28,17 @@ function requestJson(url, body, headers = {}) {
     req.write(JSON.stringify(body));
     req.end();
   });
+}
+
+
+function formatProviderError(statusCode, providerError) {
+  const error = providerError && typeof providerError === "object" ? providerError : {};
+  const clean = (value, fallback, max) => redactString(String(value || fallback).replace(/\s+/g, " ").slice(0, max));
+  const code = clean(error.code, "unknown", 100);
+  const type = clean(error.type, "unknown", 100);
+  const param = clean(error.param, "unknown", 100);
+  const message = clean(error.message, "No provider error message supplied", 350);
+  return `AI HTTP ${Number(statusCode)}: code=${code}; type=${type}; param=${param}; message=${message}`;
 }
 
 function openAIProvider(key, model) {
@@ -92,4 +103,4 @@ function createAI() {
   return { generate, providers: providers.map(x => x.name) };
 }
 
-module.exports = { createAI, providersFromEnv };
+module.exports = { createAI, providersFromEnv, formatProviderError };

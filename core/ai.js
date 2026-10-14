@@ -35,7 +35,17 @@ async function parseMerchantData(messageText) {
   return await generateAIResponse(messageText, systemPrompt);
 }
 
+// إضافة الدالة createAI لتتوافق مع ما يستدعيه index.js
+function createAI() {
+  return {
+    generateAIResponse,
+    parseMerchantData,
+    ai
+  };
+}
+
 module.exports = {
+  createAI,
   generateAIResponse,
   parseMerchantData
 };

@@ -46,6 +46,8 @@ async function persistDeals(pool, deals) {
   }
   return saved;
 }
+let throttleStorageFailureReported = false;
+
 async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
   if (!pool || !telegram || !chatId) return { skipped: true, reason: "database_telegram_or_deals_chat_missing" };
   if (!isNewsletterWindow(now)) return { skipped: true, reason: "before_17_cairo" };
@@ -76,7 +78,14 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
       );
       shouldNotify = Boolean(notice.rows[0]?.should_notify);
     } catch (error) {
-      await onError(error, { stage: "error_notification_throttle", errorKey });
+      // Fail closed: if durable throttling is unavailable, do not emit the
+      // no-deals alert every scheduler tick. Report the storage failure once
+      // per process so operators can repair the migration/database issue.
+      shouldNotify = false;
+      if (!throttleStorageFailureReported) {
+        throttleStorageFailureReported = true;
+        await onError(error, { stage: "error_notification_throttle", errorKey });
+      }
     }
     if (shouldNotify) {
       await onError(new Error("No validated deal candidates; newsletter not published"), {

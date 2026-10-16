@@ -381,6 +381,10 @@ bot.on("text", async ctx => {
   }
 
   if (cmd === "settings" || cmd === "admin") {
+    if (m.chatType === "private") {
+      await showPrivatePanel(ctx, false);
+      return;
+    }
     if (!(await canControl(ctx, m))) return;
     const chatId = m.chatId;
     const settings = await db.query("SELECT * FROM moderation_settings WHERE chat_id=$1", [chatId]).catch(() => ({ rows: [] }));

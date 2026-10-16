@@ -1,6 +1,7 @@
 "use strict";
 
 const MAX_BATCH = 25;
+const { nextDailyOccurrence } = require("../core/cairo-time");
 
 async function ensureSchedulerSchema(pool) {
   if (!pool) throw new Error("scheduler requires PostgreSQL");
@@ -36,21 +37,43 @@ async function listScheduledMessages(pool, chatId) {
 }
 
 async function dispatchDue(pool, telegram, { onError = () => {} } = {}) {
-  if (!pool || !telegram) return { checked: 0, sent: 0, failed: 0 };
-  const due = await pool.query(`SELECT * FROM scheduled_messages WHERE enabled=TRUE AND run_at <= NOW() ORDER BY run_at LIMIT $1`, [MAX_BATCH]);
-  let sent = 0, failed = 0;
-  for (const job of due.rows) {
-    try {
-      await telegram.sendMessage(job.chat_id, job.message_text, { disable_web_page_preview: true });
-      if (job.schedule_kind === "daily") {
-        await pool.query(`UPDATE scheduled_messages SET last_sent_at=NOW(), run_at=run_at + INTERVAL '1 day' WHERE id=$1 AND enabled=TRUE`, [job.id]);
-      } else {
-        await pool.query(`UPDATE scheduled_messages SET enabled=FALSE,last_sent_at=NOW() WHERE id=$1`, [job.id]);
-      }
-      sent++;
-    } catch (error) { failed++; await onError(error, job); }
+  if (!pool || !telegram) return { checked: 0, sent: 0, failed: 0, skipped: false };
+
+  // A session-level advisory lock prevents two replicas from dispatching the same
+  // due rows concurrently. Keep the lock on one dedicated connection for the
+  // entire select/send/update cycle. This reduces duplicates but cannot provide
+  // exactly-once delivery if the process crashes after Telegram accepts a send
+  // and before PostgreSQL records it.
+  const client = typeof pool.connect === "function" ? await pool.connect() : pool;
+  let lockAcquired = false;
+  try {
+    if (typeof pool.connect === "function") {
+      const lock = await client.query("SELECT pg_try_advisory_lock($1, $2) AS locked", [731942, 1]);
+      lockAcquired = lock.rows?.[0]?.locked === true;
+      if (!lockAcquired) return { checked: 0, sent: 0, failed: 0, skipped: true, reason: "scheduler_lock_busy" };
+    }
+    const due = await client.query(`SELECT * FROM scheduled_messages WHERE enabled=TRUE AND run_at <= NOW() ORDER BY run_at LIMIT $1`, [MAX_BATCH]);
+    let sent = 0, failed = 0;
+    for (const job of due.rows) {
+      try {
+        await telegram.sendMessage(job.chat_id, job.message_text, { disable_web_page_preview: true });
+        if (job.schedule_kind === "daily") {
+          const nextRunAt = nextDailyOccurrence(job.run_at, job.timezone || "Africa/Cairo");
+          await client.query(`UPDATE scheduled_messages SET last_sent_at=NOW(), run_at=$2 WHERE id=$1 AND enabled=TRUE`, [job.id, nextRunAt.toISOString()]);
+        } else {
+          await client.query(`UPDATE scheduled_messages SET enabled=FALSE,last_sent_at=NOW() WHERE id=$1`, [job.id]);
+        }
+        sent++;
+      } catch (error) { failed++; await onError(error, job); }
+    }
+    return { checked: due.rowCount, sent, failed, skipped: false };
+  } finally {
+    if (lockAcquired) {
+      try { await client.query("SELECT pg_advisory_unlock($1, $2)", [731942, 1]); }
+      catch (error) { await onError(error, null); }
+    }
+    if (client !== pool) client.release();
   }
-  return { checked: due.rowCount, sent, failed };
 }
 
 function startScheduler({ pool, telegram, onError = () => {}, intervalMs = 30_000 }) {

@@ -1,0 +1,12 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const source = fs.readFileSync(require.resolve("../index.js"), "utf8");
+assert.match(source, /"my_chat_member"/);
+assert.match(source, /"chat_member"/);
+assert.match(source, /\[GROUP_RECOGNIZED\]/);
+assert.match(source, /await bot\.telegram\.setWebhook\(webhookConfig\.url,\s*\{/);
+assert.match(source, /createWebhookServer\(bot, webhookConfig\)/);
+assert.doesNotMatch(source, /await bot\.launch\(/);
+assert.match(source, /cmd === "claim" && \["group", "supergroup"\]/);
+console.log("GROUP DISCOVERY STATIC TESTS: OK");

@@ -2,14 +2,18 @@
 require("dotenv").config();
 
 const { Telegraf } = require("telegraf");
+const { createWebhookServer, getWebhookConfig } = require("./core/webhook");
 const { createAI } = require("./core/ai");
 const db = require("./core/database");
+const { runMigrations } = require("./core/migrations");
 const { createGPTCore } = require("./core/gpt-core");
 const { loadRegistry } = require("./core/product-registry");
 const { claimMessage, isBotMessage, isLogChat } = require("./core/message-gate");
 const { cacheMessage, getMessageByRef } = require("./core/message-cache");
 const { log, makeReport, emitReport, redactString } = require("./core/diagnostics");
 const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
+const { formatTelegramStartupError } = require("./core/telegram-startup-error");
+const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
 const { canManage, isMaster } = require("./core/permissions");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
@@ -19,6 +23,7 @@ const chemical = require("./modules/chemical-assistant");
 const deals = require("./modules/deals");
 const protection = require("./modules/protection");
 const scheduler = require("./modules/scheduler");
+const { parseLocalDateTime } = require("./core/cairo-time");
 const weather = require("./modules/weather");
 const { startDealScheduler } = require("./modules/deal-scheduler");
 const legacyAdmin = require("./modules/legacy-admin");
@@ -38,6 +43,14 @@ if (!process.env.DATABASE_URL) {
   process.exit(1);
 }
 
+let webhookConfig;
+try {
+  webhookConfig = getWebhookConfig(process.env);
+} catch (error) {
+  console.error(`[WEBHOOK_CONFIG_INVALID] ${error.message}`);
+  process.exit(1);
+}
+
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
 const core = createGPTCore({ ai, registry, diagnostics: log });
@@ -45,6 +58,9 @@ let botUserId = null;
 let stopScheduledMessages = () => {};
 let stopDeals = () => {};
 let shutdownPromise = null;
+let shutdownRequested = false;
+let startupPhase = true;
+let webhookServer = null;
 
 function messageData(ctx) {
   const m = ctx.message || ctx.editedMessage || ctx.channelPost || ctx.callbackQuery?.message;
@@ -55,7 +71,7 @@ function messageData(ctx) {
     userId: ctx.callbackQuery?.from?.id || m?.from?.id,
     text: m?.text || "",
     caption: m?.caption || "",
-    messageType: m?.photo ? "photo" : m?.document ? "document" : "text",
+    messageType: m?.photo ? "photo" : m?.video ? "video" : m?.document ? "document" : "text",
   };
 }
 
@@ -117,6 +133,7 @@ async function showPrivatePanel(ctx, edit = false) {
 async function configureCommandMenus() {
   const commands = [
     { command: "panel", description: "لوحة التحكم الخاصة" },
+    { command: "claim", description: "ربط المجموعة بواسطة منشئها" },
     { command: "settings", description: "إعدادات المجموعة" },
     { command: "antispam", description: "إعدادات مانع الإزعاج" },
     { command: "schedule", description: "جدولة رسالة" },
@@ -144,14 +161,8 @@ async function configureCommandMenus() {
 }
 
 async function ensureDb() {
-  if (!db.pool) return;
-  const files = ["migrations/000_legacy_compat.sql", "migrations/001_core.sql", "migrations/002_operational.sql", "migrations/003_message_cache.sql", "migrations/004_legacy_services.sql", "migrations/005_deal_product_identity.sql"];
-  const fs = require("node:fs");
-  const path = require("node:path");
-  for (const file of files) {
-    const sql = fs.readFileSync(path?.join(__dirname, file), "utf8");
-    await db.query(sql);
-  }
+  if (!db.pool) throw new Error("DATABASE_URL غير مضبوط؛ لا يمكن تطبيق ترحيلات قاعدة البيانات بأمان");
+  return runMigrations({ db, rootDir: __dirname });
 }
 
 bot.use(async (ctx, next) => {
@@ -161,18 +172,45 @@ bot.use(async (ctx, next) => {
   if (isMessageUpdate && m.messageId) await cacheMessage(db.pool, m).catch(e => console.warn("[CACHE_FAIL]", redactString(e?.message || "cache_error")));
   if (isMessageUpdate && m.messageId && !(await claimMessage(db.pool, { chatId: m.chatId, messageId: m.messageId, updateType: ctx.updateType }))) return;
   if (["group", "supergroup"].includes(m.chatType) && m.userId && !isBotMessage(ctx, botUserId)) {
-    legacyAdmin.recordActivity(db.pool, { chatId: m.chatId, userId: m.userId, username: ctx.from?.username, displayName: [ctx.from?.first_name,ctx.from?.last_name].filter(Boolean)?.join(" ") }).catch(e => console.warn("[ACTIVITY_TRACK_FAIL]", redactString(e?.message || "activity_track_error")));
+    legacyAdmin.recordActivity(db.pool, { chatId: m.chatId, userId: m.userId, username: ctx.from?.username, displayName: [ctx.from?.first_name,ctx.from?.last_name].filter(Boolean).join(" ") }).catch(e => console.warn("[ACTIVITY_TRACK_FAIL]", redactString(e?.message || "activity_track_error")));
   }
   // Legacy protection is additive and audit-first. Destructive enforcement is opt-in.
-  if (["group", "supergroup"].includes(m.chatType) && m.text && !/^\s*\//.test(m.text) && !isBotMessage(ctx, botUserId)) {
+  if (["group", "supergroup"].includes(m.chatType) && (m.text || m.caption) && !/^\s*\//.test(m.text || "") && !isBotMessage(ctx, botUserId)) {
     try {
       let opts = { anti_spam_enabled: true, block_excessive_links: true, max_links: 5, max_message_length: 5000, block_untrusted_forwards: false };
       const setting = await db.query("SELECT * FROM moderation_settings WHERE chat_id=$1", [m.chatId]).catch(() => ({ rows: [] }));
       if (setting.rows[0]) opts = { ...opts, ...setting.rows[0] };
       if (opts.anti_spam_enabled) {
-        const result = protection.inspectMessage({ text: m.text, caption: m.caption, isForward: Boolean(ctx.message?.forward_origin || ctx.message?.forward_from || ctx.message?.forward_from_chat), trustedForward: false }, { maxLinks: opts.block_excessive_links ? opts.max_links : 999, maxLength: opts.max_message_length, blockUntrustedForwards: opts.block_untrusted_forwards });
+        const rateInput = { chatId: m.chatId, userId: m.userId, messageId: m.messageId, limit: Number(process.env.PROTECTION_RATE_LIMIT || 5), windowMs: Number(process.env.PROTECTION_RATE_WINDOW_MS || 60_000) };
+        const rate = db.pool && m.messageId != null
+          ? await protection.recordRate(db.pool, rateInput)
+          : protection.inspectRate(rateInput);
+        if (rate.limited) {
+          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, "flagged", "rate_limit", JSON.stringify({ count: rate.count, limit: rate.limit, windowMs: rate.windowMs })]).catch(() => {});
+          await sendLog({ module: "protection", stage: "rate_limit_detected", severity: "warn", status: "audit_only", details: { chatId: m.chatId, messageId: m.messageId, userId: m.userId, count: rate.count, limit: rate.limit, windowMs: rate.windowMs } });
+        }
+        const mediaMessage = ctx.message || ctx.editedMessage || ctx.channelPost;
+        const messageType = mediaMessage?.photo ? "photo" : mediaMessage?.video ? "video" : mediaMessage?.document ? "document" : "text";
+        const mediaQuotaInput = {
+          chatId: m.chatId, userId: m.userId, messageType,
+          messageId: m.messageId,
+          now: Date.now(),
+          photoLimit: Number(process.env.PROTECTION_DAILY_PHOTO_LIMIT || 3),
+          videoLimit: Number(process.env.PROTECTION_DAILY_VIDEO_LIMIT || 1),
+          mediaGroupId: mediaMessage?.media_group_id || null
+        };
+        // Use PostgreSQL counters when available so restarts and multiple replicas
+        // share the same audit count. The process-local fallback remains audit-only.
+        const mediaQuota = db.pool
+          ? await protection.recordMediaQuota(db.pool, mediaQuotaInput)
+          : protection.inspectMediaQuota(mediaQuotaInput);
+        if (mediaQuota.exceeded) {
+          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, "flagged", "daily_media_quota", JSON.stringify({ type: messageType, count: mediaQuota.count, limit: mediaQuota.limit, day: mediaQuota.day, mediaGroupId: mediaQuota.mediaGroupId })]).catch(() => {});
+          await sendLog({ module: "protection", stage: "media_quota_detected", severity: "warn", status: "audit_only", details: { chatId: m.chatId, messageId: m.messageId, userId: m.userId, type: messageType, count: mediaQuota.count, limit: mediaQuota.limit, day: mediaQuota.day, mediaGroupId: mediaQuota.mediaGroupId } });
+        }
+        const result = protection.inspectMessage({ text: m.text, caption: m.caption, messageType, isForward: Boolean(mediaMessage?.forward_origin || mediaMessage?.forward_from || mediaMessage?.forward_from_chat), trustedForward: false }, { maxLinks: opts.block_excessive_links ? opts.max_links : 999, maxLength: opts.max_message_length, blockUntrustedForwards: opts.block_untrusted_forwards });
         if (!result.allowed) {
-          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, process.env.PROTECTION_ENFORCE === "true" ? "delete_attempt" : "flagged", result.reasons?.join(","), JSON.stringify({ length: result.length, linkCount: result.linkCount })]).catch(() => {});
+          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, process.env.PROTECTION_ENFORCE === "true" ? "delete_attempt" : "flagged", result.reasons.join(","), JSON.stringify({ length: result.length, linkCount: result.linkCount })]).catch(() => {});
           await sendLog({ module: "protection", stage: "message_flagged", severity: "warn", status: process.env.PROTECTION_ENFORCE === "true" ? "enforce_requested" : "audit_only", details: { chatId: m.chatId, messageId: m.messageId, userId: m.userId, reasons: result.reasons } });
           if (process.env.PROTECTION_ENFORCE === "true" && m.messageId) {
             try { await ctx.telegram.deleteMessage(m.chatId, m.messageId); } catch (e) { await sendLog({ module: "protection", stage: "delete_message", severity: "error", status: "failed", details: { code: e.code, message: e.message } }); }
@@ -209,6 +247,7 @@ bot.on("my_chat_member", async ctx => {
     return;
   }
   await authorizeChat(chat.id, chat.type, creatorId || actor);
+  console.log(`[GROUP_RECOGNIZED] chatId=${chat.id} type=${chat.type} ownerId=${creatorId || actor}`);
   await sendLog({ module: "security", stage: "chat_authorized", status: "ok", details: { chatId: chat.id, actor, ownerUserId: creatorId || actor, chatType: chat.type } });
 });
 
@@ -223,7 +262,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
   if (action === "health") {
     let dbState = "غير متاح";
     try { await db.query("SELECT 1"); dbState = "متصل"; } catch (e) { dbState = `فشل (${String(e.code || e.message).slice(0,80)})`; }
-    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || [])?.join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nDEALS_CHAT_ID: ${process.env.DEALS_CHAT_ID ? "مضبوط" : "غير مضبوط"}\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
+    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || []).join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nDEALS_CHAT_ID: ${process.env.DEALS_CHAT_ID ? "مضبوط" : "غير مضبوط"}\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
     await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
   if (action === "scraper_test") {
@@ -236,7 +275,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
   }
   if (action === "diagnostics") {
     const r = await db.query("SELECT ts,module,stage,severity,status,details FROM diagnostic_events ORDER BY ts DESC LIMIT 8").catch(() => ({ rows: [] }));
-    const body = r.rows.length ? r.rows.map((x,i)=>`${i+1}. ${new Date(x.ts).toLocaleString("ar-EG")} — ${x.severity}/${x.module}/${x.stage} — ${x.status}`)?.join("\n") : "لا توجد تقارير محفوظة أو تعذر قراءة جدول التشخيص.";
+    const body = r.rows.length ? r.rows.map((x,i)=>`${i+1}. ${new Date(x.ts).toLocaleString("ar-EG")} — ${x.severity}/${x.module}/${x.stage} — ${x.status}`).join("\n") : "لا توجد تقارير محفوظة أو تعذر قراءة جدول التشخيص.";
     await ctx.editMessageText(`📄 آخر تقارير الأخطاء\n${body}\n\nللحصول على التقرير الكامل، راجع قناة السجلات باستخدام Report ID.`, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
   if (action === "reports") {
@@ -249,7 +288,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
     ];
     const lines=[];
     for (const [label,sql] of checks) { try { const q=await db.query(sql); lines.push(`${label}: ${q.rows[0]?.n ?? 0}`); } catch { lines.push(`${label}: الجدول/الاستعلام غير متاح في هذا المخطط`); } }
-    await ctx.editMessageText(`📊 ملخص التقارير\n${lines?.join("\n")}\n\nالأعداد وصفية حسب السجلات الموجودة ولا تعني أن جميع مصادر البيانات الحية تعمل.`, { reply_markup: adminPanel.actionKeyboard() }); return;
+    await ctx.editMessageText(`📊 ملخص التقارير\n${lines.join("\n")}\n\nالأعداد وصفية حسب السجلات الموجودة ولا تعني أن جميع مصادر البيانات الحية تعمل.`, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
   const guides = {
     chemical: "🧪 المساعد الكيميائي\nأرسل سؤالك هنا في الخاص، أو اكتب /مساعد متبوعًا بالسؤال. سيولّد البوت إجابة وروابط بحث آمنة؛ التركيبات الخطرة تخضع لبوابة السلامة.",
@@ -267,11 +306,31 @@ bot.on("text", async ctx => {
   const m = messageData(ctx);
   if (!["group", "supergroup", "private"].includes(m.chatType)) return;
   if (isBotMessage(ctx, botUserId)) return;
-  if (m.chatType !== "private" && !(await isAuthorizedChat(m.chatId))) return;
-
   const text = m.text;
   const cmd = commandName(text);
   const args = commandText(text);
+
+  // /claim is deliberately available in an unclaimed group, but only the real
+  // Telegram group creator can bind it. A master can administer the bot but
+  // cannot claim ownership on behalf of another group creator.
+  if (cmd === "claim" && ["group", "supergroup"].includes(m.chatType)) {
+    try {
+      const admins = await ctx.telegram.getChatAdministrators(m.chatId);
+      const creator = admins.find(a => a.status === "creator")?.user;
+      if (!creator || String(creator.id) !== String(m.userId)) {
+        await ctx.reply("لا يمكن ربط المجموعة: يجب أن ينفذ /claim منشئ المجموعة الأصلي بحسابه الشخصي.");
+        return;
+      }
+      await authorizeChat(m.chatId, m.chatType, creator.id);
+      await ctx.reply(`✅ تم التحقق من ملكية المجموعة وربطها بالبوت.\nمعرّف المجموعة: ${m.chatId}\nيمكن للمالك فتح اللوحة الخاصة بإرسال /panel للبوت في الخاص.`);
+      await sendLog({ module: "security", stage: "group_claim", status: "ok", details: { chatId: m.chatId, ownerUserId: creator.id, actor: m.userId } });
+    } catch (error) {
+      await ctx.reply("تعذر التحقق من ملكية المجموعة. تأكد أن البوت يستطيع قراءة قائمة مشرفي المجموعة ثم أعد المحاولة.");
+      await sendLog({ module: "security", stage: "group_claim", severity: "warn", status: "failed", details: { chatId: m.chatId, code: error.code || null } });
+    }
+    return;
+  }
+  if (m.chatType !== "private" && !(await isAuthorizedChat(m.chatId))) return;
 
   // Ordinary members may use automatic services, but slash commands are controller-only.
   if (cmd && !(await canControl(ctx, m))) return;
@@ -317,7 +376,7 @@ bot.on("text", async ctx => {
     const question = args || "اكتب سؤالك الكيميائي بوضوح.";
     const answer = await chemical.answer(ai, question);
     const links = buildChemicalLinks(question);
-    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean)?.join("\n\n"), { disable_web_page_preview: true });
+    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean).join("\n\n"), { disable_web_page_preview: true });
     return;
   }
 
@@ -343,9 +402,11 @@ bot.on("text", async ctx => {
   if (cmd === "schedule") {
     if (!(await canControl(ctx, m))) return;
     const match = args.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?:\s+)([\s\S]+)$/);
-    if (!match) { await ctx.reply("الصيغة: /schedule 2026-10-13T17:00 نص الرسالة\nالموعد بتوقيت UTC في هذه النسخة؛ سنثبت دعم Africa/Cairo صراحةً في واجهة الجدولة."); return; }
+    if (!match) { await ctx.reply("الصيغة: /schedule 2026-10-13T17:00 نص الرسالة\nالموعد يُفسَّر بتوقيت القاهرة Africa/Cairo."); return; }
     try {
-      const job = await scheduler.createScheduledMessage(db.pool, { chat_id: m.chatId, run_at: new Date(`${match[1]}:00Z`), message_text: match[2], created_by: m.userId });
+      const local = match[1];
+      const runAt = parseLocalDateTime(local, "Africa/Cairo");
+      const job = await scheduler.createScheduledMessage(db.pool, { chat_id: m.chatId, run_at: runAt, timezone: "Africa/Cairo", message_text: match[2], created_by: m.userId });
       await ctx.reply(`✅ تمت إضافة الرسالة المجدولة رقم ${job.id}.`);
     } catch (error) { await ctx.reply(`تعذر إنشاء الجدولة: ${error.message}`); }
     return;
@@ -354,7 +415,7 @@ bot.on("text", async ctx => {
   if (cmd === "weather" || cmd === "الطقس") {
     const city = args || "القاهرة";
     const result = await weather.getWeatherSummary(ai, city);
-    await ctx.reply(`${result.message}\n🔎 بحث الطقس: ${result.searchUrl}`, { disable_web_page_preview: true });
+    await ctx.reply(`${result.message}${result.ok ? "" : `\n🔎 بحث الطقس: ${result.searchUrl}`}`, { disable_web_page_preview: true });
     return;
   }
 
@@ -363,7 +424,7 @@ bot.on("text", async ctx => {
     if (cmd === "inactive") {
       const days = Number(args) || 30;
       const rows = await legacyAdmin.listInactive(db.pool, m.chatId, days, 20);
-      const body = rows.length ? rows.map((r,i)=>`${i+1}. ${r.display_name || r.username || r.user_id} — ${r.inactive_days} يوم — ${r.message_count} رسالة`)?.join("\n") : "لا توجد بيانات أعضاء مسجلة خاملة لهذه المدة. التقرير يعتمد على الأعضاء الذين رصد البوت نشاطهم منذ تفعيل التتبع، وليس تعدادًا كاملًا لأعضاء تيليجرام.";
+      const body = rows.length ? rows.map((r,i)=>`${i+1}. ${r.display_name || r.username || r.user_id} — ${r.inactive_days} يوم — ${r.message_count} رسالة`).join("\n") : "لا توجد بيانات أعضاء مسجلة خاملة لهذه المدة. التقرير يعتمد على الأعضاء الذين رصد البوت نشاطهم منذ تفعيل التتبع، وليس تعدادًا كاملًا لأعضاء تيليجرام.";
       await ctx.reply(`📊 تقرير النشاط (أكثر من ${Math.max(1,Math.min(365,days))} يوم):\n${body}`);
       return;
     }
@@ -376,7 +437,7 @@ bot.on("text", async ctx => {
       await ctx.reply(`⚠️ تم تسجيل الإنذار رقم ${result.id} للعضو ${targetUserId}.\nالإنذارات النشطة: ${result.count}\n${result.count >= 3 ? "وصل العضو إلى 3 إنذارات؛ راجع الحالة قبل أي إجراء تقييدي." : ""}`);
     } else if (cmd === "warnings") {
       const rows = await legacyAdmin.listWarnings(db.pool, m.chatId, targetUserId);
-      await ctx.reply(rows.length ? `⚠️ إنذارات العضو ${targetUserId}:\n${rows.map(r=>`#${r.id} — ${r.reason} — ${new Date(r.created_at).toLocaleString("ar-EG")}`)?.join("\n")}` : `لا توجد إنذارات نشطة للعضو ${targetUserId}.`);
+      await ctx.reply(rows.length ? `⚠️ إنذارات العضو ${targetUserId}:\n${rows.map(r=>`#${r.id} — ${r.reason} — ${new Date(r.created_at).toLocaleString("ar-EG")}`).join("\n")}` : `لا توجد إنذارات نشطة للعضو ${targetUserId}.`);
     } else {
       const count = await legacyAdmin.clearWarnings(db.pool, { chatId: m.chatId, userId: targetUserId, clearedBy: m.userId });
       await ctx.reply(`تم إغلاق ${count} إنذارًا للعضو ${targetUserId}.`);
@@ -390,7 +451,7 @@ bot.on("text", async ctx => {
   if (m.chatType === "private" && /(كلور|مطهر|تركيبه|مادة|خلط|pH|حمض|قلوي)/i.test(text)) {
     const answer = await chemical.answer(ai, text);
     const links = buildChemicalLinks(text);
-    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean)?.join("\n\n"), { disable_web_page_preview: true });
+    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean).join("\n\n"), { disable_web_page_preview: true });
     return;
   }
 
@@ -401,7 +462,7 @@ bot.on("text", async ctx => {
   if (phone && /(سعر|جنيه|ج\s|مسحوق|جيل|منظف|تاجر|محل)/i.test(text)) {
     try {
       const saved = await saveMerchant(db.pool, {
-        name: [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean)?.join(" ") || "تاجر غير مسمى",
+        name: [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(" ") || "تاجر غير مسمى",
         activity: "مرصد أسعار",
         location: "غير محدد",
         phone,
@@ -426,23 +487,27 @@ bot.catch(async (err, ctx) => {
   await emitReport({ bot, db, report });
 });
 
-process.on("unhandledRejection", async err => {
-  const report = makeReport({ module: "process", stage: "unhandledRejection", severity: "CRITICAL", action: "promise_rejection", error: err, details: { appVersion: APP_VERSION } });
-  await emitReport({ bot, db, report });
-});
-process.on("uncaughtException", async err => {
-  const report = makeReport({ module: "process", stage: "uncaughtException", severity: "CRITICAL", action: "uncaught_exception", error: err, details: { appVersion: APP_VERSION } });
-  await emitReport({ bot, db, report });
+installFatalProcessHandlers({
+  reportFatal: async (stage, err) => {
+    const report = makeReport({ module: "process", stage, severity: "CRITICAL", action: stage === "unhandledRejection" ? "promise_rejection" : "uncaught_exception", error: err, details: { appVersion: APP_VERSION } });
+    await emitReport({ bot, db, report });
+  },
+  shutdown,
+  timeoutMs: 10_000,
 });
 
 (async () => {
   await ensureDb();
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   const me = await bot.telegram.getMe();
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   botUserId = me.id;
   await configureCommandMenus().catch(error => sendLog({ module: "security", stage: "command_menu_setup", severity: "warn", status: "failed", details: { code: error.code || null, message: error.message } }));
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
-  console.log(`AI providers configured: ${ai.providers?.join(", ") || "none"}`);
+  console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
   await scheduler.ensureSchedulerSchema(db.pool);
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   stopScheduledMessages = scheduler.startScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, job) => {
     const report = makeReport({ module: "scheduler", stage: "dispatch_due", severity: "ERROR", action: "scheduled_message", error, details: { jobId: job?.id, chatId: job?.chat_id }, chatId: job?.chat_id });
     await emitReport({ bot, db, report });
@@ -455,8 +520,40 @@ process.on("uncaughtException", async err => {
   } else {
     console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
   }
-  await bot.launch({ dropPendingUpdates: false });
-})().catch(err => { console.error("STARTUP_FAILED", redactString(err?.stack || err?.message || "startup_error")); process.exit(1); });
+  // Webhook-only transport. There is intentionally no bot.launch()/getUpdates polling path.
+  const allowedUpdates = [
+    "message", "edited_message", "callback_query", "my_chat_member",
+    "chat_member", "chat_join_request", "channel_post", "edited_channel_post"
+  ];
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
+  webhookServer = createWebhookServer(bot, webhookConfig);
+  await new Promise((resolve, reject) => {
+    const onError = error => { webhookServer.removeListener("listening", onListening); reject(error); };
+    const onListening = () => { webhookServer.removeListener("error", onError); resolve(); };
+    webhookServer.once("error", onError);
+    webhookServer.once("listening", onListening);
+    webhookServer.listen(webhookConfig.port, "0.0.0.0");
+  });
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
+  await bot.telegram.setWebhook(webhookConfig.url, {
+    secret_token: webhookConfig.secret,
+    allowed_updates: allowedUpdates,
+    drop_pending_updates: false
+  });
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
+  console.log(`[TELEGRAM_WEBHOOK_ACTIVE] path=${webhookConfig.path} port=${webhookConfig.port} allowedUpdates=${allowedUpdates.join(",")}`);
+  startupPhase = false;
+})().catch(async err => {
+  if (shutdownRequested) {
+    try { await shutdown("STARTUP_CANCELLED"); }
+    catch (shutdownError) { console.error("[STARTUP_SHUTDOWN_FAILED]", redactString(shutdownError?.message || shutdownError)); }
+    return;
+  }
+  console.error("STARTUP_FAILED\n" + redactString(formatTelegramStartupError(err)));
+  try { await shutdown("STARTUP_FAILURE"); }
+  catch (shutdownError) { console.error("[STARTUP_SHUTDOWN_FAILED]", redactString(shutdownError?.message || shutdownError)); }
+  process.exit(1);
+});
 
 async function shutdown(signal) {
   if (shutdownPromise) return shutdownPromise;
@@ -464,11 +561,22 @@ async function shutdown(signal) {
     console.log(`[SHUTDOWN] ${signal}: stopping schedulers and closing connections`);
     try { stopScheduledMessages(); } catch (error) { console.error("[SHUTDOWN_SCHEDULER_ERROR]", error?.message || error); }
     try { stopDeals(); } catch (error) { console.error("[SHUTDOWN_DEALS_ERROR]", error?.message || error); }
-    try { bot.stop(signal); } catch (error) { console.error("[SHUTDOWN_BOT_ERROR]", error?.message || error); }
+    if (webhookServer?.listening) {
+      try { await new Promise((resolve, reject) => webhookServer.close(error => error ? reject(error) : resolve())); }
+      catch (error) { console.error("[SHUTDOWN_WEBHOOK_SERVER_ERROR]", error?.message || error); process.exitCode = 1; }
+    }
     try { await db.close(); } catch (error) { console.error("[SHUTDOWN_DATABASE_ERROR]", error?.message || error); process.exitCode = 1; }
   })();
   return shutdownPromise;
 }
 
-process.once("SIGINT", () => { void shutdown("SIGINT"); });
-process.once("SIGTERM", () => { void shutdown("SIGTERM"); });
+function requestShutdown(signal) {
+  shutdownRequested = true;
+  // During startup, let the active awaited step settle before closing PostgreSQL;
+  // the startup flow checks this flag between steps and performs the one shutdown.
+  if (startupPhase) return;
+  void shutdown(signal);
+}
+
+process.once("SIGINT", () => requestShutdown("SIGINT"));
+process.once("SIGTERM", () => requestShutdown("SIGTERM"));

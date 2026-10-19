@@ -1,6 +1,6 @@
 {
   "name": "borsa-gpt-bot-v1",
-  "version": "1.0.0-rc1",
+  "version": "1.0.3",
   "description": "Borsa GBT Bot V1 Mona Lisa — GPT Core, price intelligence, merchant intelligence, chemical assistant, and diagnostics",
   "main": "index.js",
   "scripts": {
@@ -10,7 +10,7 @@
     "preflight:live": "node tests/preflight-live.js"
   },
   "engines": {
-    "node": ">=24 <25"
+    "node": ">=20 <26"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

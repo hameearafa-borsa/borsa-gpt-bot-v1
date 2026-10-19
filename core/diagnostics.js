@@ -74,8 +74,7 @@ function log(e = {}) {
   else if (row.severity === "warn") console.warn("[DIAG]", line);
   else console.log("[DIAG]", line);
   return row;
-}
-async function persistReport(db, report) {
+}async function persistReport(db, report) {
   if (!db?.pool) return false;
   try {
     await db.query(`INSERT INTO diagnostic_events(ts,module,stage,severity,status,input_summary,input_fingerprint,details,chat_id,message_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, [report.ts, report.module, report.stage, report.severity, report.status, report.input_summary, report.input_fingerprint, JSON.stringify({ report_id: report.report_id, action: report.action, error: report.error, details: report.details }), report.chat_id, report.message_id]);

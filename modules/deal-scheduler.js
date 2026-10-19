@@ -3,6 +3,7 @@ const { collectDealCandidates } = require("./deal-sources");
 const { filterRecentDeals, distributeDeals } = require("./deal-publication");
 const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
 
+function hostOf(url) { try { return new URL(url).hostname; } catch { return ""; } }
 function cairoParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
   return Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type,p.value]));
@@ -46,8 +47,6 @@ async function persistDeals(pool, deals) {
   }
   return saved;
 }
-let throttleStorageFailureReported = false;
-
 async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
   if (!pool || !telegram || !chatId) return { skipped: true, reason: "database_telegram_or_deals_chat_missing" };
   if (!isNewsletterWindow(now)) return { skipped: true, reason: "before_17_cairo" };
@@ -56,43 +55,8 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   if (["amazon","other_sites","best_deals"].every(kind => existing.rows.some(r => r.channel_kind === kind && r.status === "published"))) return { skipped: true, reason: "already_published", batchKey: key };
   const gathered = await fetcher();
   if (!gathered.deals?.length) {
-    const errors = gathered.errors || [];
-    // Durable throttling avoids logging the same source failure every minute.
-    const errorKey = errors
-      .map(e => String(e.source || "unknown") + ":" + String(e.status || e.reason || e.code || "error"))
-      .sort()
-      .join("|")
-      .slice(0, 400) || "no_validated_deals";
-    let shouldNotify = true;
-    try {
-      const notice = await pool.query(
-        "INSERT INTO deal_error_notifications(error_key, occurrences, last_notified_at) " +
-        "VALUES($1, 1, NOW()) " +
-        "ON CONFLICT(error_key) DO UPDATE SET " +
-        "occurrences = deal_error_notifications.occurrences + 1, " +
-        "last_notified_at = CASE " +
-        "WHEN deal_error_notifications.last_notified_at <= NOW() - INTERVAL '30 minutes' THEN NOW() " +
-        "ELSE deal_error_notifications.last_notified_at END " +
-        "RETURNING last_notified_at = NOW() AS should_notify",
-        [errorKey]
-      );
-      shouldNotify = Boolean(notice.rows[0]?.should_notify);
-    } catch (error) {
-      // Fail closed: if durable throttling is unavailable, do not emit the
-      // no-deals alert every scheduler tick. Report the storage failure once
-      // per process so operators can repair the migration/database issue.
-      shouldNotify = false;
-      if (!throttleStorageFailureReported) {
-        throttleStorageFailureReported = true;
-        await onError(error, { stage: "error_notification_throttle", errorKey });
-      }
-    }
-    if (shouldNotify) {
-      await onError(new Error("No validated deal candidates; newsletter not published"), {
-        stage: "fetch", errors, errorKey
-      });
-    }
-    return { skipped: true, reason: "no_deals", sourceErrors: errors, errorKey, notified: shouldNotify };
+    await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [] });
+    return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [] };
   }
   const verified = await verify(gathered.deals);
   const recent = await filterRecentDeals(pool, verified, 7);
@@ -100,10 +64,10 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   // Overall pool is category-balanced (10 detergents, 10 paper, 10 care when supply allows).
   const balanced = distributeDeals(recent);
   const ordered = [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
-  const amazon = ordered.filter(d => /amazon\.eg/i.test(new URL(d.url).hostname)).slice(0, 10);
+  const amazon = ordered.filter(d => /amazon\.eg/i.test(hostOf(d.url))).slice(0, 10);
   const amazonKeys = new Set(amazon.map(d => d.fingerprint));
   const remaining = ordered.filter(d => !amazonKeys.has(d.fingerprint));
-  const other = remaining.filter(d => !/amazon\.eg/i.test(new URL(d.url).hostname)).slice(0, 10);
+  const other = remaining.filter(d => !/amazon\.eg/i.test(hostOf(d.url))).slice(0, 10);
   const otherKeys = new Set(other.map(d => d.fingerprint));
   const publishedKeys = new Set([...amazonKeys, ...otherKeys]);
   const best = ordered.filter(d => !publishedKeys.has(d.fingerprint)).sort((a,b) => (Number(b.discount_pct)||0) - (Number(a.discount_pct)||0)).slice(0, 10);

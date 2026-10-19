@@ -104,19 +104,29 @@ function deterministicList(text) {
   }
   return out;
 }
+function priceAppears(text, price) {
+  const value = Number(price);
+  if (!Number.isFinite(value) || value <= 0) return false;
+  const ascii = toAsciiDigits(text).replace(/٫/g, ".").replace(/,/g, ".");
+  const tokens = [...ascii.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
+  return tokens.some((token) => Math.abs(token - value) < 0.011);
+}
 async function extractList(ai, text) {
-  if (!ai?.generate) return { company: null, items: deterministicList(text), method: "deterministic" };
+  const fallback = deterministicList(text);
+  if (!ai?.generate) return { company: null, items: fallback, method: "deterministic" };
   try {
-    const result = await ai.generate(buildListPrompt(text), { temperature: 0 });
+    const result = await ai.generate(buildListPrompt(text), { maxOutputTokens: 4000, reasoningEffort: "low" });
     const parsed = parseAIJson(result.text);
-    // Guard AI output against missing identity and non-positive prices; preserve skipped rows for audit.
     parsed.items = parsed.items.map(item => {
       const price = Number(item.package_sale_price);
       const product = String(item.product || "").trim();
-      if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };
+      if (!product || !Number.isFinite(price) || price <= 0 || !priceAppears(text, price)) return { ...item, decision: "skipped" };
       return { ...item, decision: ["accepted", "review", "skipped"].includes(item.decision) ? item.decision : "review" };
     });
+    const aiAccepted = parsed.items.some((item) => item.decision === "accepted");
+    const fallbackAccepted = fallback.some((item) => item.decision === "accepted");
+    if (!aiAccepted && fallbackAccepted) return { company: null, items: fallback, method: "deterministic_guard" };
     return { ...parsed, method: result.provider || "ai" };
-  } catch (error) { return { company: null, items: deterministicList(text), method: "fallback", error: error.message }; }
+  } catch (error) { return { company: null, items: fallback, method: "fallback", error: error.message }; }
 }
-module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName };
+module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, priceAppears };

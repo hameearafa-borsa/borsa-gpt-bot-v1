@@ -5,6 +5,9 @@ const { verifyProductUrl, batchKey, isNewsletterWindow, cairoParts } = require("
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
 assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), null);
+assert.equal(safeProductUrl("", "amazon"), null);
+assert.equal(safeProductUrl("https://www.amazon.eg:8443/dp/B0ABCDEF12", "amazon"), null);
+assert.equal(safeProductUrl("https://www.amazon.eg/", "amazon"), null);
 assert.equal(categoryOf("مناديل فاين"), "paper");
 assert.equal(categoryOf("شامبو نيفيا"), "personal_care");
 assert.equal(categoryOf("مسحوق غسيل"), "detergent");

@@ -21,7 +21,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.ok(review.some(row => /205 ح/.test(row.raw_line)), "ambiguous currency suffix must be sent to review, not silently accepted");
 
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
-  assert.equal(images.length, Math.ceil(accepted.length / 14), "long lists should be split into readable pages");
+  assert.equal(images.length, Math.ceil(accepted.length / 15), "long lists should be split into pages of about 15 products");
   for (const png of images) {
     assert.ok(Buffer.isBuffer(png));
     assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "output must have a real PNG signature");

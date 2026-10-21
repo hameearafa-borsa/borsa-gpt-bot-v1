@@ -54,25 +54,47 @@ function openAIProvider(key, model) {
 }
 
 function xaiProvider(key, model) {
-  return async (prompt, options = {}) => {
+  return async (prompt) => {
     const data = await requestJson("https://api.x.ai/v1/chat/completions", {
       model: model || "grok-4.7",
-      temperature: options.temperature ?? 0,
       messages: [{ role: "system", content: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية." }, { role: "user", content: prompt }]
     }, { authorization: `Bearer ${key}` });
     return { text: data.choices?.[0]?.message?.content || "", provider: "xai", model };
   };
 }
 
+const WORKING_GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.6-flash", "gemini-3.5-flash"];
+
+function geminiModelOrder(preferred) {
+  const models = [];
+  const add = (model) => {
+    const name = String(model || "").trim();
+    if (name && !models.includes(name)) models.push(name);
+  };
+  if (WORKING_GEMINI_MODELS.includes(String(preferred || "").trim())) add(preferred);
+  for (const model of WORKING_GEMINI_MODELS) add(model);
+  add(preferred);
+  return models;
+}
+
 function geminiProvider(key, model) {
-  return async (prompt, options = {}) => {
-    const selectedModel = model || "gemini-3.5-flash-lite";
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`;
-    const data = await requestJson(endpoint, {
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: { temperature: options.temperature ?? 0 }
-    }, { "x-goog-api-key": key });
-    return { text: data.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("") || "", provider: "gemini", model: selectedModel };
+  return async (prompt) => {
+    let last;
+    for (const selectedModel of geminiModelOrder(model)) {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`;
+      try {
+        const data = await requestJson(endpoint, {
+          contents: [{ role: "user", parts: [{ text: prompt }] }]
+        }, { "x-goog-api-key": key });
+        return { text: data.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("") || "", provider: "gemini", model: selectedModel };
+      } catch (error) {
+        last = error;
+        const message = String(error?.message || "");
+        const missing = /AI HTTP 404/.test(message) || /not found|not supported|unknown model/i.test(message);
+        if (!missing) throw error;
+      }
+    }
+    throw last || new Error("gemini_model_unavailable");
   };
 }
 
@@ -86,8 +108,8 @@ function providersFromEnv() {
   for (const [keyName, modelName] of [["XAI_API_KEY","XAI_MODEL"],["XAI_API_KEY_2","XAI_MODEL_2"]]) {
     if (process.env[keyName]) all.xai.push({ name: keyName, provider: "xai", run: xaiProvider(process.env[keyName], process.env[modelName] || process.env.XAI_MODEL || "grok-4.7") });
   }
-  for (const keyName of ["GEMINI_API_KEY_1","GEMINI_API_KEY_2","GEMINI_API_KEY_3"]) {
-    if (process.env[keyName]) all.gemini.push({ name: keyName, provider: "gemini", run: geminiProvider(process.env[keyName], process.env.GEMINI_MODEL || "gemini-3.5-flash-lite") });
+  for (const keyName of ["GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"]) {
+    if (process.env[keyName]) all.gemini.push({ name: keyName, provider: "gemini", run: geminiProvider(process.env[keyName], process.env.GEMINI_MODEL || "gemini-3.8-flash") });
   }
   const primary = String(process.env.AI_PROVIDER || "openai").toLowerCase();
   const order = [primary, ...["openai", "gemini", "xai"].filter(x => x !== primary)];
@@ -128,4 +150,4 @@ function createAI() {
   return { generate, providers: selected.map(x => x.name), primaryProvider: selected[0]?.provider || null };
 }
 
-module.exports = { createAI, providersFromEnv, formatProviderError };
+module.exports = { createAI, providersFromEnv, formatProviderError, geminiModelOrder, WORKING_GEMINI_MODELS };

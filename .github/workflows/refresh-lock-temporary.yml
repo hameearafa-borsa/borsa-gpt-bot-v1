@@ -1,9 +1,9 @@
 name: Refresh dependency lock (temporary)
 
 on:
-  push:
+  pull_request:
     branches:
-      - termux-arm64-sharp-test-2026-10-21
+      - main
 
 permissions:
   contents: write

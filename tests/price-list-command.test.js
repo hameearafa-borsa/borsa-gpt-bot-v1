@@ -11,5 +11,5 @@ assert.match(index, /db\.withTransaction\(async client =>/, "price-list persiste
 assert.match(index, /accepted\.length >= 3 && companyNames\.length === 1/, "publishing requires 3 accepted items from one company");
 assert.match(index, /renderPriceListImages/, "long lists must use adaptive multi-page rendering");
 assert.match(index, /replyWithMediaGroup/, "multiple pages should be sent as a Telegram media group when supported");
-assert.equal(pkg.dependencies.sharp, "^0.34.5", "sharp must be declared as a runtime dependency");
+assert.equal(pkg.dependencies.sharp, "^0.35.5", "sharp must be declared as a runtime dependency");
 console.log("price-list command configuration tests: OK");

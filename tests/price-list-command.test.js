@@ -1,0 +1,15 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const root = path.join(__dirname, "..");
+const index = fs.readFileSync(path.join(root, "index.js"), "utf8");
+const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
+assert.match(index, /cmd === "قائمة" \|\| cmd === "pricelist"/, "Arabic alias and Telegram-safe command must both work");
+assert.match(index, /command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة"/, "menu must expose the working command");
+assert.match(index, /db\.withTransaction\(async client =>/, "price-list persistence should be transactional");
+assert.match(index, /accepted\.length >= 3 && companyNames\.length === 1/, "publishing requires 3 accepted items from one company");
+assert.match(index, /renderPriceListImages/, "long lists must use adaptive multi-page rendering");
+assert.match(index, /replyWithMediaGroup/, "multiple pages should be sent as a Telegram media group when supported");
+assert.equal(pkg.dependencies.sharp, "^0.34.5", "sharp must be declared as a runtime dependency");
+console.log("price-list command configuration tests: OK");

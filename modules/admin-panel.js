@@ -6,7 +6,6 @@ const ROWS = [
   [{ text: "📋 قوائم الشركات", callback_data: "panel:lists" }, { text: "🏪 بيانات التجار", callback_data: "panel:merchants" }],
   [{ text: "🛍️ العروض", callback_data: "panel:deals" }, { text: "📊 التقارير", callback_data: "panel:reports" }],
   [{ text: "🛡️ الحماية والإنذارات", callback_data: "panel:protection" }, { text: "👥 الأعضاء الخاملون", callback_data: "panel:inactive" }],
-  [{ text: "🌤 الطقس", callback_data: "panel:weather" }, { text: "💵 السوق", callback_data: "panel:market" }],
   [{ text: "🩺 تشخيص النظام", callback_data: "panel:health" }, { text: "🌐 اختبار مصدر العروض", callback_data: "panel:scraper_test" }],
   [{ text: "📄 آخر تقارير الأخطاء", callback_data: "panel:diagnostics" }]
 ];

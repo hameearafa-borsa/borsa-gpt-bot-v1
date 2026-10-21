@@ -5,7 +5,6 @@ require("dotenv").config();
 const { Pool } = require("pg");
 const { fetchSearch } = require("../modules/deal-sources");
 const { redactString } = require("../core/diagnostics");
-const { buildPoolConfig } = require("../core/database");
 
 const checks = [];
 function record(name, status, detail) {
@@ -29,7 +28,7 @@ async function telegramCall(token, method, body = {}) {
   try {
     if (!process.env.DATABASE_URL) record("PostgreSQL", "BLOCKED", "DATABASE_URL غير مضبوط؛ لم يُجر أي اتصال");
     else {
-      pool = new Pool({ ...buildPoolConfig(process.env.DATABASE_URL), max: 1, connectionTimeoutMillis: 10000, idleTimeoutMillis: 1000 });
+      pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: /localhost|127\.0\.0\.1/.test(process.env.DATABASE_URL) ? false : { rejectUnauthorized: false }, max: 1, connectionTimeoutMillis: 10000, idleTimeoutMillis: 1000 });
       await pool.query("SELECT 1 AS ok");
       record("PostgreSQL connection", "PASS", "SELECT 1 نجح؛ لا كتابة ولا ترحيل");
       const required = {

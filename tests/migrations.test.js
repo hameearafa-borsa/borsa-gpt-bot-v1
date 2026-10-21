@@ -13,11 +13,11 @@ async function successCase() {
     }
   };
   const result = await runMigrations({ db, rootDir: "/project", readFile: (file, encoding) => { assert.equal(encoding, "utf8"); calls.push({ read: file }); return `-- ${path.basename(file)}`; } });
-  assert.equal(result.applied, 9);
+  assert.equal(result.applied, 10);
   assert.deepEqual(result.files, [...MIGRATION_FILES]);
   assert.equal(calls[0], "BEGIN");
   assert.deepEqual(calls[1], { sql: "SELECT pg_advisory_xact_lock($1)", params: [MIGRATION_LOCK_KEY] });
-  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 10, "lock plus nine migration statements should run in one transaction");
+  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 11, "lock plus ten migration statements should run in one transaction");
   assert.equal(calls.at(-1), "COMMIT");
   assert.ok(calls.indexOf("COMMIT") > calls.findIndex(x => x?.read?.endsWith(MIGRATION_FILES.at(-1))));
 }

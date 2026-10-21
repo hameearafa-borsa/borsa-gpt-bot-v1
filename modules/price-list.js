@@ -54,14 +54,50 @@ function cleanProductName(line) {
     .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة)/giu, " ")
     .replace(/\s+/g, " ").trim();
 }
+function parseListMetadata(text) {
+  const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  let company = null, month = null, priceType = null;
+  for (const line of lines) {
+    const companyMatch = line.match(/^(?:أسعار|اسعار)\s+(شركة\s+.+)$/iu);
+    if (companyMatch) company = companyMatch[1].trim().replace(/[:：]+$/, "");
+    const monthMatch = line.match(/^(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+(20\d{2})$/iu);
+    if (monthMatch) month = `${monthMatch[1]} ${monthMatch[2]}`;
+    if (/الأسعار?\s*(?:هي\s*)?جملة|اسعار\s*جمله/iu.test(line)) priceType = "أسعار جملة";
+    else if (/(?:قطاعي|مستهلك|تجزئة)/iu.test(line)) priceType = "أسعار قطاعي";
+  }
+  return { company, month, priceType };
+}
+function cleanExplicitProductLine(line) {
+  const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
+  const token = [...ascii.matchAll(PRICE_TOKEN)].find(m => {
+    const end = m.index + m[0].length;
+    const tail = ascii.slice(end);
+    return !/^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
+  });
+  if (!token) return cleanProductName(line);
+  return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
+    .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
+    .replace(/\s+/g, " ").trim().replace(/^[\s•*._-]+/, "");
+}
+function detectUnitPriceType(line) {
+  const s = String(line || "");
+  // Explicit wording wins; standalone Arabic ق is a common shorthand for per-piece pricing.
+  if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|قطعة|بالقطعه|للقطعه)/iu.test(s) || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
+  return null;
+}
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  let company = null, section = null;
+  const metadata = parseListMetadata(text);
+  let company = metadata.company, section = null;
   const out = [];
   for (const line of lines) {
-    if (/^[-_=.*.]{3,}$/.test(line)) continue;
+    if (/^[-_=.*.]{3,}$/.test(line) || /^\/(?:قائمة|pricelist)(?:\s|$)/iu.test(line)) continue;
+    if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
     const normalized = normalizeArabic(line);
-    if (!/(?:\d+(?:[.,]\d+)?\s*(?:جنيه|ج|egp)|\|)/i.test(toAsciiDigits(line))) {
+    if (!getPriceTokens(line).length && !line.includes("|")) {
+      if (/^(?:الأسعار?|اسعار)\s*(?:هي\s*)?(?:جملة|جمله|قطاعي|مستهلك)$/iu.test(line)) continue;
+      if (/[:：]$/.test(line) && line.length <= 70) { section = line.replace(/[:：]+$/, "").trim(); continue; }
+      if (/^(?:أسعار|اسعار)\s+شركة\s+/iu.test(line)) { company = line.replace(/^(?:أسعار|اسعار)\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
       if (/اوتوماتيك|automatic/i.test(normalized)) { section = "مسحوق أوتوماتيك"; continue; }
       if (/اوزان|شكاير|شكاره/i.test(normalized)) { section = "أوزان وشكاير"; continue; }
       if (/عبوات صغيره|العبوات الصغيره/i.test(normalized)) { section = "العبوات الصغيرة"; continue; }
@@ -84,19 +120,23 @@ function deterministicList(text) {
     const afterConsumer = consumerIndex >= 0 ? getPriceTokens(line.slice(consumerIndex + line.slice(consumerIndex).match(RETAIL_LABEL)[0].length))[0]?.value ?? null : null;
     const beforeLabel = priceTokens.find(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
     const packagePrice = beforeLabel?.value ?? null;
-    const productPrefix = cleanProductName(line);
+    const unitPriceType = detectUnitPriceType(line);
+    const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
-    const product = [company, section, productPrefix, weightLabel].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const identityText = normalizeArabic(productPrefix);
     const isNumericOnly = !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));
+    const product = metadata.company
+      ? productPrefix
+      : [company, section, productPrefix, weightLabel].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const normalizedLine = normalizeArabic(line);
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
-    const hasIdentity = Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel);
-    const decision = packagePrice && hasIdentity ? "accepted" : (packagePrice && !isNumericOnly ? "review" : "skipped");
+    const hasIdentity = metadata.company ? Boolean(productPrefix && /[\u0600-\u06ff]/u.test(productPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
+    const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
+    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : suspiciousCurrency ? "review" : "accepted";
     out.push({
-      raw_line: line, product, variant: section || null, company,
+      raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company,
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
-      pack_count: packCount, package_sale_price: packagePrice,
+      pack_count: packCount, package_sale_price: packagePrice, unit_price_type: unitPriceType,
       wholesale_carton_price: afterWholesale, consumer_price: afterConsumer,
       list_price: null, confidence: decision === "accepted" ? 0.93 : decision === "review" ? 0.58 : 0.1,
       decision
@@ -104,29 +144,27 @@ function deterministicList(text) {
   }
   return out;
 }
-function priceAppears(text, price) {
-  const value = Number(price);
-  if (!Number.isFinite(value) || value <= 0) return false;
-  const ascii = toAsciiDigits(text).replace(/٫/g, ".").replace(/,/g, ".");
-  const tokens = [...ascii.matchAll(/\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
-  return tokens.some((token) => Math.abs(token - value) < 0.011);
-}
 async function extractList(ai, text) {
-  const fallback = deterministicList(text);
-  if (!ai?.generate) return { company: null, items: fallback, method: "deterministic" };
+  const localItems = deterministicList(text);
+  const metadata = parseListMetadata(text);
+  const acceptedLocal = localItems.filter(item => item.decision === "accepted");
+  const companies = [...new Set(acceptedLocal.map(item => normalizeArabic(item.company || "")).filter(Boolean))];
+  // A clean, locally parsed list of >=3 accepted items from one named company needs no AI call.
+  if (acceptedLocal.length >= 3 && companies.length === 1) {
+    return { ...metadata, company: acceptedLocal[0].company || metadata.company || null, items: localItems, method: "deterministic" };
+  }
+  if (!ai?.generate) return { ...metadata, company: metadata.company || null, items: localItems, method: "deterministic" };
   try {
-    const result = await ai.generate(buildListPrompt(text), { maxOutputTokens: 4000, reasoningEffort: "low" });
+    const result = await ai.generate(buildListPrompt(text), { temperature: 0 });
     const parsed = parseAIJson(result.text);
+    // Guard AI output against missing identity and non-positive prices; preserve skipped rows for audit.
     parsed.items = parsed.items.map(item => {
       const price = Number(item.package_sale_price);
       const product = String(item.product || "").trim();
-      if (!product || !Number.isFinite(price) || price <= 0 || !priceAppears(text, price)) return { ...item, decision: "skipped" };
+      if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };
       return { ...item, decision: ["accepted", "review", "skipped"].includes(item.decision) ? item.decision : "review" };
     });
-    const aiAccepted = parsed.items.some((item) => item.decision === "accepted");
-    const fallbackAccepted = fallback.some((item) => item.decision === "accepted");
-    if (!aiAccepted && fallbackAccepted) return { company: null, items: fallback, method: "deterministic_guard" };
-    return { ...parsed, method: result.provider || "ai" };
-  } catch (error) { return { company: null, items: fallback, method: "fallback", error: error.message }; }
+    return { ...metadata, ...parsed, company: parsed.company || metadata.company || null, method: result.provider || "ai" };
+  } catch (error) { return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: error.message }; }
 }
-module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, priceAppears };
+module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType };

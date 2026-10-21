@@ -36,3 +36,7 @@ assert.equal(beforeCairoMidnight.day, "2026-01-01");
 assert.equal(afterCairoMidnight.day, "2026-01-02");
 assert.equal(afterCairoMidnight.count, 1, "daily quota resets at Cairo midnight");
 console.log("Cairo-local media quota day tests: OK");
+
+const runtimeSource = require("node:fs").readFileSync(require.resolve("../index.js"), "utf8");
+assert.match(runtimeSource, /status: process\.env\.PROTECTION_ENFORCE === "true" \? "delete_attempted" : "audit_only"/);
+assert.match(runtimeSource, /recentLogAlerts/);

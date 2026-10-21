@@ -1,249 +1,131 @@
 "use strict";
 const { redactString } = require("./diagnostics");
+
 const https = require("node:https");
 
-const SYSTEM = "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية. أخرج المطلوب بدقة وبالعربية عند الحاجة.";
-
-function sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
-
-function samplingAllowed(model) {
-  // GPT-5/GPT-6 and Grok 4 reasoning models reject a custom temperature unless reasoning is off.
-  return !/^(?:gpt-5|gpt-6|o\d|grok-4)/i.test(String(model || ""));
-}
-
-function responsesBody(model, prompt, options = {}) {
-  const body = {
-    model,
-    instructions: SYSTEM,
-    input: String(prompt || ""),
-    max_output_tokens: Number(options.maxOutputTokens || 1200),
-  };
-  if (/^(?:gpt-5|gpt-6|o\d|grok-)/i.test(String(model || ""))) {
-    body.reasoning = { effort: options.reasoningEffort || "low" };
-  }
-  if (options.temperature != null && samplingAllowed(model) && body.reasoning?.effort !== "low" && body.reasoning?.effort !== "medium" && body.reasoning?.effort !== "high") {
-    body.temperature = options.temperature;
-  }
-  if (options.json) body.text = { format: { type: "json_object" } };
-  return body;
-}
-
-function xaiResponsesBody(model, prompt, options = {}) {
-  return {
-    model,
-    input: [{ role: "user", content: `${SYSTEM}\n\n${String(prompt || "")}` }],
-    max_output_tokens: Number(options.maxOutputTokens || 1200),
-    reasoning: { effort: options.reasoningEffort || "low" },
-  };
-}
-
-function chatBody(model, prompt, options = {}) {
-  const body = {
-    model,
-    messages: [
-      { role: "system", content: SYSTEM },
-      { role: "user", content: String(prompt || "") },
-    ],
-  };
-  if (options.maxOutputTokens) body.max_tokens = Number(options.maxOutputTokens);
-  if (options.temperature != null && samplingAllowed(model)) body.temperature = options.temperature;
-  return body;
-}
-
-function textFromResponses(data) {
-  if (typeof data?.output_text === "string" && data.output_text.trim()) return data.output_text;
-  const parts = [];
-  for (const item of data?.output || []) {
-    for (const part of item?.content || []) {
-      if (part?.type === "output_text" || part?.type === "text") parts.push(part.text || "");
-    }
-    if (!item?.content && typeof item?.text === "string") parts.push(item.text);
-  }
-  return parts.join("");
-}
-
-function textFromChat(data) {
-  const content = data?.choices?.[0]?.message?.content;
-  if (typeof content === "string") return content;
-  if (Array.isArray(content)) return content.map((part) => part?.text || "").join("");
-  return "";
-}
-
-function requestJson(url, body, headers = {}, options = {}) {
-  const payload = Buffer.from(JSON.stringify(body));
-  const timeout = Number(options.timeoutMs || process.env.AI_TIMEOUT_MS || 20000);
+function requestJson(url, body, headers = {}) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const req = https.request({
-      protocol: u.protocol,
       hostname: u.hostname,
-      port: u.port || 443,
-      path: `${u.pathname}${u.search}`,
+      path: u.pathname + u.search,
       method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "content-length": String(payload.length),
-        accept: "application/json",
-        "user-agent": "borsa-gpt-bot/1.0",
-        ...headers,
-      },
-      timeout,
-    }, (res) => {
-      const chunks = [];
-      res.on("data", (chunk) => chunks.push(chunk));
+      headers: { "content-type": "application/json", ...headers },
+      timeout: Number(process.env.AI_TIMEOUT_MS || 20000),
+    }, res => {
+      let data = "";
+      res.setEncoding("utf8");
+      res.on("data", c => { data += c; });
       res.on("end", () => {
-        const raw = Buffer.concat(chunks).toString("utf8");
         let parsed = null;
-        try { parsed = raw ? JSON.parse(raw) : {}; } catch { parsed = null; }
+        try { parsed = JSON.parse(data); } catch {}
         if (res.statusCode >= 200 && res.statusCode < 300) return resolve(parsed || {});
-        const err = new Error(formatProviderError(res.statusCode, parsed?.error));
-        err.statusCode = res.statusCode;
-        err.param = parsed?.error?.param || null;
-        reject(err);
+        reject(new Error(formatProviderError(res.statusCode, parsed?.error)));
       });
     });
-    req.on("timeout", () => req.destroy(Object.assign(new Error("AI timeout"), { statusCode: 408 })));
+    req.on("timeout", () => req.destroy(new Error("AI timeout")));
     req.on("error", reject);
-    req.end(payload);
+    req.write(JSON.stringify(body));
+    req.end();
   });
 }
 
-function unsupportedParameter(err) {
-  return err?.statusCode === 400 && /temperature|top_p|reasoning|unsupported_value|unsupported_parameter|unknown parameter|invalid parameter/i.test(String(err.message || ""));
-}
-
-function endpointMissing(err) {
-  return err?.statusCode === 404 || err?.statusCode === 405 || /not found|unknown url|unrecognized request/i.test(String(err.message || ""));
-}
-
-async function requestWithRecovery(url, body, headers, options) {
-  try { return await requestJson(url, body, headers, options); }
-  catch (err) {
-    if (unsupportedParameter(err)) {
-      const slim = {
-        model: body.model,
-        input: body.input,
-        instructions: body.instructions,
-        messages: body.messages,
-        max_output_tokens: body.max_output_tokens,
-        max_tokens: body.max_tokens,
-      };
-      const compact = Object.fromEntries(Object.entries(slim).filter(([, value]) => value != null));
-      return requestJson(url, compact, headers, options);
-    }
-    if ([429, 500, 502, 503, 504].includes(err.statusCode)) {
-      await sleep(700);
-      return requestJson(url, body, headers, options);
-    }
-    throw err;
-  }
-}
 
 function formatProviderError(statusCode, providerError) {
   const error = providerError && typeof providerError === "object" ? providerError : {};
   const clean = (value, fallback, max) => redactString(String(value || fallback).replace(/\s+/g, " ").slice(0, max));
   const code = clean(error.code, "unknown", 100);
-  const type = clean(error.type || error.status, "unknown", 100);
+  const type = clean(error.type, "unknown", 100);
   const param = clean(error.param, "unknown", 100);
   const message = clean(error.message, "No provider error message supplied", 350);
   return `AI HTTP ${Number(statusCode)}: code=${code}; type=${type}; param=${param}; message=${message}`;
 }
 
-async function completeResponses({ responsesUrl, chatUrl, key, model, prompt, options, provider, xai = false }) {
-  const headers = { authorization: `Bearer ${key}` };
-  const primaryBody = xai ? xaiResponsesBody(model, prompt, options) : responsesBody(model, prompt, options);
-  try {
-    const data = await requestWithRecovery(responsesUrl, primaryBody, headers, options);
-    const text = textFromResponses(data);
-    if (text.trim() || !chatUrl) return { text, provider, model, endpoint: "responses" };
-  } catch (err) {
-    if (!endpointMissing(err) && !unsupportedParameter(err)) throw err;
-  }
-  const data = await requestWithRecovery(chatUrl, chatBody(model, prompt, options), headers, options);
-  return { text: textFromChat(data), provider, model, endpoint: "chat" };
-}
-
 function openAIProvider(key, model) {
-  return (prompt, options = {}) => completeResponses({
-    responsesUrl: "https://api.openai.com/v1/responses",
-    chatUrl: "https://api.openai.com/v1/chat/completions",
-    key, model: model || "gpt-6-luna", prompt, options, provider: "openai",
-  });
+  return async (prompt, options = {}) => {
+    const data = await requestJson("https://api.openai.com/v1/responses", {
+      model: model || "gpt-6-luna",
+      instructions: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية. أخرج المطلوب بدقة وبالعربية عند الحاجة.",
+      input: String(prompt || "")
+    }, { authorization: `Bearer ${key}` });
+    const text = data.output_text || (data.output || []).flatMap(item => item.content || []).filter(part => part.type === "output_text").map(part => part.text || "").join("");
+    return { text, provider: "openai", model: model || "gpt-6-luna" };
+  };
 }
 
 function xaiProvider(key, model) {
-  return (prompt, options = {}) => completeResponses({
-    responsesUrl: "https://api.x.ai/v1/responses",
-    chatUrl: "https://api.x.ai/v1/chat/completions",
-    key, model: model || "grok-4.7", prompt, options, provider: "xai", xai: true,
-  });
+  return async (prompt, options = {}) => {
+    const data = await requestJson("https://api.x.ai/v1/chat/completions", {
+      model: model || "grok-4.7",
+      temperature: options.temperature ?? 0,
+      messages: [{ role: "system", content: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية." }, { role: "user", content: prompt }]
+    }, { authorization: `Bearer ${key}` });
+    return { text: data.choices?.[0]?.message?.content || "", provider: "xai", model };
+  };
 }
 
 function geminiProvider(key, model) {
   return async (prompt, options = {}) => {
-    const usedModel = model || "gemini-2.5-flash";
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(usedModel)}:generateContent?key=${encodeURIComponent(key)}`;
-    const body = {
-      contents: [{ role: "user", parts: [{ text: `${SYSTEM}\n\n${String(prompt || "")}` }] }],
-      generationConfig: { maxOutputTokens: Number(options.maxOutputTokens || 1200) },
-    };
-    let data;
-    try { data = await requestWithRecovery(endpoint, body, {}, options); }
-    catch (err) {
-      if (!unsupportedParameter(err)) throw err;
-      data = await requestJson(endpoint, { contents: body.contents }, {}, options);
-    }
-    const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || "").join("") || "";
-    if (!text && data.promptFeedback?.blockReason) {
-      throw new Error(`AI HTTP 200: code=blocked; type=gemini; param=prompt; message=${redactString(String(data.promptFeedback.blockReason))}`);
-    }
-    return { text, provider: "gemini", model: usedModel, endpoint: "generateContent" };
+    const selectedModel = model || "gemini-3.5-flash-lite";
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`;
+    const data = await requestJson(endpoint, {
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      generationConfig: { temperature: options.temperature ?? 0 }
+    }, { "x-goog-api-key": key });
+    return { text: data.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("") || "", provider: "gemini", model: selectedModel };
   };
 }
 
 function providersFromEnv() {
-  const out = [];
-  for (const keyName of ["OPENAI_API_KEY", "OPENAI_API_KEY_2"]) {
-    if (process.env[keyName]) out.push({ name: keyName, run: openAIProvider(process.env[keyName], process.env.OPENAI_MODEL || "gpt-6-luna") });
+  const all = {
+    openai: [], xai: [], gemini: []
+  };
+  for (const keyName of ["OPENAI_API_KEY", "OPENAI_API_KEY_2", "OPENAI_API_KEY_3"]) {
+    if (process.env[keyName]) all.openai.push({ name: keyName, provider: "openai", run: openAIProvider(process.env[keyName], process.env.OPENAI_MODEL || "gpt-6-luna") });
   }
-  for (const keyName of ["XAI_API_KEY", "XAI_API_KEY_2"]) {
-    if (process.env[keyName]) out.push({ name: keyName, run: xaiProvider(process.env[keyName], process.env.XAI_MODEL || "grok-4.7") });
+  for (const [keyName, modelName] of [["XAI_API_KEY","XAI_MODEL"],["XAI_API_KEY_2","XAI_MODEL_2"]]) {
+    if (process.env[keyName]) all.xai.push({ name: keyName, provider: "xai", run: xaiProvider(process.env[keyName], process.env[modelName] || process.env.XAI_MODEL || "grok-4.7") });
   }
-  for (const keyName of ["GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"]) {
-    if (process.env[keyName]) out.push({ name: keyName, run: geminiProvider(process.env[keyName], process.env.GEMINI_MODEL || "gemini-2.5-flash") });
+  for (const keyName of ["GEMINI_API_KEY_1","GEMINI_API_KEY_2","GEMINI_API_KEY_3"]) {
+    if (process.env[keyName]) all.gemini.push({ name: keyName, provider: "gemini", run: geminiProvider(process.env[keyName], process.env.GEMINI_MODEL || "gemini-3.5-flash-lite") });
   }
-  return out;
+  const primary = String(process.env.AI_PROVIDER || "openai").toLowerCase();
+  const order = [primary, ...["openai", "gemini", "xai"].filter(x => x !== primary)];
+  return order.flatMap(provider => all[provider] || []);
+}
+
+function isRetryable(error) {
+  const message = String(error?.message || "");
+  const status = Number(message.match(/AI HTTP (\d+)/)?.[1] || 0);
+  return status === 408 || status === 409 || status === 429 || status >= 500 || /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(message);
 }
 
 function createAI() {
-  const providers = providersFromEnv();
+  const configured = providersFromEnv();
+  const primaryProvider = String(process.env.AI_PROVIDER || "openai").toLowerCase();
+  const primary = configured.filter(p => p.provider === primaryProvider);
+  const selected = primary.length ? primary : configured;
   async function generate(prompt, options = {}) {
-    const budget = Number(options.budgetMs || process.env.AI_BUDGET_MS || 45000);
-    const started = Date.now();
+    if (!selected.length) throw new Error("لا يوجد مزود AI مضبوط");
+    const allowCrossProvider = process.env.AI_FALLBACK_ENABLED === "true";
+    const providerOrder = allowCrossProvider ? selected : selected.filter(p => p.provider === selected[0].provider);
     let last;
-    for (const provider of providers) {
-      const elapsed = Date.now() - started;
-      if (elapsed >= budget) break;
-      const timeoutMs = Math.max(5000, Math.min(Number(process.env.AI_TIMEOUT_MS || 20000), budget - elapsed));
-      try { return await provider.run(prompt, { ...options, timeoutMs }); }
-      catch (err) {
-        last = err;
-        console.warn(`[AI_FAIL] ${provider.name}: ${redactString(err?.message || "provider_error")}`);
+    for (let i = 0; i < providerOrder.length; i++) {
+      const p = providerOrder[i];
+      try { return await p.run(prompt, options); }
+      catch (e) {
+        last = e;
+        console.warn(`[AI_FAIL] provider=${p.provider} key_slot=${p.name} retryable=${isRetryable(e)} error=${redactString(e?.message || "provider_error")}`);
+        // Do not burn through keys/providers on invalid credentials, unsupported models,
+        // or malformed requests. Retry only temporary/rate-limit failures.
+        if (!isRetryable(e)) throw e;
+        const next = providerOrder[i + 1];
+        if (next && next.provider !== p.provider && !allowCrossProvider) break;
       }
     }
     throw last || new Error("لا يوجد مزود AI مضبوط");
   }
-  return { generate, providers: providers.map((item) => item.name) };
+  return { generate, providers: selected.map(x => x.name), primaryProvider: selected[0]?.provider || null };
 }
 
-module.exports = {
-  createAI,
-  providersFromEnv,
-  formatProviderError,
-  responsesBody,
-  xaiResponsesBody,
-  chatBody,
-  samplingAllowed,
-  textFromResponses,
-  textFromChat,
-};
+module.exports = { createAI, providersFromEnv, formatProviderError };

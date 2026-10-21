@@ -11,6 +11,7 @@ const MIGRATION_FILES = Object.freeze([
   "004_legacy_services.sql",
   "005_deal_product_identity.sql",
   "006_media_quota_events.sql",
+  "006_price_observation_identity.sql",
   "007_rate_limit_events.sql",
   "008_deal_error_notifications.sql",
 ]);
@@ -18,7 +19,7 @@ const MIGRATION_FILES = Object.freeze([
 // A single transaction prevents a failed migration from leaving a partially
 // applied schema. The transaction-scoped advisory lock serializes startup when
 // more than one application instance attempts migrations at the same time.
-const MIGRATION_LOCK_KEY = 0x424f5253; // 
+const MIGRATION_LOCK_KEY = 0x424f5253;
 
 async function runMigrations({ db, rootDir = path.join(__dirname, ".."), readFile = fs.readFileSync }) {
   if (!db || typeof db.withTransaction !== "function") {

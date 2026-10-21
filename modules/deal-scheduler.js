@@ -3,7 +3,6 @@ const { collectDealCandidates } = require("./deal-sources");
 const { filterRecentDeals, distributeDeals } = require("./deal-publication");
 const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
 
-function hostOf(url) { try { return new URL(url).hostname; } catch { return ""; } }
 function cairoParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
   return Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type,p.value]));
@@ -11,20 +10,46 @@ function cairoParts(date = new Date()) {
 function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.year}-${p.month}-${p.day}`; }
 function isNewsletterWindow(date = new Date()) { const p = cairoParts(date); return Number(p.hour) >= 17; }
 
-async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000 } = {}) {
-  let url;
-  try { url = new URL(raw); } catch { return { ok: false, reason: "invalid_url" }; }
+async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000, maxRedirects = 5 } = {}) {
   const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com"]);
-  if (url.protocol !== "https:" || !allowedHosts.has(url.hostname) || url.username || url.password) return { ok: false, reason: "host_not_allowed" };
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const safeUrl = value => {
+    try {
+      const u = new URL(value);
+      if (u.protocol !== "https:" || !allowedHosts.has(u.hostname.toLowerCase()) || u.username || u.password || (u.port && u.port !== "443")) return null;
+      return u;
+    } catch { return null; }
+  };
+  let url = safeUrl(raw);
+  if (!url) return { ok: false, reason: "host_not_allowed" };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    let response = await fetchImpl(url, { method: "HEAD", redirect: "follow", signal: controller.signal });
-    if ([403, 405, 501].includes(response.status)) response = await fetchImpl(url, { method: "GET", redirect: "follow", signal: controller.signal, headers: { Range: "bytes=0-0" } });
-    const final = new URL(response.url || url.href);
-    if (final.protocol !== "https:" || !allowedHosts.has(final.hostname)) return { ok: false, reason: "redirect_host_not_allowed" };
-    return { ok: response.status >= 200 && response.status < 400, status: response.status, finalUrl: final.href, reason: response.status >= 200 && response.status < 400 ? null : "http_error" };
-  } catch (error) { return { ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed" }; }
-  finally { clearTimeout(timer); }
+    let method = "HEAD";
+    let headers;
+    for (let redirects = 0; redirects <= maxRedirects; redirects++) {
+      const response = await fetchImpl(url, { method, ...(headers ? { headers } : {}), redirect: "manual", signal: controller.signal });
+      if (method === "HEAD" && [403, 405, 501].includes(response.status)) {
+        method = "GET";
+        headers = { Range: "bytes=0-0" };
+        redirects--;
+        continue;
+      }
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers?.get?.("location") || response.headers?.location;
+        if (!location) return { ok: false, reason: "redirect_without_location" };
+        if (redirects === maxRedirects) return { ok: false, reason: "too_many_redirects" };
+        const next = safeUrl(new URL(location, url).href);
+        if (!next) return { ok: false, reason: "redirect_host_not_allowed" };
+        url = next;
+        continue;
+      }
+      const ok = response.status >= 200 && response.status < 400;
+      return { ok, status: response.status, finalUrl: url.href, reason: ok ? null : "http_error" };
+    }
+    return { ok: false, reason: "too_many_redirects" };
+  } catch (error) {
+    return { ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed" };
+  } finally { clearTimeout(timer); }
 }
 async function verifyDeals(deals, options = {}) {
   const output = [];
@@ -64,10 +89,10 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   // Overall pool is category-balanced (10 detergents, 10 paper, 10 care when supply allows).
   const balanced = distributeDeals(recent);
   const ordered = [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
-  const amazon = ordered.filter(d => /amazon\.eg/i.test(hostOf(d.url))).slice(0, 10);
+  const amazon = ordered.filter(d => /amazon\.eg/i.test(new URL(d.url).hostname)).slice(0, 10);
   const amazonKeys = new Set(amazon.map(d => d.fingerprint));
   const remaining = ordered.filter(d => !amazonKeys.has(d.fingerprint));
-  const other = remaining.filter(d => !/amazon\.eg/i.test(hostOf(d.url))).slice(0, 10);
+  const other = remaining.filter(d => !/amazon\.eg/i.test(new URL(d.url).hostname)).slice(0, 10);
   const otherKeys = new Set(other.map(d => d.fingerprint));
   const publishedKeys = new Set([...amazonKeys, ...otherKeys]);
   const best = ordered.filter(d => !publishedKeys.has(d.fingerprint)).sort((a,b) => (Number(b.discount_pct)||0) - (Number(a.discount_pct)||0)).slice(0, 10);
@@ -106,13 +131,48 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   }
   return { batchKey: key, verified: verified.length, recent: recent.length, saved: published.reduce((n,x) => n + x.count, 0), published, sourceErrors: gathered.errors || [] };
 }
-function startDealScheduler(options, { intervalMs = 60_000 } = {}) {
+function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 15 * 60_000 } = {}) {
   let busy = false;
+  let nextAttemptAt = 0;
+  let activeDay = batchKey();
+  const reportedFetchFailures = new Set();
+
+  // A failed source query used to emit the same diagnostic every minute. Keep
+  // trying periodically, but emit only one identical fetch-failure report per
+  // Cairo day. A changed source/status signature is still reported immediately.
+  const scheduledOptions = {
+    ...options,
+    onError: async (error, details = {}) => {
+      if (details.stage === "fetch") {
+        const day = batchKey();
+        if (day !== activeDay) {
+          activeDay = day;
+          reportedFetchFailures.clear();
+        }
+        const sourceErrors = (details.errors || [])
+          .map(item => `${String(item.source || "unknown")}:${String(item.reason || "unknown")}`)
+          .sort();
+        const signature = `${day}|${String(error?.message || "fetch_error")}|${sourceErrors.join(",")}`;
+        if (reportedFetchFailures.has(signature)) return;
+        reportedFetchFailures.add(signature);
+      }
+      await options.onError?.(error, details);
+    }
+  };
+
   const timer = setInterval(async () => {
-    if (busy) return; busy = true;
-    try { await publishDailyDeals(options); }
-    catch (error) { await options.onError?.(error, { stage: "scheduler_tick" }); }
-    finally { busy = false; }
+    if (busy || Date.now() < nextAttemptAt) return;
+    busy = true;
+    try {
+      const result = await publishDailyDeals(scheduledOptions);
+      if (result.reason === "no_deals") nextAttemptAt = Date.now() + retryAfterFailureMs;
+      else nextAttemptAt = 0;
+    } catch (error) {
+      nextAttemptAt = Date.now() + retryAfterFailureMs;
+      await scheduledOptions.onError?.(error, { stage: "scheduler_tick" });
+    } finally {
+      busy = false;
+    }
   }, intervalMs);
   timer.unref?.();
   return () => clearInterval(timer);

@@ -10,20 +10,46 @@ function cairoParts(date = new Date()) {
 function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.year}-${p.month}-${p.day}`; }
 function isNewsletterWindow(date = new Date()) { const p = cairoParts(date); return Number(p.hour) >= 17; }
 
-async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000 } = {}) {
-  let url;
-  try { url = new URL(raw); } catch { return { ok: false, reason: "invalid_url" }; }
+async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000, maxRedirects = 5 } = {}) {
   const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com"]);
-  if (url.protocol !== "https:" || !allowedHosts.has(url.hostname) || url.username || url.password) return { ok: false, reason: "host_not_allowed" };
-  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const safeUrl = value => {
+    try {
+      const u = new URL(value);
+      if (u.protocol !== "https:" || !allowedHosts.has(u.hostname.toLowerCase()) || u.username || u.password || (u.port && u.port !== "443")) return null;
+      return u;
+    } catch { return null; }
+  };
+  let url = safeUrl(raw);
+  if (!url) return { ok: false, reason: "host_not_allowed" };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    let response = await fetchImpl(url, { method: "HEAD", redirect: "follow", signal: controller.signal });
-    if ([403, 405, 501].includes(response.status)) response = await fetchImpl(url, { method: "GET", redirect: "follow", signal: controller.signal, headers: { Range: "bytes=0-0" } });
-    const final = new URL(response.url || url.href);
-    if (final.protocol !== "https:" || !allowedHosts.has(final.hostname)) return { ok: false, reason: "redirect_host_not_allowed" };
-    return { ok: response.status >= 200 && response.status < 400, status: response.status, finalUrl: final.href, reason: response.status >= 200 && response.status < 400 ? null : "http_error" };
-  } catch (error) { return { ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed" }; }
-  finally { clearTimeout(timer); }
+    let method = "HEAD";
+    let headers;
+    for (let redirects = 0; redirects <= maxRedirects; redirects++) {
+      const response = await fetchImpl(url, { method, ...(headers ? { headers } : {}), redirect: "manual", signal: controller.signal });
+      if (method === "HEAD" && [403, 405, 501].includes(response.status)) {
+        method = "GET";
+        headers = { Range: "bytes=0-0" };
+        redirects--;
+        continue;
+      }
+      if ([301, 302, 303, 307, 308].includes(response.status)) {
+        const location = response.headers?.get?.("location") || response.headers?.location;
+        if (!location) return { ok: false, reason: "redirect_without_location" };
+        if (redirects === maxRedirects) return { ok: false, reason: "too_many_redirects" };
+        const next = safeUrl(new URL(location, url).href);
+        if (!next) return { ok: false, reason: "redirect_host_not_allowed" };
+        url = next;
+        continue;
+      }
+      const ok = response.status >= 200 && response.status < 400;
+      return { ok, status: response.status, finalUrl: url.href, reason: ok ? null : "http_error" };
+    }
+    return { ok: false, reason: "too_many_redirects" };
+  } catch (error) {
+    return { ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed" };
+  } finally { clearTimeout(timer); }
 }
 async function verifyDeals(deals, options = {}) {
   const output = [];

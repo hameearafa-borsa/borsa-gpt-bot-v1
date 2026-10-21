@@ -23,5 +23,18 @@ assert.equal(isNewsletterWindow(new Date("2026-10-12T14:00:00.000Z")),true);
  assert.equal(ok.ok,true);
  const bad = await verifyProductUrl("https://evil.example/x", {fetchImpl:async()=>({status:200,url:"https://evil.example/x"})});
  assert.equal(bad.ok,false);
+ let redirectCalls = 0;
+ const redirected = await verifyProductUrl("https://www.amazon.eg/dp/B0ABCDEF12", {
+   fetchImpl: async (_url, options) => {
+     redirectCalls++;
+     assert.equal(options.redirect, "manual", "redirects must be validated before following");
+     return { status: 302, headers: { get: () => "https://evil.example/redirect-target" } };
+   }
+ });
+ assert.equal(redirected.ok, false);
+ assert.equal(redirected.reason, "redirect_host_not_allowed");
+ assert.equal(redirectCalls, 1, "must not make a request to a disallowed redirect target");
+ const badPort = await verifyProductUrl("https://www.amazon.eg:8443/dp/B0ABCDEF12");
+ assert.equal(badPort.ok, false, "non-standard HTTPS ports must be rejected");
  console.log("deal sources + safe URL verification + Cairo scheduler tests: OK");
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -25,8 +25,9 @@ function money(value) {
 }
 function safeProductUrl(raw, sourceName) {
   try {
+    if (!SOURCES[sourceName] || !String(raw || "").trim()) return null;
     const u = new URL(raw, `https://${SOURCES[sourceName].host}`);
-    if (u.protocol !== "https:" || u.hostname !== SOURCES[sourceName].host || u.username || u.password) return null;
+    if (u.protocol !== "https:" || u.hostname !== SOURCES[sourceName].host || u.username || u.password || (u.port && u.port !== "443") || u.pathname === "/") return null;
     u.hash = "";
     // Strip tracking parameters; preserve only the path and essential product identifier.
     if (sourceName === "amazon" && /\/dp\/[A-Z0-9]{10}/i.test(u.pathname)) u.search = "";

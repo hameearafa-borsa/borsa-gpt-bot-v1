@@ -26,7 +26,7 @@
 
 ## قبل الإنتاج — بوابات إلزامية
 1. إكمال/اعتماد ترحيل ميزات الحماية والإدارة والجدولة والعروض من المصدر القديم؛ التفاصيل في `LEGACY-MIGRATION-MAP.md`.
-2. توليد `package-lock.json` عبر `npm install` في Termux والتحقق من `npm ci` بعد ذلك.
+2. ملف القفل الحالي يتضمن `sharp 0.34.5` وحزمة WASM. على Termux/Android ARM64: نفّذ `npm ci` ثم `npm install --cpu=wasm32 sharp` لأن `npm ci` وحده قد يتجاوز حزمة WASM الاختيارية، ثم شغّل `npm run check && npm test`.
 3. أخذ نسخة احتياطية من PostgreSQL، ثم فحص المخطط الحالي ومقارنته بملفات migrations؛ لا تشغّل migrations على قاعدة الإنتاج قبل المراجعة.
 4. اختبار OpenAI Responses API فعليًا من Termux بمفتاح مخزّن محليًا، دون طباعته أو إرساله.
 5. اختبار Telegram في مجموعة اختبار: `/claim` يجب أن ينفذه منشئ المجموعة الأصلي، ثم اختبار لوحة الخاص والاستعادة والتراجع.
@@ -78,4 +78,4 @@ This candidate uses Telegram **Webhook** transport only; it does not start `getU
 Do not run a second instance using the same token during cutover. This code change has only been locally tested; it does not verify the Railway domain, Telegram webhook registration, or live delivery. Shutdown preserves queued updates and does not call `deleteWebhook`.
 
 ## Review candidate note — 2026-10-19
-This archive includes a `sharp`-based price-list image renderer. The review workspace could not reach the npm registry to fully refresh `package-lock.json`; on Termux with working network access, run `npm install` before testing (do not run `npm ci` against the stale lockfile). See `REVIEW-REPORT-2026-10-19.md`. This candidate has not been live-tested or approved for production.
+This archive includes a `sharp`-based price-list image renderer. The lockfile has since been refreshed for `sharp 0.34.5` and includes the optional WASM package. On Termux/Android ARM64, run `npm ci` followed by `npm install --cpu=wasm32 sharp` before testing; the second command installs the WASM runtime that npm may skip for Android's `arm64` platform. On Railway/Linux, use the standard `npm ci` path so npm selects the platform's native `sharp` binary. This candidate has not been live-tested or approved for production.

@@ -9,6 +9,7 @@ assert.match(source, /await bot\.telegram\.setWebhook\(webhookConfig\.url,\s*\{/
 assert.match(source, /createWebhookServer\(bot, webhookConfig\)/);
 assert.doesNotMatch(source, /await bot\.launch\(/);
 assert.match(source, /cmd === "claim" && \["group", "supergroup"\]/);
+assert.match(source, /if \(await isAuthorizedChat\(m\.chatId\)\) \{[\s\S]*?هذه المجموعة معتمدة بالفعل/);
 assert.match(source, /cmd === "approvechat" && m\.chatType === "private"/);
 assert.match(source, /pending_group_approvals/);
 assert.match(source, /Number\(actor\) !== MASTER_ID/);

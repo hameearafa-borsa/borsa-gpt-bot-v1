@@ -272,18 +272,30 @@ bot.on("my_chat_member", async ctx => {
       creatorId = admins.find(a => a.status === "creator")?.user?.id || null;
     } catch { creatorId = null; }
   }
-  const actorIsCreator = creatorId != null && String(creatorId) === String(actor);
-  const allowed = isMaster(actor) || actorIsCreator;
-  if (!allowed) {
-    await sendLog({ module: "security", stage: "unauthorized_add", severity: "warn", status: "rejected", details: { chatId: chat.id, actor, chatType: chat.type } });
-    // Keep the bot in the chat but do not authorize it. The creator must run /claim.
+  // Only the bot master may authorize a group by adding the bot.
+  if (!isMaster(actor)) {
+    if (db.pool) {
+      await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
+        VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET
+        chat_type=EXCLUDED.chat_type, requested_by=EXCLUDED.requested_by,
+        owner_user_id=EXCLUDED.owner_user_id, requested_at=NOW(), status='pending',
+        approved_by=NULL, approved_at=NULL`,
+        [chat.id, chat.type, actor ?? null, creatorId]);
+    }
+    await sendLog({ module: "security", stage: "group_approval_required", severity: "warn", status: "pending", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
     return;
   }
-  // A bot master may add the bot, but must not be recorded as the Telegram group's owner
-  // when Telegram could not verify the actual creator. /claim binds the real creator later.
   await authorizeChat(chat.id, chat.type, creatorId, actor);
-  console.log(`[GROUP_RECOGNIZED] chatId=${chat.id} type=${chat.type} ownerId=${creatorId || actor}`);
-  await sendLog({ module: "security", stage: "chat_authorized", status: "ok", details: { chatId: chat.id, actor, ownerUserId: creatorId || actor, chatType: chat.type } });
+  if (db.pool) {
+    await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id,status,approved_by,approved_at)
+      VALUES($1,$2,$3,$4,'approved',$5,NOW()) ON CONFLICT(chat_id) DO UPDATE SET
+      chat_type=EXCLUDED.chat_type, requested_by=EXCLUDED.requested_by,
+      owner_user_id=EXCLUDED.owner_user_id, status='approved',
+      approved_by=EXCLUDED.approved_by, approved_at=NOW()`,
+      [chat.id, chat.type, actor ?? null, creatorId, actor]);
+  }
+  console.log(`[GROUP_RECOGNIZED] chatId=${chat.id} type=${chat.type} ownerId=${creatorId || "unverified"}`);
+  await sendLog({ module: "security", stage: "chat_authorized", status: "ok", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
 });
 
 bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protection|inactive|health|scraper_test|diagnostics)$/, async ctx => {

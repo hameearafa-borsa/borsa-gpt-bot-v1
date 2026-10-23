@@ -12,7 +12,7 @@ function safetyGate(question) {
 }
 function isChemicalQuestion(value) {
   const s = String(value || "").trim();
-  if (!s || s.length < 12 || /^\\//.test(s)) return false;
+  if (!s || s.length < 12 || s.startsWith("/")) return false;
 
   // A topic mention, link, or tutorial announcement alone is not a request for help.
   const commercialOnly = /(سعر|بكام|بكم|كام جنيه|جنيه لل|متوفر|متوفره|متوفر عند|عرض سعر|قائمة أسعار|قائمه اسعار|بيع|شراء|للبيع|للشراء|كرتونة|كرتونه|جملة|جمله|قطاعي|خصم|توصيل|محل|تاجر)/i.test(s);

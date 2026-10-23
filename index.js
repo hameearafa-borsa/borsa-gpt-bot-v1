@@ -386,7 +386,7 @@ bot.on("text", async ctx => {
   // Only the bot master may approve a group, and only from a private chat.
   if (cmd === "approvechat" && m.chatType === "private") {
     if (!isMaster(m.userId)) { await ctx.reply("هذا الأمر متاح لمالك البوت فقط."); return; }
-    const targetId = Number(args.split(/\\s+/)[0]);
+    const targetId = Number(args.split(/\s+/)[0]);
     if (!Number.isSafeInteger(targetId) || targetId >= 0) { await ctx.reply("الصيغة: /approvechat -1001234567890"); return; }
     try {
       const pending = await db.query("SELECT chat_type,owner_user_id FROM pending_group_approvals WHERE chat_id=$1 AND status='pending'", [targetId]);

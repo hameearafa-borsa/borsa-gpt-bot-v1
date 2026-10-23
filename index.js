@@ -568,7 +568,7 @@ bot.on("text", async ctx => {
   if (m.chatType === "private" && chemical.isChemicalQuestion(text)) {
     const answer = await chemical.answer(chemicalAI, text);
     const links = buildChemicalLinks(text);
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${answer}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}`;
+    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }

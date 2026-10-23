@@ -16,6 +16,7 @@ const { formatTelegramStartupError } = require("./core/telegram-startup-error");
 const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
 const { MASTER_ID, canManage, isMaster, authorizedUserIds } = require("./core/permissions");
+const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { renderPriceListImages } = require("./modules/price-list-image");
 const priceMonitor = require("./modules/price-monitor");
@@ -406,8 +407,13 @@ bot.on("text", async ctx => {
         await ctx.reply("تعذر التحقق من منشئ المجموعة الحالي؛ لم يتم اعتمادها.");
         return;
       }
-      await authorizeChat(targetId, pending.rows[0].chat_type, creator.id, m.userId);
-      await db.query("UPDATE pending_group_approvals SET status='approved', approved_by=$2, approved_at=NOW(), owner_user_id=$3 WHERE chat_id=$1", [targetId, m.userId, creator.id]);
+      await approvePendingGroup({
+        db,
+        chatId: targetId,
+        chatType: pending.rows[0].chat_type,
+        ownerUserId: creator.id,
+        approvedBy: m.userId
+      });
       await ctx.reply(`تم اعتماد المجموعة بنجاح.\nالمعرّف: ${targetId}\nمنشئ المجموعة: ${creator.id}\nالمعتمد: مالك البوت.`);
       try { await ctx.telegram.sendMessage(targetId, "وافق مالك البوت على تفعيل خدمات البوت في هذه المجموعة."); } catch {}
       await sendLog({ module: "security", stage: "group_approved_by_master", status: "ok", details: { chatId: targetId, ownerUserId: creator.id, approvedBy: m.userId } });

@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const aiSource = fs.readFileSync(path.join(__dirname, "../core/ai.js"), "utf8");
 const index = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
-const { createAI, extractResponsesText } = require("../core/ai");
+const { createAI, extractResponsesText, providersFromEnv } = require("../core/ai");
 
 assert.ok(aiSource.includes("gemini-3.5-flash-lite"));
 assert.ok(aiSource.includes("x-goog-api-key"));
@@ -33,6 +33,25 @@ assert.equal(extractResponsesText({ output: [
   { type: "message", content: [{ type: "output_text", text: "nested answer" }] }
 ] }), "nested answer");
 assert.equal(extractResponsesText({ output: [] }), "");
+
+// Existing Railway deployments may use GEMINI_API_KEY (without _1).
+const envNames = ["AI_PROVIDER", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"];
+const savedEnv = Object.fromEntries(envNames.map(name => [name, process.env[name]]));
+try {
+  process.env.AI_PROVIDER = "gemini";
+  process.env.GEMINI_API_KEY = "legacy-slot-one";
+  delete process.env.GEMINI_API_KEY_1;
+  delete process.env.GEMINI_API_KEY_2;
+  delete process.env.GEMINI_API_KEY_3;
+  const geminiConfigured = providersFromEnv().filter(p => p.provider === "gemini");
+  assert.equal(geminiConfigured.length, 1);
+  assert.equal(geminiConfigured[0].name, "GEMINI_API_KEY_1");
+} finally {
+  for (const name of envNames) {
+    if (savedEnv[name] === undefined) delete process.env[name];
+    else process.env[name] = savedEnv[name];
+  }
+}
 
 (async () => {
   // Retryable upstream failure: exhaust Gemini slots, then use OpenAI, then xAI if needed.

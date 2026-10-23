@@ -53,14 +53,27 @@ function openAIProvider(key, model) {
   };
 }
 
+function extractResponsesText(data) {
+  if (typeof data?.output_text === "string" && data.output_text) return data.output_text;
+  return (data?.output || [])
+    .flatMap(item => item.content || [])
+    .filter(part => part.type === "output_text" && typeof part.text === "string")
+    .map(part => part.text)
+    .join("");
+}
+
 function xaiProvider(key, model) {
   return async (prompt, options = {}) => {
-    const data = await requestJson("https://api.x.ai/v1/chat/completions", {
-      model: model || "grok-4.7",
-      temperature: options.temperature ?? 0,
-      messages: [{ role: "system", content: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية." }, { role: "user", content: prompt }]
+    const selectedModel = model || "grok-4.7";
+    const data = await requestJson("https://api.x.ai/v1/responses", {
+      model: selectedModel,
+      input: [
+        { role: "system", content: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية." },
+        { role: "user", content: String(prompt || "") }
+      ],
+      temperature: options.temperature ?? 0
     }, { authorization: `Bearer ${key}` });
-    return { text: data.choices?.[0]?.message?.content || "", provider: "xai", model };
+    return { text: extractResponsesText(data), provider: "xai", model: selectedModel };
   };
 }
 
@@ -154,4 +167,4 @@ function createAI(options = {}) {
   return { generate, providers: selected.map(x => x.name), primaryProvider: selected[0]?.provider || null };
 }
 
-module.exports = { createAI, providersFromEnv, formatProviderError };
+module.exports = { createAI, providersFromEnv, formatProviderError, extractResponsesText };

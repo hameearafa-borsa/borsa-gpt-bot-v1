@@ -12,7 +12,7 @@ assert.match(source, /cmd === "claim" && \["group", "supergroup"\]/);
 assert.match(source, /cmd === "approvechat" && m\.chatType === "private"/);
 assert.match(source, /pending_group_approvals/);
 assert.match(source, /Number\(actor\) !== MASTER_ID/);
-assert.match(source, /UPDATE authorized_chats SET active=FALSE WHERE chat_id=\\$1/);
+assert.match(source, /UPDATE authorized_chats SET active=FALSE WHERE chat_id=\$1/);
 assert.match(source, /Number\(m\.userId\) !== MASTER_ID/);
 assert.match(source, /status=.pending./);
 assert.match(source, /status=.approved./);

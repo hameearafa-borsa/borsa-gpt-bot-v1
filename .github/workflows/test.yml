@@ -1,0 +1,31 @@
+name: Borsa Bot Tests
+
+on:
+  pull_request:
+    branches:
+      - termux-arm64-sharp-test-2026-10-21
+  push:
+    branches:
+      - owner-approved-group-access
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Syntax check
+        run: npm run check
+      - name: Run automated tests
+        run: npm test

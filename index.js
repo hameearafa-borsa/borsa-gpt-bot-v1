@@ -491,8 +491,8 @@ bot.on("text", async ctx => {
     const question = args || "اكتب سؤالك الكيميائي بوضوح.";
     const answer = await chemical.answer(chemicalAI, question);
     const links = buildChemicalLinks(question);
-    const mention = ctx.from?.username ? `@ ${ctx.from.username}\\n` : "";
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\\n\\n${mention}${answer}${renderChemicalLinks(links) ? `\\n\\n${renderChemicalLinks(links)}` : ""}\\n\\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";
+    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }
@@ -568,16 +568,16 @@ bot.on("text", async ctx => {
   if (m.chatType === "private" && chemical.isChemicalQuestion(text)) {
     const answer = await chemical.answer(chemicalAI, text);
     const links = buildChemicalLinks(text);
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\\n\\n${answer}${renderChemicalLinks(links) ? `\\n\\n${renderChemicalLinks(links)}` : ""}`;
+    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${answer}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }
 
   // In approved groups, automatically answer likely chemistry questions once per incoming message.
-  if (["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
+  if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
     const answer = await chemical.answer(chemicalAI, text);
     const links = buildChemicalLinks(text);
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\\n\\n${ctx.from?.username ? `@ ${ctx.from.username}\\n` : ""}${answer}${renderChemicalLinks(links) ? `\\n\\n${renderChemicalLinks(links)}` : ""}\\n\\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }

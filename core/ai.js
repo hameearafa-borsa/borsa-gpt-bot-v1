@@ -94,9 +94,19 @@ function providersFromEnv() {
   return order.flatMap(provider => all[provider] || []);
 }
 
+function providerStatus(error) {
+  const message = String(error?.message || "");
+  return Number(message.match(/AI HTTP (\d+)/)?.[1] || 0);
+}
+
+function isCredentialError(error) {
+  const status = providerStatus(error);
+  return status === 401 || status === 403 || /invalid_api_key|unauthorized|authentication failed/i.test(String(error?.message || ""));
+}
+
 function isRetryable(error) {
   const message = String(error?.message || "");
-  const status = Number(message.match(/AI HTTP (\d+)/)?.[1] || 0);
+  const status = providerStatus(error);
   return status === 408 || status === 409 || status === 429 || status >= 500 || /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(message);
 }
 
@@ -105,24 +115,37 @@ function createAI(options = {}) {
   const forcedProvider = options.provider ? String(options.provider).toLowerCase() : null;
   const primaryProvider = forcedProvider || String(process.env.AI_PROVIDER || "openai").toLowerCase();
   const primary = configured.filter(p => p.provider === primaryProvider);
-  // A forced provider (e.g. Gemini for chemistry) must never silently fall back to another vendor.
-  const selected = forcedProvider ? primary : (primary.length ? primary : configured);
+  const fallbackProviders = [...new Set((options.fallbackProviders || []).map(x => String(x).toLowerCase()))]
+    .filter(provider => provider !== primaryProvider);
+  // Explicit fallback providers are opt-in and ordered. Normal AI routing is unchanged.
+  const selected = forcedProvider
+    ? [...primary, ...fallbackProviders.flatMap(provider => configured.filter(p => p.provider === provider))]
+    : (primary.length ? primary : configured);
   async function generate(prompt, options = {}) {
     if (!selected.length) throw new Error("لا يوجد مزود AI مضبوط");
-    const allowCrossProvider = process.env.AI_FALLBACK_ENABLED === "true";
+    const allowCrossProvider = fallbackProviders.length > 0 || process.env.AI_FALLBACK_ENABLED === "true";
     const providerOrder = allowCrossProvider ? selected : selected.filter(p => p.provider === selected[0].provider);
     let last;
+    let skipProvider = null;
     for (let i = 0; i < providerOrder.length; i++) {
       const p = providerOrder[i];
+      if (skipProvider === p.provider) continue;
+      if (skipProvider && skipProvider !== p.provider) skipProvider = null;
       try { return await p.run(prompt, options); }
       catch (e) {
         last = e;
-        console.warn(`[AI_FAIL] provider=${p.provider} key_slot=${p.name} retryable=${isRetryable(e)} error=${redactString(e?.message || "provider_error")}`);
-        // Do not burn through keys/providers on invalid credentials, unsupported models,
-        // or malformed requests. Retry only temporary/rate-limit failures.
-        if (!isRetryable(e)) throw e;
-        const next = providerOrder[i + 1];
-        if (next && next.provider !== p.provider && !allowCrossProvider) break;
+        const retryable = isRetryable(e);
+        const credentialError = isCredentialError(e);
+        console.warn(`[AI_FAIL] provider=${p.provider} key_slot=${p.name} retryable=${retryable} credential_error=${credentialError} error=${redactString(e?.message || "provider_error")}`);
+        // Invalid credentials may be isolated to one key slot. Do not retry permanent
+        // model/request errors across every key of the same provider.
+        if (!retryable && !credentialError) {
+          if (!allowCrossProvider) throw e;
+          skipProvider = p.provider;
+        }
+        const next = providerOrder.slice(i + 1).find(candidate => skipProvider ? candidate.provider !== skipProvider : true);
+        if (!next) break;
+        if (next.provider !== p.provider && !allowCrossProvider) break;
       }
     }
     throw last || new Error("لا يوجد مزود AI مضبوط");

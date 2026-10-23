@@ -6,6 +6,14 @@ const links = require("../core/links");
 assert.equal(chemistry.isChemicalQuestion("إزاي أعالج مشكلة قلة لزوجة الصابون السائل؟"), true);
 assert.equal(chemistry.isChemicalQuestion("عايز تركيبة صابون سائل اقتصادية"), true);
 assert.equal(chemistry.isChemicalQuestion("ما طريقة تصنيع معطر أرضيات؟"), true);
+assert.equal(chemistry.isChemicalQuestion("لو ريحة الداوني غيرت اعمل إيه"), true);
+assert.equal(chemistry.isChemicalQuestion("حد عنده تركيبة كلوركس ألوان 60 لتر تكون شعبي"), true);
+assert.equal(chemistry.isChemicalQuestion("فيديو تعليمي من الالف للياء لطريقة تنفيذ تركيبة جيل شعر"), false);
+assert.equal(chemistry.isChemicalQuestion("اوكسي سائل غسيل اطباق ب 103 ج عليه تخفيض 13 ج"), false);
+assert.equal(chemistry.isChemicalQuestion("اوكسي جيل دا فيه منه توصيل؟"), false);
+assert.equal(chemistry.isChemicalQuestion("فلفيتا معطر ملابس 3 لتر بكام"), false);
+assert.equal(chemistry.isChemicalQuestion("أسعار المواد الخام عمالة تزيد و بترفع تكاليف الصابون و المنظفات في الشركات"), false);
+
 assert.equal(chemistry.isChemicalQuestion("سعر مسحوق بيرل 25 جنيه"), false);
 assert.equal(chemistry.isChemicalQuestion("الصابون السائل بكام؟"), false);
 assert.equal(chemistry.isChemicalQuestion("متوفر عندك كلور؟"), false);

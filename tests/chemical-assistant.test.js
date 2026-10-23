@@ -4,7 +4,13 @@ const chemistry = require("../modules/chemical-assistant");
 const links = require("../core/links");
 
 assert.equal(chemistry.isChemicalQuestion("إزاي أعالج مشكلة قلة لزوجة الصابون السائل؟"), true);
+assert.equal(chemistry.isChemicalQuestion("عايز تركيبة صابون سائل اقتصادية"), true);
+assert.equal(chemistry.isChemicalQuestion("ما طريقة تصنيع معطر أرضيات؟"), true);
 assert.equal(chemistry.isChemicalQuestion("سعر مسحوق بيرل 25 جنيه"), false);
+assert.equal(chemistry.isChemicalQuestion("الصابون السائل بكام؟"), false);
+assert.equal(chemistry.isChemicalQuestion("متوفر عندك كلور؟"), false);
+assert.equal(chemistry.isChemicalQuestion("مسحوق أريال وصل كام النهارده؟"), false);
+assert.equal(chemistry.isChemicalQuestion("المنظفات أسعارها زادت"), false);
 assert.equal(chemistry.isChemicalQuestion("/chemical"), false);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة شعبية اقتصادية/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة أعلى جودة/);

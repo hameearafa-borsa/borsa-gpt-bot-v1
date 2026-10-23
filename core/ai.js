@@ -81,7 +81,7 @@ function geminiProvider(key, model) {
   return async (prompt, options = {}) => {
     const selectedModel = model || "gemini-3.5-flash-lite";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`;
-    // Gemini 3.5 Flash-Lite deprecates sampling parameters such as temperature.
+    // Gemini 3.5 Flash-Lite request intentionally omits sampling configuration.
     const data = await requestJson(endpoint, {
       contents: [{ role: "user", parts: [{ text: String(prompt || "") }] }]
     }, { "x-goog-api-key": key });

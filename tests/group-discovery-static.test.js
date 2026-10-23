@@ -13,6 +13,9 @@ assert.match(source, /if \(await isAuthorizedChat\(m\.chatId\)\) \{[\s\S]*?هذ�
 assert.match(source, /cmd === "approvechat" && m\.chatType === "private"/);
 assert.match(source, /pending_group_approvals/);
 assert.match(source, /Number\(actor\) !== MASTER_ID/);
+assert.match(source, /SELECT active FROM authorized_chats WHERE chat_id=\$1/);
+assert.match(source, /existing\.rows\[0\]\?\.active === true/);
+assert.match(source, /authorized_group_bot_readded/);
 assert.match(source, /UPDATE authorized_chats SET active=FALSE WHERE chat_id=\$1/);
 assert.match(source, /Number\(m\.userId\) !== MASTER_ID/);
 assert.match(source, /status=.pending./);

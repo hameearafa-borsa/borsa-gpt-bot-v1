@@ -5,7 +5,7 @@ const source = fs.readFileSync(require.resolve("../index.js"), "utf8");
 assert.match(source, /"my_chat_member"/);
 assert.match(source, /!\["group", "supergroup"\]\.includes\(chat\.type\)/, "group approval handler must ignore channels");
 assert.match(source, /"chat_member"/);
-assert.match(source, /\[GROUP_RECOGNIZED\]/);
+assert.match(source, /group_approval_required/, "new groups must enter the pending approval flow");
 assert.match(source, /await bot\.telegram\.setWebhook\(webhookConfig\.url,\s*\{/);
 assert.match(source, /createWebhookServer\(bot, webhookConfig\)/);
 assert.doesNotMatch(source, /await bot\.launch\(/);

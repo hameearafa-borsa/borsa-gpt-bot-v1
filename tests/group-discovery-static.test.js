@@ -8,8 +8,13 @@ assert.match(source, /\[GROUP_RECOGNIZED\]/);
 assert.match(source, /await bot\.telegram\.setWebhook\(webhookConfig\.url,\s*\{/);
 assert.match(source, /createWebhookServer\(bot, webhookConfig\)/);
 assert.doesNotMatch(source, /await bot\.launch\(/);
-assert.match(source, /cmd === "claim" && \["group", "supergroup"\]/);\nassert.match(source, /cmd === "approvechat" && m\.chatType === "private"/);\nassert.match(source, /pending_group_approvals/);\nassert.match(source, /if \(!isMaster\(actor\)\)/);\nassert.match(source, /status=.pending./);
-assert.match(source, /status=.approved./);\nconsole.log("GROUP DISCOVERY STATIC TESTS: OK");
+assert.match(source, /cmd === "claim" && \["group", "supergroup"\]/);
+assert.match(source, /cmd === "approvechat" && m\.chatType === "private"/);
+assert.match(source, /pending_group_approvals/);
+assert.match(source, /if \(!isMaster\(actor\)\)/);
+assert.match(source, /status=.pending./);
+assert.match(source, /status=.approved./);
+console.log("GROUP DISCOVERY STATIC TESTS: OK");
 
 const menuBlock = source.match(/const groupCommands = \[([\s\S]*?)\];/);
 assert.ok(menuBlock, "group command menu must be declared");

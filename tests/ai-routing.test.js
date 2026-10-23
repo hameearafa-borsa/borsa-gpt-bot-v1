@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const aiSource = fs.readFileSync(path.join(__dirname, "../core/ai.js"), "utf8");
 const index = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
-const { createAI } = require("../core/ai");
+const { createAI, extractResponsesText } = require("../core/ai");
 
 assert.ok(aiSource.includes("gemini-3.5-flash-lite"));
 assert.ok(aiSource.includes("x-goog-api-key"));
@@ -14,6 +14,8 @@ assert.ok(!openAISection.includes("temperature:"), "Responses request must not s
 assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
 assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
+assert.ok(aiSource.includes("https://api.x.ai/v1/responses"));
+assert.ok(!aiSource.includes("https://api.x.ai/v1/chat/completions"));
 assert.ok(aiSource.includes("if (!retryable && !credentialError)"));
 assert.ok(index.includes('createAI({ provider: "gemini", fallbackProviders: ["openai", "xai"] })'));
 
@@ -23,6 +25,14 @@ function provider(name, providerName, run) {
 function httpError(status, message = "simulated provider failure") {
   return new Error(`AI HTTP ${status}: ${message}`);
 }
+
+// xAI Responses API output may expose output_text directly or nested output content.
+assert.equal(extractResponsesText({ output_text: "direct answer" }), "direct answer");
+assert.equal(extractResponsesText({ output: [
+  { type: "reasoning", summary: [{ text: "not user-facing answer" }] },
+  { type: "message", content: [{ type: "output_text", text: "nested answer" }] }
+] }), "nested answer");
+assert.equal(extractResponsesText({ output: [] }), "");
 
 (async () => {
   // Retryable upstream failure: exhaust Gemini slots, then use OpenAI, then xAI if needed.

@@ -90,6 +90,17 @@ try {
   assert.equal(permanentResult.provider, "openai");
   assert.deepEqual(permanentCalls, ["gemini-1", "openai"]);
 
+  const allFailProviders = [
+    provider("GEMINI_API_KEY_1", "gemini", async () => { throw httpError(503, "Gemini unavailable"); }),
+    provider("OPENAI_API_KEY", "openai", async () => { throw httpError(503, "OpenAI unavailable"); }),
+    provider("XAI_API_KEY", "xai", async () => { throw httpError(503, "xAI unavailable"); })
+  ];
+  const allFailRouted = createAI({ provider: "gemini", fallbackProviders: ["openai", "xai"], providers: allFailProviders });
+  await assert.rejects(allFailRouted.generate("test prompt"), error => {
+    assert.equal(error.aiProvider, "xai");
+    return true;
+  });
+
   console.log("AI provider routing and chemical fallback unit tests: OK");
 })().catch(error => {
   console.error(error);

@@ -23,6 +23,6 @@ function renderChemicalLinks(links) {
     `📚 <a href="${escapeHtml(links.formulaChannel)}">قناة التركيبات المحفوظة</a>`,
     `🔎 <a href="${escapeHtml(links.google)}">نتائج البحث على Google</a>`,
     `▶️ <a href="${escapeHtml(links.youtube)}">نتائج البحث على YouTube</a>`
-  ].join("\\n");
+  ].join("\n");
 }
-module.exports = { encodeQuery, validHttps, buildChemicalLinks, validChemicalLinks, renderChemicalLinks };
+module.exports = { encodeQuery, validHttps, buildChemicalLinks, validChemicalLinks, escapeHtml, renderChemicalLinks };

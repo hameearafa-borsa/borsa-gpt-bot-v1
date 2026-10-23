@@ -15,7 +15,7 @@ const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
 const { formatTelegramStartupError } = require("./core/telegram-startup-error");
 const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
-const { canManage, isMaster, authorizedUserIds } = require("./core/permissions");
+const { MASTER_ID, canManage, isMaster, authorizedUserIds } = require("./core/permissions");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { renderPriceListImages } = require("./modules/price-list-image");
 const priceMonitor = require("./modules/price-monitor");
@@ -273,9 +273,11 @@ bot.on("my_chat_member", async ctx => {
       creatorId = admins.find(a => a.status === "creator")?.user?.id || null;
     } catch { creatorId = null; }
   }
-  // Only the bot master may authorize a group by adding the bot.
-  if (!isMaster(actor)) {
+  // Only the fixed bot owner may authorize a group by adding the bot.
+  // Any non-owner add/re-add must leave the chat disabled until explicit approval.
+  if (Number(actor) !== MASTER_ID) {
     if (db.pool) {
+      await db.query("UPDATE authorized_chats SET active=FALSE WHERE chat_id=$1", [chat.id]);
       await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
         VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET
         chat_type=EXCLUDED.chat_type, requested_by=EXCLUDED.requested_by,
@@ -385,7 +387,7 @@ bot.on("text", async ctx => {
 
   // Only the bot master may approve a group, and only from a private chat.
   if (cmd === "approvechat" && m.chatType === "private") {
-    if (!isMaster(m.userId)) { await ctx.reply("هذا الأمر متاح لمالك البوت فقط."); return; }
+    if (Number(m.userId) !== MASTER_ID) { await ctx.reply("هذا الأمر متاح لمالك البوت المحدد فقط."); return; }
     const targetId = Number(args.split(/\s+/)[0]);
     if (!Number.isSafeInteger(targetId) || targetId >= 0) { await ctx.reply("الصيغة: /approvechat -1001234567890"); return; }
     try {

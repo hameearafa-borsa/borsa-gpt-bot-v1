@@ -55,7 +55,7 @@ try {
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
-const chemicalAI = createAI({ provider: "gemini" });
+const chemicalAI = createAI({ provider: "gemini", fallbackProviders: ["openai", "xai"] });
 const core = createGPTCore({ ai, registry, diagnostics: log });
 let botUserId = null;
 let stopScheduledMessages = () => {};

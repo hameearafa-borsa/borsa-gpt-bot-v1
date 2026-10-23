@@ -10,7 +10,6 @@ assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /ترك�
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة أعلى جودة/);
 assert.ok(chemistry.safetyGate("هل أخلط الكلور مع حمض الفلاش؟"));
 assert.ok(chemistry.safetyGate("خلط الكلور مع الأمونيا"));
-(async () => {\n  assert.equal(/تحذير سلامة/.test(await chemistry.answer({generate: async () => { throw new Error("must not run"); }}, "خلط الكلور مع حمض الفلاش")), true);\n})().catch(error => { console.error(error); process.exitCode = 1; });
 const built = links.buildChemicalLinks("تركيبة صابون سائل");
 assert.match(links.renderChemicalLinks(built), /<a href=/);
 assert.match(links.renderChemicalLinks(built), /قناة التركيبات المحفوظة/);

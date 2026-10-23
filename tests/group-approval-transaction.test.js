@@ -52,5 +52,5 @@ function fakeDb({ failApprovalUpdate = false, initialStatus = "pending" } = {}) 
     await assert.rejects(() => approvePendingGroup({ db, chatId: -100123, chatType: "supergroup", ownerUserId: 77, approvedBy: 5256328556 }), /GROUP_APPROVAL_NOT_PENDING/);
     assert.equal(state.authorized, false, "non-pending requests must not activate access");
   }
-  console.log("GROUP APPROVAL TRANSACTION INTEGRATION TESTS: OK");
+  console.log("GROUP APPROVAL TRANSACTION UNIT TESTS (FAKE DB): OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

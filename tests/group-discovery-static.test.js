@@ -25,7 +25,7 @@ assert.match(memberHandler[0], /status='pending'/);
 assert.doesNotMatch(memberHandler[0], /authorizeChat\(/, "adding the bot must never authorize a new group automatically");
 assert.doesNotMatch(memberHandler[0], /status='approved'/, "adding the bot must never mark a pending group approved");
 assert.match(source, /Number\(m\.userId\) !== MASTER_ID/, "approval command must remain restricted to the fixed master");
-assert.match(source, /status=.approved./, "explicit approval flow must mark records approved");
+assert.match(source, /await approvePendingGroup\(\{[\s\S]*?approvedBy: m\.userId/ , "explicit approval flow must invoke the transactional approval helper");
 console.log("GROUP DISCOVERY STATIC TESTS: OK");
 
 const menuBlock = source.match(/const groupCommands = \[([\s\S]*?)\];/);

@@ -488,6 +488,7 @@ bot.on("text", async ctx => {
   }
 
   if (isChemicalCommand) {
+    if (!["group", "supergroup"].includes(m.chatType)) return;
     const question = args || "اكتب سؤالك الكيميائي بوضوح.";
     const answer = await chemical.answer(chemicalAI, question);
     const links = buildChemicalLinks(question);

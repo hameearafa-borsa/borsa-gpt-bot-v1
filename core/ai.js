@@ -111,7 +111,8 @@ function isRetryable(error) {
 }
 
 function createAI(options = {}) {
-  const configured = providersFromEnv();
+  // Optional provider injection supports deterministic unit tests; production defaults to environment configuration.
+  const configured = Array.isArray(options.providers) ? options.providers : providersFromEnv();
   const forcedProvider = options.provider ? String(options.provider).toLowerCase() : null;
   const primaryProvider = forcedProvider || String(process.env.AI_PROVIDER || "openai").toLowerCase();
   const primary = configured.filter(p => p.provider === primaryProvider);

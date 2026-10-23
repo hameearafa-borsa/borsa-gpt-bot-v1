@@ -47,6 +47,9 @@ async function answer(ai, question, onError = null) {
   try {
     const result = await ai.generate(buildPrompt(question), { temperature: 0.3 });
     return String(result?.text || "").trim() || SAFE_FALLBACK;
-  } catch (error) {\n    if (typeof onError === "function") { try { onError(error); } catch {} }\n    return SAFE_FALLBACK;\n  }
+  } catch (error) {
+    if (typeof onError === "function") { try { onError(error); } catch {} }
+    return SAFE_FALLBACK;
+  }
 }
 module.exports = { answer, buildPrompt, safetyGate, isChemicalQuestion, SAFE_FALLBACK, RULES };

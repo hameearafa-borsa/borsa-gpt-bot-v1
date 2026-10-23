@@ -8,9 +8,13 @@ const { createAI, extractResponsesText, providersFromEnv } = require("../core/ai
 
 assert.ok(aiSource.includes("gemini-3.5-flash-lite"));
 assert.ok(aiSource.includes("x-goog-api-key"));
-const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function xaiProvider"));
+const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function extractResponsesText"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");
 assert.ok(!openAISection.includes("temperature:"), "Responses request must not send unsupported temperature field");
+const geminiSection = aiSource.slice(aiSource.indexOf("function geminiProvider"), aiSource.indexOf("function providersFromEnv"));
+assert.ok(geminiSection.length > 0, "Gemini provider implementation should exist");
+assert.ok(!geminiSection.includes("temperature"), "Gemini 3.5 Flash-Lite request must omit deprecated temperature sampling parameter");
+assert.ok(!geminiSection.includes("generationConfig"), "Gemini request should omit deprecated sampling configuration");
 assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
 assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
@@ -26,7 +30,6 @@ function httpError(status, message = "simulated provider failure") {
   return new Error(`AI HTTP ${status}: ${message}`);
 }
 
-// xAI Responses API output may expose output_text directly or nested output content.
 assert.equal(extractResponsesText({ output_text: "direct answer" }), "direct answer");
 assert.equal(extractResponsesText({ output: [
   { type: "reasoning", summary: [{ text: "not user-facing answer" }] },
@@ -34,7 +37,6 @@ assert.equal(extractResponsesText({ output: [
 ] }), "nested answer");
 assert.equal(extractResponsesText({ output: [] }), "");
 
-// Existing Railway deployments may use GEMINI_API_KEY (without _1).
 const envNames = ["AI_PROVIDER", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"];
 const savedEnv = Object.fromEntries(envNames.map(name => [name, process.env[name]]));
 try {
@@ -54,7 +56,6 @@ try {
 }
 
 (async () => {
-  // Retryable upstream failure: exhaust Gemini slots, then use OpenAI, then xAI if needed.
   const calls = [];
   const providers = [
     provider("GEMINI_API_KEY_1", "gemini", async () => { calls.push("gemini-1"); throw httpError(503); }),
@@ -67,7 +68,6 @@ try {
   assert.equal(result.provider, "xai");
   assert.deepEqual(calls, ["gemini-1", "gemini-2", "openai", "xai"]);
 
-  // A bad credential slot should not prevent trying another key for that provider.
   const credentialCalls = [];
   const credentialProviders = [
     provider("GEMINI_API_KEY_1", "gemini", async () => { credentialCalls.push("gemini-1"); throw httpError(401, "invalid_api_key"); }),
@@ -79,7 +79,6 @@ try {
   assert.equal(credentialResult.provider, "gemini");
   assert.deepEqual(credentialCalls, ["gemini-1", "gemini-2"]);
 
-  // Permanent model/request errors skip remaining keys for that provider and advance to fallback.
   const permanentCalls = [];
   const permanentProviders = [
     provider("GEMINI_API_KEY_1", "gemini", async () => { permanentCalls.push("gemini-1"); throw httpError(400, "unsupported model"); }),

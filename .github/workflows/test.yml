@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - termux-arm64-sharp-test-2026-10-21
+      - chemical-assistant-gemini-reply-once
   push:
     branches:
       - owner-approved-group-access

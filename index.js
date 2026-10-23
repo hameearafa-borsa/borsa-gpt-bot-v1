@@ -265,7 +265,8 @@ bot.on("my_chat_member", async ctx => {
   const u = ctx.myChatMember;
   const chat = u?.chat;
   const nextStatus = u?.new_chat_member?.status;
-  if (!chat || !["member", "administrator"].includes(nextStatus)) return;
+  // Group authorization is intentionally limited to groups and supergroups; channels are out of scope.
+  if (!chat || !["group", "supergroup"].includes(chat.type) || !["member", "administrator"].includes(nextStatus)) return;
   const actor = u?.from?.id;
   let creatorId = null;
   if (chat.type !== "channel") {
@@ -409,6 +410,10 @@ bot.on("text", async ctx => {
     try {
       const pending = await db.query("SELECT chat_type,owner_user_id FROM pending_group_approvals WHERE chat_id=$1 AND status='pending'", [targetId]);
       if (!pending.rows[0]) { await ctx.reply("لا يوجد طلب اعتماد معلّق لهذا المعرّف."); return; }
+      if (!["group", "supergroup"].includes(pending.rows[0].chat_type)) {
+        await ctx.reply("نوع المحادثة غير مدعوم للاعتماد؛ يُسمح بالمجموعات والمجموعات الفائقة فقط.");
+        return;
+      }
       const admins = await ctx.telegram.getChatAdministrators(targetId);
       const creator = admins.find(a => a.status === "creator")?.user;
       if (!creator || (pending.rows[0].owner_user_id != null && String(creator.id) !== String(pending.rows[0].owner_user_id))) {

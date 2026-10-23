@@ -15,7 +15,8 @@ const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
 const { formatTelegramStartupError } = require("./core/telegram-startup-error");
 const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
-const { canManage, isMaster, authorizedUserIds } = require("./core/permissions");
+const { MASTER_ID, canManage, isMaster, authorizedUserIds } = require("./core/permissions");
+const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { renderPriceListImages } = require("./modules/price-list-image");
 const priceMonitor = require("./modules/price-monitor");
@@ -156,7 +157,8 @@ async function configureCommandMenus() {
   const adminCommands = [
     { command: "panel", description: "لوحة التحكم الخاصة" },
     { command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة" },
-    { command: "claim", description: "ربط المجموعة بواسطة منشئها" },
+    { command: "claim", description: "طلب اعتماد المجموعة" },
+    { command: "approvechat", description: "اعتماد مجموعة (مالك البوت فقط)" },
     { command: "settings", description: "إعدادات المجموعة" },
     { command: "antispam", description: "إعدادات مانع الإزعاج" },
     { command: "schedule", description: "جدولة رسالة" },
@@ -171,7 +173,7 @@ async function configureCommandMenus() {
     { command: "settings", description: "إعدادات المجموعة" },
     { command: "antispam", description: "إعدادات مانع الإزعاج" },
     { command: "schedule", description: "جدولة رسالة" },
-    { command: "claim", description: "ربط المجموعة بواسطة منشئها" }
+    { command: "claim", description: "طلب اعتماد المجموعة" }
   ];
   // Keep the default menu empty; publish the real user-facing command set to groups
   // and the controller-only administrative set to verified owners in private chats.
@@ -263,7 +265,8 @@ bot.on("my_chat_member", async ctx => {
   const u = ctx.myChatMember;
   const chat = u?.chat;
   const nextStatus = u?.new_chat_member?.status;
-  if (!chat || !["member", "administrator"].includes(nextStatus)) return;
+  // Group authorization is intentionally limited to groups and supergroups; channels are out of scope.
+  if (!chat || !["group", "supergroup"].includes(chat.type) || !["member", "administrator"].includes(nextStatus)) return;
   const actor = u?.from?.id;
   let creatorId = null;
   if (chat.type !== "channel") {
@@ -272,18 +275,26 @@ bot.on("my_chat_member", async ctx => {
       creatorId = admins.find(a => a.status === "creator")?.user?.id || null;
     } catch { creatorId = null; }
   }
-  const actorIsCreator = creatorId != null && String(creatorId) === String(actor);
-  const allowed = isMaster(actor) || actorIsCreator;
-  if (!allowed) {
-    await sendLog({ module: "security", stage: "unauthorized_add", severity: "warn", status: "rejected", details: { chatId: chat.id, actor, chatType: chat.type } });
-    // Keep the bot in the chat but do not authorize it. The creator must run /claim.
-    return;
+  // Adding the bot never grants authorization, including when the actor is the fixed bot master.
+  // Keep existing active approvals intact; every unapproved group must go through /claim and /approvechat.
+  if (db.pool) {
+    const existing = await db.query(
+      "SELECT active FROM authorized_chats WHERE chat_id=$1",
+      [chat.id]
+    );
+    if (existing.rows[0]?.active === true) {
+      await sendLog({ module: "security", stage: "authorized_group_bot_readded", status: "preserved", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
+      return;
+    }
+    await db.query("UPDATE authorized_chats SET active=FALSE WHERE chat_id=$1", [chat.id]);
+    await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
+      VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET
+      chat_type=EXCLUDED.chat_type, requested_by=EXCLUDED.requested_by,
+      owner_user_id=EXCLUDED.owner_user_id, requested_at=NOW(), status='pending',
+      approved_by=NULL, approved_at=NULL`,
+      [chat.id, chat.type, actor ?? null, creatorId]);
   }
-  // A bot master may add the bot, but must not be recorded as the Telegram group's owner
-  // when Telegram could not verify the actual creator. /claim binds the real creator later.
-  await authorizeChat(chat.id, chat.type, creatorId, actor);
-  console.log(`[GROUP_RECOGNIZED] chatId=${chat.id} type=${chat.type} ownerId=${creatorId || actor}`);
-  await sendLog({ module: "security", stage: "chat_authorized", status: "ok", details: { chatId: chat.id, actor, ownerUserId: creatorId || actor, chatType: chat.type } });
+  await sendLog({ module: "security", stage: "group_approval_required", severity: "warn", status: "pending", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
 });
 
 bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protection|inactive|health|scraper_test|diagnostics)$/, async ctx => {
@@ -345,23 +356,69 @@ bot.on("text", async ctx => {
   const cmd = commandName(text);
   const args = commandText(text);
 
-  // /claim is deliberately available in an unclaimed group, but only the real
-  // Telegram group creator can bind it. A master can administer the bot but
-  // cannot claim ownership on behalf of another group creator.
+  // /claim submits a request only; it never grants group access.
   if (cmd === "claim" && ["group", "supergroup"].includes(m.chatType)) {
     try {
       const admins = await ctx.telegram.getChatAdministrators(m.chatId);
       const creator = admins.find(a => a.status === "creator")?.user;
       if (!creator || String(creator.id) !== String(m.userId)) {
-        await ctx.reply("لا يمكن ربط المجموعة: يجب أن ينفذ /claim منشئ المجموعة الأصلي بحسابه الشخصي.");
+        await ctx.reply("يمكن لمنشئ المجموعة الأصلي فقط طلب الاعتماد. التفعيل يتطلب موافقة مالك البوت.");
         return;
       }
-      await authorizeChat(m.chatId, m.chatType, creator.id);
-      await ctx.reply(`✅ تم التحقق من ملكية المجموعة وربطها بالبوت.\nمعرّف المجموعة: ${m.chatId}\nيمكن للمالك فتح اللوحة الخاصة بإرسال /panel للبوت في الخاص.`);
-      await sendLog({ module: "security", stage: "group_claim", status: "ok", details: { chatId: m.chatId, ownerUserId: creator.id, actor: m.userId } });
+      // An already approved group must not be disabled by an unnecessary repeat claim.
+      if (await isAuthorizedChat(m.chatId)) {
+        await ctx.reply("هذه المجموعة معتمدة بالفعل. لا حاجة لإرسال طلب جديد.");
+        return;
+      }
+      // A new claim remains inactive until the fixed bot owner explicitly approves it.
+      await db.query("UPDATE authorized_chats SET active=FALSE WHERE chat_id=$1", [m.chatId]);
+      await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
+        VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET
+        chat_type=EXCLUDED.chat_type, requested_by=EXCLUDED.requested_by,
+        owner_user_id=EXCLUDED.owner_user_id, requested_at=NOW(), status='pending',
+        approved_by=NULL, approved_at=NULL`,
+        [m.chatId, m.chatType, m.userId, creator.id]);
+      await ctx.reply("تم تسجيل طلب الاعتماد. ستبقى خدمات البوت متوقفة لهذه المجموعة حتى موافقة مالك البوت.");
+      try { await ctx.telegram.sendMessage(5256328556, `طلب اعتماد مجموعة جديدة\nالمعرّف: ${m.chatId}\nمنشئ المجموعة: ${creator.id}\nللموافقة أرسل في الخاص: /approvechat ${m.chatId}`); } catch {}
+      await sendLog({ module: "security", stage: "group_claim_requested", status: "pending", details: { chatId: m.chatId, ownerUserId: creator.id, actor: m.userId } });
     } catch (error) {
-      await ctx.reply("تعذر التحقق من ملكية المجموعة. تأكد أن البوت يستطيع قراءة قائمة مشرفي المجموعة ثم أعد المحاولة.");
+      await ctx.reply("تعذر تسجيل الطلب. تأكد من اتصال قاعدة البيانات ثم أعد المحاولة.");
       await sendLog({ module: "security", stage: "group_claim", severity: "warn", status: "failed", details: { chatId: m.chatId, code: error.code || null } });
+    }
+    return;
+  }
+
+  // Only the bot master may approve a group, and only from a private chat.
+  if (cmd === "approvechat" && m.chatType === "private") {
+    if (Number(m.userId) !== MASTER_ID) { await ctx.reply("هذا الأمر متاح لمالك البوت المحدد فقط."); return; }
+    const targetId = Number(args.split(/\s+/)[0]);
+    if (!Number.isSafeInteger(targetId) || targetId >= 0) { await ctx.reply("الصيغة: /approvechat -1001234567890"); return; }
+    try {
+      const pending = await db.query("SELECT chat_type,owner_user_id FROM pending_group_approvals WHERE chat_id=$1 AND status='pending'", [targetId]);
+      if (!pending.rows[0]) { await ctx.reply("لا يوجد طلب اعتماد معلّق لهذا المعرّف."); return; }
+      if (!["group", "supergroup"].includes(pending.rows[0].chat_type)) {
+        await ctx.reply("نوع المحادثة غير مدعوم للاعتماد؛ يُسمح بالمجموعات والمجموعات الفائقة فقط.");
+        return;
+      }
+      const admins = await ctx.telegram.getChatAdministrators(targetId);
+      const creator = admins.find(a => a.status === "creator")?.user;
+      if (!creator || (pending.rows[0].owner_user_id != null && String(creator.id) !== String(pending.rows[0].owner_user_id))) {
+        await ctx.reply("تعذر التحقق من منشئ المجموعة الحالي؛ لم يتم اعتمادها.");
+        return;
+      }
+      await approvePendingGroup({
+        db,
+        chatId: targetId,
+        chatType: pending.rows[0].chat_type,
+        ownerUserId: creator.id,
+        approvedBy: m.userId
+      });
+      await ctx.reply(`تم اعتماد المجموعة بنجاح.\nالمعرّف: ${targetId}\nمنشئ المجموعة: ${creator.id}\nالمعتمد: مالك البوت.`);
+      try { await ctx.telegram.sendMessage(targetId, "وافق مالك البوت على تفعيل خدمات البوت في هذه المجموعة."); } catch {}
+      await sendLog({ module: "security", stage: "group_approved_by_master", status: "ok", details: { chatId: targetId, ownerUserId: creator.id, approvedBy: m.userId } });
+    } catch (error) {
+      await ctx.reply("فشل اعتماد المجموعة؛ راجع صلاحيات البوت واتصال قاعدة البيانات.");
+      await sendLog({ module: "security", stage: "group_approval_failed", severity: "warn", status: "failed", details: { chatId: targetId, code: error.code || null } });
     }
     return;
   }

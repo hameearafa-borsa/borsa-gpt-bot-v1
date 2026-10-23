@@ -1,0 +1,49 @@
+name: Borsa Bot Tests
+
+on:
+  pull_request:
+    branches:
+      - termux-arm64-sharp-test-2026-10-21
+  push:
+    branches:
+      - owner-approved-group-access
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: borsa_test
+          POSTGRES_PASSWORD: borsa_test_password
+          POSTGRES_DB: borsa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U borsa_test -d borsa_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://borsa_test:borsa_test_password@localhost:5432/borsa_test
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Syntax check
+        run: npm run check
+      - name: Run automated tests
+        run: npm test
+      - name: Run PostgreSQL group approval integration test
+        run: node tests/group-approval-postgres.integration.test.js

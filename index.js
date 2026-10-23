@@ -55,6 +55,7 @@ try {
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
+const chemicalAI = createAI({ provider: "gemini" });
 const core = createGPTCore({ ai, registry, diagnostics: log });
 let botUserId = null;
 let stopScheduledMessages = () => {};
@@ -425,7 +426,8 @@ bot.on("text", async ctx => {
   if (m.chatType !== "private" && !(await isAuthorizedChat(m.chatId))) return;
 
   // Ordinary members may use automatic services, but slash commands are controller-only.
-  if (cmd && !(await canControl(ctx, m))) return;
+  const isChemicalCommand = ["مساعد", "كيمياء", "المساعد_الكيميائي", "chemical", "chem"].includes(cmd);
+  if (cmd && !isChemicalCommand && !(await canControl(ctx, m))) return;
 
   if ((cmd === "panel" || cmd === "start" || cmd === "settings") && m.chatType === "private") {
     await showPrivatePanel(ctx, false);
@@ -485,11 +487,14 @@ bot.on("text", async ctx => {
     return;
   }
 
-  if (cmd === "مساعد" || cmd === "كيمياء" || cmd === "المساعد_الكيميائي" || cmd === "chemical") {
+  if (isChemicalCommand) {
+    if (!["group", "supergroup"].includes(m.chatType)) return;
     const question = args || "اكتب سؤالك الكيميائي بوضوح.";
-    const answer = await chemical.answer(ai, question);
+    const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: "gemini_request", severity: "error", status: "safe_fallback", input: question, details: { message: error?.message || "Gemini request failed" } }));
     const links = buildChemicalLinks(question);
-    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean).join("\n\n"), { disable_web_page_preview: true });
+    const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";
+    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }
 
@@ -561,10 +566,12 @@ bot.on("text", async ctx => {
 
   if (cmd) return; // commands are intentionally invisible/unusable to unauthorized users
 
-  if (m.chatType === "private" && /(كلور|مطهر|تركيبه|مادة|خلط|pH|حمض|قلوي)/i.test(text)) {
-    const answer = await chemical.answer(ai, text);
+  // In approved groups, automatically answer likely chemistry questions once per incoming message.
+  if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
+    const answer = await chemical.answer(chemicalAI, text, error => log({ module: "chemical-assistant", stage: "gemini_request", severity: "error", status: "safe_fallback", input: text, details: { message: error?.message || "Gemini request failed" } }));
     const links = buildChemicalLinks(text);
-    await ctx.reply([answer, renderChemicalLinks(links)].filter(Boolean).join("\n\n"), { disable_web_page_preview: true });
+    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }
 

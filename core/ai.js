@@ -100,11 +100,13 @@ function isRetryable(error) {
   return status === 408 || status === 409 || status === 429 || status >= 500 || /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(message);
 }
 
-function createAI() {
+function createAI(options = {}) {
   const configured = providersFromEnv();
-  const primaryProvider = String(process.env.AI_PROVIDER || "openai").toLowerCase();
+  const forcedProvider = options.provider ? String(options.provider).toLowerCase() : null;
+  const primaryProvider = forcedProvider || String(process.env.AI_PROVIDER || "openai").toLowerCase();
   const primary = configured.filter(p => p.provider === primaryProvider);
-  const selected = primary.length ? primary : configured;
+  // A forced provider (e.g. Gemini for chemistry) must never silently fall back to another vendor.
+  const selected = forcedProvider ? primary : (primary.length ? primary : configured);
   async function generate(prompt, options = {}) {
     if (!selected.length) throw new Error("لا يوجد مزود AI مضبوط");
     const allowCrossProvider = process.env.AI_FALLBACK_ENABLED === "true";

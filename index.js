@@ -156,7 +156,8 @@ async function configureCommandMenus() {
   const adminCommands = [
     { command: "panel", description: "لوحة التحكم الخاصة" },
     { command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة" },
-    { command: "claim", description: "ربط المجموعة بواسطة منشئها" },
+    { command: "claim", description: "طلب اعتماد المجموعة" },
+    { command: "approvechat", description: "اعتماد مجموعة (مالك البوت فقط)" },
     { command: "settings", description: "إعدادات المجموعة" },
     { command: "antispam", description: "إعدادات مانع الإزعاج" },
     { command: "schedule", description: "جدولة رسالة" },
@@ -171,7 +172,7 @@ async function configureCommandMenus() {
     { command: "settings", description: "إعدادات المجموعة" },
     { command: "antispam", description: "إعدادات مانع الإزعاج" },
     { command: "schedule", description: "جدولة رسالة" },
-    { command: "claim", description: "ربط المجموعة بواسطة منشئها" }
+    { command: "claim", description: "طلب اعتماد المجموعة" }
   ];
   // Keep the default menu empty; publish the real user-facing command set to groups
   // and the controller-only administrative set to verified owners in private chats.

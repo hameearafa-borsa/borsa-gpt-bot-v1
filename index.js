@@ -369,6 +369,8 @@ bot.on("text", async ctx => {
         await ctx.reply("يمكن لمنشئ المجموعة الأصلي فقط طلب الاعتماد. التفعيل يتطلب موافقة مالك البوت.");
         return;
       }
+      // A fresh claim must never leave a previously authorized chat active.
+      await db.query("UPDATE authorized_chats SET active=FALSE WHERE chat_id=$1", [m.chatId]);
       await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
         VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET
         chat_type=EXCLUDED.chat_type, requested_by=EXCLUDED.requested_by,

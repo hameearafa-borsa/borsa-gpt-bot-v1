@@ -16,8 +16,13 @@ function buildChemicalLinks(product = "منظفات") {
 function validChemicalLinks(links) {
   return Boolean(links && validHttps(links.formulaChannel, "t.me") && validHttps(links.google, "www.google.com") && validHttps(links.youtube, "www.youtube.com"));
 }
+function escapeHtml(value = "") { return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;"); }
 function renderChemicalLinks(links) {
   if (!validChemicalLinks(links)) return "";
-  return [`📚 قناة التركيبات: ${links.formulaChannel}`, `🔎 Google: ${links.google}`, `▶️ YouTube: ${links.youtube}`].join("\n");
+  return [
+    `📚 <a href="${escapeHtml(links.formulaChannel)}">قناة التركيبات المحفوظة</a>`,
+    `🔎 <a href="${escapeHtml(links.google)}">نتائج البحث على Google</a>`,
+    `▶️ <a href="${escapeHtml(links.youtube)}">نتائج البحث على YouTube</a>`
+  ].join("\\n");
 }
 module.exports = { encodeQuery, validHttps, buildChemicalLinks, validChemicalLinks, renderChemicalLinks };

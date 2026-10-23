@@ -565,14 +565,6 @@ bot.on("text", async ctx => {
 
   if (cmd) return; // commands are intentionally invisible/unusable to unauthorized users
 
-  if (m.chatType === "private" && chemical.isChemicalQuestion(text)) {
-    const answer = await chemical.answer(chemicalAI, text);
-    const links = buildChemicalLinks(text);
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}`;
-    await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
-    return;
-  }
-
   // In approved groups, automatically answer likely chemistry questions once per incoming message.
   if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
     const answer = await chemical.answer(chemicalAI, text);

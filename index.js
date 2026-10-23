@@ -275,40 +275,26 @@ bot.on("my_chat_member", async ctx => {
       creatorId = admins.find(a => a.status === "creator")?.user?.id || null;
     } catch { creatorId = null; }
   }
-  // Only the fixed bot owner may authorize a new/unapproved group by adding the bot.
-  // Re-adding the bot to an already-authorized active group must not revoke its access.
-  if (Number(actor) !== MASTER_ID) {
-    if (db.pool) {
-      const existing = await db.query(
-        "SELECT active FROM authorized_chats WHERE chat_id=$1",
-        [chat.id]
-      );
-      if (existing.rows[0]?.active === true) {
-        await sendLog({ module: "security", stage: "authorized_group_bot_readded", status: "preserved", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
-        return;
-      }
-      await db.query("UPDATE authorized_chats SET active=FALSE WHERE chat_id=$1", [chat.id]);
-      await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
-        VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET
-        chat_type=EXCLUDED.chat_type, requested_by=EXCLUDED.requested_by,
-        owner_user_id=EXCLUDED.owner_user_id, requested_at=NOW(), status='pending',
-        approved_by=NULL, approved_at=NULL`,
-        [chat.id, chat.type, actor ?? null, creatorId]);
-    }
-    await sendLog({ module: "security", stage: "group_approval_required", severity: "warn", status: "pending", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
-    return;
-  }
-  await authorizeChat(chat.id, chat.type, creatorId, actor);
+  // Adding the bot never grants authorization, including when the actor is the fixed bot master.
+  // Keep existing active approvals intact; every unapproved group must go through /claim and /approvechat.
   if (db.pool) {
-    await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id,status,approved_by,approved_at)
-      VALUES($1,$2,$3,$4,'approved',$5,NOW()) ON CONFLICT(chat_id) DO UPDATE SET
+    const existing = await db.query(
+      "SELECT active FROM authorized_chats WHERE chat_id=$1",
+      [chat.id]
+    );
+    if (existing.rows[0]?.active === true) {
+      await sendLog({ module: "security", stage: "authorized_group_bot_readded", status: "preserved", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
+      return;
+    }
+    await db.query("UPDATE authorized_chats SET active=FALSE WHERE chat_id=$1", [chat.id]);
+    await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
+      VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET
       chat_type=EXCLUDED.chat_type, requested_by=EXCLUDED.requested_by,
-      owner_user_id=EXCLUDED.owner_user_id, status='approved',
-      approved_by=EXCLUDED.approved_by, approved_at=NOW()`,
-      [chat.id, chat.type, actor ?? null, creatorId, actor]);
+      owner_user_id=EXCLUDED.owner_user_id, requested_at=NOW(), status='pending',
+      approved_by=NULL, approved_at=NULL`,
+      [chat.id, chat.type, actor ?? null, creatorId]);
   }
-  console.log(`[GROUP_RECOGNIZED] chatId=${chat.id} type=${chat.type} ownerId=${creatorId || "unverified"}`);
-  await sendLog({ module: "security", stage: "chat_authorized", status: "ok", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
+  await sendLog({ module: "security", stage: "group_approval_required", severity: "warn", status: "pending", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
 });
 
 bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protection|inactive|health|scraper_test|diagnostics)$/, async ctx => {

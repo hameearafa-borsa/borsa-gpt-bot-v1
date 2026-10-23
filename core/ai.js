@@ -99,8 +99,15 @@ function providersFromEnv() {
   for (const [keyName, modelName] of [["XAI_API_KEY","XAI_MODEL"],["XAI_API_KEY_2","XAI_MODEL_2"]]) {
     if (process.env[keyName]) all.xai.push({ name: keyName, provider: "xai", run: xaiProvider(process.env[keyName], process.env[modelName] || process.env.XAI_MODEL || "grok-4.7") });
   }
-  for (const keyName of ["GEMINI_API_KEY_1","GEMINI_API_KEY_2","GEMINI_API_KEY_3"]) {
-    if (process.env[keyName]) all.gemini.push({ name: keyName, provider: "gemini", run: geminiProvider(process.env[keyName], process.env.GEMINI_MODEL || "gemini-3.5-flash-lite") });
+  // Accept the existing Railway variable GEMINI_API_KEY as slot 1, while
+  // retaining GEMINI_API_KEY_1 for deployments that use the numbered convention.
+  const geminiKeys = [
+    ["GEMINI_API_KEY_1", process.env.GEMINI_API_KEY_1 || process.env.GEMINI_API_KEY],
+    ["GEMINI_API_KEY_2", process.env.GEMINI_API_KEY_2],
+    ["GEMINI_API_KEY_3", process.env.GEMINI_API_KEY_3]
+  ];
+  for (const [keyName, key] of geminiKeys) {
+    if (key) all.gemini.push({ name: keyName, provider: "gemini", run: geminiProvider(key, process.env.GEMINI_MODEL || "gemini-3.5-flash-lite") });
   }
   const primary = String(process.env.AI_PROVIDER || "openai").toLowerCase();
   const order = [primary, ...["openai", "gemini", "xai"].filter(x => x !== primary)];

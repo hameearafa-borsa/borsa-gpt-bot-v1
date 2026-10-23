@@ -369,7 +369,12 @@ bot.on("text", async ctx => {
         await ctx.reply("يمكن لمنشئ المجموعة الأصلي فقط طلب الاعتماد. التفعيل يتطلب موافقة مالك البوت.");
         return;
       }
-      // A fresh claim must never leave a previously authorized chat active.
+      // An already approved group must not be disabled by an unnecessary repeat claim.
+      if (await isAuthorizedChat(m.chatId)) {
+        await ctx.reply("هذه المجموعة معتمدة بالفعل. لا حاجة لإرسال طلب جديد.");
+        return;
+      }
+      // A new claim remains inactive until the fixed bot owner explicitly approves it.
       await db.query("UPDATE authorized_chats SET active=FALSE WHERE chat_id=$1", [m.chatId]);
       await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
         VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET

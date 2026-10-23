@@ -274,10 +274,18 @@ bot.on("my_chat_member", async ctx => {
       creatorId = admins.find(a => a.status === "creator")?.user?.id || null;
     } catch { creatorId = null; }
   }
-  // Only the fixed bot owner may authorize a group by adding the bot.
-  // Any non-owner add/re-add must leave the chat disabled until explicit approval.
+  // Only the fixed bot owner may authorize a new/unapproved group by adding the bot.
+  // Re-adding the bot to an already-authorized active group must not revoke its access.
   if (Number(actor) !== MASTER_ID) {
     if (db.pool) {
+      const existing = await db.query(
+        "SELECT active FROM authorized_chats WHERE chat_id=$1",
+        [chat.id]
+      );
+      if (existing.rows[0]?.active === true) {
+        await sendLog({ module: "security", stage: "authorized_group_bot_readded", status: "preserved", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
+        return;
+      }
       await db.query("UPDATE authorized_chats SET active=FALSE WHERE chat_id=$1", [chat.id]);
       await db.query(`INSERT INTO pending_group_approvals(chat_id,chat_type,requested_by,owner_user_id)
         VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET

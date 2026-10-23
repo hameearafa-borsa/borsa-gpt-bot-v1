@@ -155,6 +155,8 @@ function createAI(options = {}) {
       try { return await p.run(prompt, options); }
       catch (e) {
         last = e;
+        // Preserve the actual failing provider for safe diagnostics after all fallbacks fail.
+        if (e && typeof e === "object") e.aiProvider = p.provider;
         const retryable = isRetryable(e);
         const credentialError = isCredentialError(e);
         console.warn(`[AI_FAIL] provider=${p.provider} key_slot=${p.name} retryable=${retryable} credential_error=${credentialError} error=${redactString(e?.message || "provider_error")}`);

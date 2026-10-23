@@ -14,14 +14,18 @@ assert.match(source, /if \(await isAuthorizedChat\(m\.chatId\)\) \{[\s\S]*?هذ�
 assert.match(source, /cmd === "approvechat" && m\.chatType === "private"/);
 assert.match(source, /!\["group", "supergroup"\]\.includes\(pending\.rows\[0\]\.chat_type\)/, "approval command must reject non-group pending records");
 assert.match(source, /pending_group_approvals/);
-assert.match(source, /Number\(actor\) !== MASTER_ID/);
-assert.match(source, /SELECT active FROM authorized_chats WHERE chat_id=\$1/);
-assert.match(source, /existing\.rows\[0\]\?\.active === true/);
-assert.match(source, /authorized_group_bot_readded/);
-assert.match(source, /UPDATE authorized_chats SET active=FALSE WHERE chat_id=\$1/);
-assert.match(source, /Number\(m\.userId\) !== MASTER_ID/);
-assert.match(source, /status=.pending./);
-assert.match(source, /status=.approved./);
+const memberHandler = source.match(/bot\.on\("my_chat_member",[\s\S]*?\n\}\);/);
+assert.ok(memberHandler, "group membership handler must exist");
+assert.match(memberHandler[0], /SELECT active FROM authorized_chats WHERE chat_id=\$1/);
+assert.match(memberHandler[0], /existing\.rows\[0\]\?\.active === true/);
+assert.match(memberHandler[0], /authorized_group_bot_readded/);
+assert.match(memberHandler[0], /UPDATE authorized_chats SET active=FALSE WHERE chat_id=\$1/);
+assert.match(memberHandler[0], /group_approval_required/);
+assert.match(memberHandler[0], /status='pending'/);
+assert.doesNotMatch(memberHandler[0], /authorizeChat\(/, "adding the bot must never authorize a new group automatically");
+assert.doesNotMatch(memberHandler[0], /status='approved'/, "adding the bot must never mark a pending group approved");
+assert.match(source, /Number\(m\.userId\) !== MASTER_ID/, "approval command must remain restricted to the fixed master");
+assert.match(source, /status=.approved./, "explicit approval flow must mark records approved");
 console.log("GROUP DISCOVERY STATIC TESTS: OK");
 
 const menuBlock = source.match(/const groupCommands = \[([\s\S]*?)\];/);

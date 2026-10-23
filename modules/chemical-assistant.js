@@ -39,7 +39,11 @@ function buildPrompt(question) {
 async function answer(ai, question, onError = null) {
   const gate = safetyGate(question);
   if (gate) return gate;
-  if (!ai || typeof ai.generate !== "function") {\n    const error = new Error("Gemini AI provider is not configured");\n    if (typeof onError === "function") { try { onError(error); } catch {} }\n    return SAFE_FALLBACK;\n  }
+  if (!ai || typeof ai.generate !== "function") {
+    const error = new Error("Gemini AI provider is not configured");
+    if (typeof onError === "function") { try { onError(error); } catch {} }
+    return SAFE_FALLBACK;
+  }
   try {
     const result = await ai.generate(buildPrompt(question), { temperature: 0.3 });
     return String(result?.text || "").trim() || SAFE_FALLBACK;

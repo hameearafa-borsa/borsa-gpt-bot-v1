@@ -27,6 +27,7 @@ const protection = require("./modules/protection");
 const scheduler = require("./modules/scheduler");
 const { parseLocalDateTime } = require("./core/cairo-time");
 const weather = require("./modules/weather");
+const { ensureWeatherSchedulerSchema, startWeatherScheduler } = require("./modules/weather-scheduler");
 const { startDealScheduler } = require("./modules/deal-scheduler");
 const legacyAdmin = require("./modules/legacy-admin");
 const adminPanel = require("./modules/admin-panel");
@@ -60,6 +61,7 @@ const core = createGPTCore({ ai, registry, diagnostics: log });
 let botUserId = null;
 let stopScheduledMessages = () => {};
 let stopDeals = () => {};
+let stopWeather = () => {};
 let shutdownPromise = null;
 let shutdownRequested = false;
 let startupPhase = true;
@@ -640,6 +642,12 @@ installFatalProcessHandlers({
   } else {
     console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
   }
+  await ensureWeatherSchedulerSchema(db.pool);
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
+  stopWeather = startWeatherScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
+    const report = makeReport({ module: "weather", stage: details?.stage || "scheduled_bulletin", severity: "ERROR", action: "weather_bulletin", error, details });
+    await emitReport({ bot, db, report });
+  } });
   // Webhook-only transport; polling transport is not used by this runtime.
   const allowedUpdates = [
     "message", "edited_message", "callback_query", "my_chat_member",
@@ -681,6 +689,7 @@ async function shutdown(signal) {
     console.log(`[SHUTDOWN] ${signal}: stopping schedulers and closing connections`);
     try { stopScheduledMessages(); } catch (error) { console.error("[SHUTDOWN_SCHEDULER_ERROR]", error?.message || error); }
     try { stopDeals(); } catch (error) { console.error("[SHUTDOWN_DEALS_ERROR]", error?.message || error); }
+    try { stopWeather(); } catch (error) { console.error("[SHUTDOWN_WEATHER_ERROR]", error?.message || error); }
     if (webhookServer?.listening) {
       try { await new Promise((resolve, reject) => webhookServer.close(error => error ? reject(error) : resolve())); }
       catch (error) { console.error("[SHUTDOWN_WEBHOOK_SERVER_ERROR]", error?.message || error); process.exitCode = 1; }

@@ -90,17 +90,12 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
   // Each of the two daily newsletters is capped at five products per category.
   // The 5 PM edition is Amazon-only; the 6 PM edition uses non-Amazon retailers.
-  const balanced = distributeDeals(recent);
-  const ordered = [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
-  const isAmazon = d => { try { return new URL(d.url).hostname.toLowerCase() === "www.amazon.eg" || new URL(d.url).hostname.toLowerCase() === "amazon.eg"; } catch { return false; } };
-  const selected = ordered.filter(d => kind === "amazon" ? isAmazon(d) : !isAmazon(d));
-  const items = [];
-  const categoryCounts = { detergent: 0, paper: 0, personal_care: 0 };
-  for (const deal of selected) {
-    if (!(deal.category in categoryCounts) || categoryCounts[deal.category] >= 5) continue;
-    items.push(deal);
-    categoryCounts[deal.category]++;
-  }
+  const isAmazon = d => { try { const host = new URL(d.url).hostname.toLowerCase(); return host === "www.amazon.eg" || host === "amazon.eg"; } catch { return false; } };
+  // Balance each edition independently; balancing the combined pool first can let
+  // Amazon products crowd out every candidate for the 6 PM edition.
+  const editionPool = recent.filter(d => kind === "amazon" ? isAmazon(d) : !isAmazon(d));
+  const balanced = distributeDeals(editionPool);
+  const items = [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
   if (!items.length) {
     await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], batchKind: kind });
     return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };

@@ -458,8 +458,8 @@ bot.on("text", async ctx => {
         const run = await client.query(`INSERT INTO price_list_runs(source_chat_id,source_message_id,raw_text,status,extracted_count,accepted_count,skipped_count)
           VALUES($1,$2,$3,'processed',$4,$5,$6) RETURNING id`, [m.chatId, m.messageId, sourceText, rows.length, accepted.length, rows.length - accepted.length]);
         for (const row of rows) {
-          await client.query(`INSERT INTO price_list_items(run_id,product_label,variant_label,company_label,weight_g,volume_ml,package_sale_price,wholesale_carton_price,consumer_price,pack_count,confidence,raw_line,decision)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [run.rows[0].id, row.product || row.product_text || null, row.variant || null, row.company || parsedList.company || null, row.weight_g ?? null, row.volume_ml ?? null, row.package_sale_price ?? null, row.wholesale_carton_price ?? null, row.consumer_price ?? null, row.pack_count ?? null, row.confidence ?? null, row.raw_line || row.rawLine || null, row.decision || "review"]);
+          await client.query(`INSERT INTO price_list_items(run_id,product_label,variant_label,company_label,weight_g,volume_ml,package_sale_price,wholesale_carton_price,consumer_price,pack_count,confidence,raw_line,decision,unit_price_type,list_price)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [run.rows[0].id, row.product || row.product_text || null, row.variant || null, row.company || parsedList.company || null, row.weight_g ?? null, row.volume_ml ?? null, row.package_sale_price ?? null, row.wholesale_carton_price ?? null, row.consumer_price ?? null, row.pack_count ?? null, row.confidence ?? null, row.raw_line || row.rawLine || null, row.decision || "review", row.unit_price_type || null, row.list_price ?? null]);
         }
       });
     }

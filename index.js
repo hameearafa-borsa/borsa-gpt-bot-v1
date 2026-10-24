@@ -642,7 +642,7 @@ installFatalProcessHandlers({
   } else {
     console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
   }
-  if (String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() === "true") {
+  if (String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() !== "false") {
     await ensureWeatherSchedulerSchema(db.pool);
     if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
     stopWeather = startWeatherScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
@@ -650,7 +650,7 @@ installFatalProcessHandlers({
       await emitReport({ bot, db, report });
     } });
   } else {
-    console.log("[WEATHER_SCHEDULER_DISABLED] Set WEATHER_SCHEDULER_ENABLED=true after selecting the authorized test group.");
+    console.log("[WEATHER_SCHEDULER_DISABLED] WEATHER_SCHEDULER_ENABLED=false; scheduled weather bulletins are disabled.");
   }
   // Webhook-only transport; polling transport is not used by this runtime.
   const allowedUpdates = [

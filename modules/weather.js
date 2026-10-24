@@ -50,7 +50,7 @@ function validateCurrentWeather(forecast, cityName) {
       c.relative_humidity_2m < 0 || c.relative_humidity_2m > 100 ||
       c.wind_speed_10m < 0 || c.precipitation < 0 ||
       !Object.hasOwn(WEATHER_CODES_AR, c.weather_code) ||
-      typeof c.time !== "string" || !/^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}$/.test(c.time) ||
+      typeof c.time !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(c.time) ||
       forecast.timezone !== "Africa/Cairo") {
     throw new Error(`weather_invalid_or_incomplete_data_${cityName}`);
   }

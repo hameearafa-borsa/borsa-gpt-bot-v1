@@ -55,7 +55,7 @@ try {
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
-const chemicalAI = createAI({ provider: "gemini", fallbackProviders: ["openai", "xai"] });
+const chemicalAI = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] });
 const core = createGPTCore({ ai, registry, diagnostics: log });
 let botUserId = null;
 let stopScheduledMessages = () => {};
@@ -493,7 +493,7 @@ bot.on("text", async ctx => {
     const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(question);
     const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    const body = `🧪 المساعد الكيميائي\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }
@@ -570,7 +570,7 @@ bot.on("text", async ctx => {
   if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
     const answer = await chemical.answer(chemicalAI, text, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: text, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(text);
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    const body = `🧪 المساعد الكيميائي\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }

@@ -25,7 +25,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
   const buffers = [];
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
     const pageRows = pages[pageIndex];
-    const width = 1200, rowHeight = 46, headerHeight = 210, footerHeight = 85;
+    const width = 1200, rowHeight = 41, headerHeight = 210, footerHeight = 85;
     const height = headerHeight + pageRows.length * rowHeight + footerHeight;
     const rowSvg = pageRows.map((item, i) => {
       const y = headerHeight + i * rowHeight;
@@ -38,7 +38,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
       const details = [variant && variant !== rawCategory ? variant : "", size && !rawName.includes(size) ? size : ""].filter(Boolean).map(escapeXml).join(" • ");
       const unitLabel = item.unit_price_type === "بالقطعة" ? "بالقطعة" : "";
       const fill = i % 2 ? "#f3f7f5" : "#ffffff";
-      return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><text x="1125" y="${y+14}" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="12" font-weight="700" fill="#25805e">${category}${unitLabel ? ` • ${escapeXml(unitLabel)}` : ""}</text><text x="1125" y="${y+29}" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="18" font-weight="700" fill="#172b26">${name}</text><text x="1125" y="${y+40}" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="10" fill="#61716b">${escapeXml([details].filter(Boolean).join(" "))}</text><text x="72" y="${y+29}" text-anchor="start" font-family="Tahoma,Arial,sans-serif" font-size="21" font-weight="700" fill="#176b50">${escapeXml(priceText(item.package_sale_price))}</text>`;
+      return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><text x="1125" y="${y+14}" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="12" font-weight="700" fill="#25805e">${category}${unitLabel ? ` • ${escapeXml(unitLabel)}` : ""}</text><text x="1125" y="${y+29}" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="18" font-weight="700" fill="#172b26">${name}</text><text x="1125" y="${y+36}" text-anchor="end" font-family="Tahoma,Arial,sans-serif" font-size="10" fill="#61716b">${escapeXml([details].filter(Boolean).join(" "))}</text><text x="72" y="${y+29}" text-anchor="start" font-family="Tahoma,Arial,sans-serif" font-size="21" font-weight="700" fill="#176b50">${escapeXml(priceText(item.package_sale_price))}</text>`;
     }).join("");
     const listTitle = `${escapeXml(company || "قائمة المنتجات").slice(0, 100)}`;
     const dateLine = [month ? `الفترة: ${month}` : null, priceType || "أسعار جملة", `صفحة ${pageIndex + 1} من ${pages.length}`].filter(Boolean).map(escapeXml).join(" • ");

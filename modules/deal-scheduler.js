@@ -8,7 +8,8 @@ function cairoParts(date = new Date()) {
   return Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type,p.value]));
 }
 function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.year}-${p.month}-${p.day}`; }
-function isNewsletterWindow(date = new Date()) { const p = cairoParts(date); return Number(p.hour) >= 17; }
+function newsletterKindAt(date = new Date()) { const p = cairoParts(date); const hour = Number(p.hour); if (hour === 17) return "amazon"; if (hour === 18) return "other_sites"; return null; }
+function isNewsletterWindow(date = new Date()) { return newsletterKindAt(date) !== null; }
 
 async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000, maxRedirects = 5 } = {}) {
   const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com"]);
@@ -74,10 +75,11 @@ async function persistDeals(pool, deals) {
 }
 async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
   if (!pool || !telegram || !chatId) return { skipped: true, reason: "database_telegram_or_deals_chat_missing" };
-  if (!isNewsletterWindow(now)) return { skipped: true, reason: "before_17_cairo" };
+  const kind = newsletterKindAt(now);
+  if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
   const key = batchKey(now);
   const existing = await pool.query("SELECT channel_kind,status FROM deal_publications WHERE batch_key=$1", [key]);
-  if (["amazon","other_sites","best_deals"].every(kind => existing.rows.some(r => r.channel_kind === kind && r.status === "published"))) return { skipped: true, reason: "already_published", batchKey: key };
+  if (existing.rows.some(r => r.channel_kind === kind && r.status === "published")) return { skipped: true, reason: "already_published", batchKey: key, kind };
   const gathered = await fetcher();
   if (!gathered.deals?.length) {
     await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [] });
@@ -86,21 +88,30 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   const verified = await verify(gathered.deals);
   const recent = await filterRecentDeals(pool, verified, 7);
   if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
-  // Overall pool is category-balanced (10 detergents, 10 paper, 10 care when supply allows).
+  // Each of the two daily newsletters is capped at five products per category.
+  // The 5 PM edition is Amazon-only; the 6 PM edition uses non-Amazon retailers.
   const balanced = distributeDeals(recent);
   const ordered = [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
-  const amazon = ordered.filter(d => /amazon\.eg/i.test(new URL(d.url).hostname)).slice(0, 10);
-  const amazonKeys = new Set(amazon.map(d => d.fingerprint));
-  const remaining = ordered.filter(d => !amazonKeys.has(d.fingerprint));
-  const other = remaining.filter(d => !/amazon\.eg/i.test(new URL(d.url).hostname)).slice(0, 10);
-  const otherKeys = new Set(other.map(d => d.fingerprint));
-  const publishedKeys = new Set([...amazonKeys, ...otherKeys]);
-  const best = ordered.filter(d => !publishedKeys.has(d.fingerprint)).sort((a,b) => (Number(b.discount_pct)||0) - (Number(a.discount_pct)||0)).slice(0, 10);
-  const batches = [
-    { kind: "amazon", items: amazon, title: "عروض أمازون للمنظفات والورقيات والعناية" },
-    { kind: "other_sites", items: other, title: "عروض المتاجر الأخرى" },
-    { kind: "best_deals", items: best, title: "أفضل العروض المختارة" }
-  ];
+  const isAmazon = d => { try { return new URL(d.url).hostname.toLowerCase() === "www.amazon.eg" || new URL(d.url).hostname.toLowerCase() === "amazon.eg"; } catch { return false; } };
+  const selected = ordered.filter(d => kind === "amazon" ? isAmazon(d) : !isAmazon(d));
+  const items = [];
+  const categoryCounts = { detergent: 0, paper: 0, personal_care: 0 };
+  for (const deal of selected) {
+    if (!(deal.category in categoryCounts) || categoryCounts[deal.category] >= 5) continue;
+    items.push(deal);
+    categoryCounts[deal.category]++;
+  }
+  if (!items.length) {
+    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], batchKind: kind });
+    return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
+  }
+  const batches = [{
+    kind,
+    items,
+    title: kind === "amazon"
+      ? "عروض أمازون للمنظفات والورقيات والعناية"
+      : "عروض نون وجوميا وكارفور وكازيون المختارة"
+  }];
   const published = [];
   for (const batch of batches) {
     if (!batch.items.length) continue;
@@ -177,4 +188,4 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
   timer.unref?.();
   return () => clearInterval(timer);
 }
-module.exports = { cairoParts, batchKey, isNewsletterWindow, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, startDealScheduler };
+module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, startDealScheduler };

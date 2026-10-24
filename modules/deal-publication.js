@@ -1,7 +1,7 @@
 "use strict";
 const { validateDeal, isRecentDuplicate } = require("./deals");
 
-const TARGETS = Object.freeze({ detergent: 10, paper: 10, personal_care: 10 });
+const TARGETS = Object.freeze({ detergent: 5, paper: 5, personal_care: 5 });
 function scoreDeal(deal) {
   const discount = Math.max(0, Math.min(90, Number(deal.discount_pct) || 0));
   const hasOldPrice = Number(deal.old_price) > Number(deal.price) && Number(deal.old_price) > 0;

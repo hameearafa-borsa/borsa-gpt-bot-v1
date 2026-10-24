@@ -77,8 +77,6 @@ async function getLiveWeatherAtCoordinates(city, { fetchJson = getJson } = {}) {
 async function getDailyWeatherReport({ fetchJson = getJson, now = new Date() } = {}) {
   // Do not return or format a partial report: Promise.all rejects if any city fails.
   const weather = await Promise.all(EGYPT_CITIES.map(city => getLiveWeatherAtCoordinates(city, { fetchJson })));
-  const measuredTimes = new Set(weather.map(w => w.time));
-  if (measuredTimes.size !== 1) throw new Error("weather_city_measurement_times_mismatch");
   const stamp = new Intl.DateTimeFormat("ar-EG", {
     timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit",
     hour: "2-digit", minute: "2-digit", hourCycle: "h23"
@@ -100,7 +98,7 @@ async function getDailyWeatherReport({ fetchJson = getJson, now = new Date() } =
     );
   }
   lines.push("المصدر: Open-Meteo");
-  return { message: lines.join("\n").trim(), cities: weather, measuredAt: [...measuredTimes][0] };
+  return { message: lines.join("\n").trim(), cities: weather, measuredAt: weather.map(w => w.time).sort().at(-1) };
 }
 
 async function getLiveWeather(city = "القاهرة", { fetchJson = getJson } = {}) {

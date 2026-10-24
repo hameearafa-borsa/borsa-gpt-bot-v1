@@ -77,6 +77,26 @@ function xaiProvider(key, model) {
   };
 }
 
+
+function groqProvider(key, model) {
+  return async (prompt, options = {}) => {
+    const selectedModel = model || "qwen/qwen3.8-27b";
+    const data = await requestJson("https://api.groq.com/openai/v1/chat/completions", {
+      model: selectedModel,
+      temperature: options.temperature ?? 0,
+      messages: [
+        { role: "system", content: "أنت المساعد الكيميائي لبوت بورصة المنظفات. أجب بالعربية الواضحة، لا تخترع نسبًا أو بيانات تجارية، واذكر مخاطر السلامة بوضوح." },
+        { role: "user", content: String(prompt || "") }
+      ]
+    }, { authorization: `Bearer ${key}` });
+    return {
+      text: data.choices?.[0]?.message?.content || "",
+      provider: "groq",
+      model: selectedModel
+    };
+  };
+}
+
 function geminiProvider(key, model) {
   return async (prompt, options = {}) => {
     const selectedModel = model || "gemini-3.5-flash-lite";
@@ -91,7 +111,7 @@ function geminiProvider(key, model) {
 
 function providersFromEnv() {
   const all = {
-    openai: [], xai: [], gemini: []
+    openai: [], xai: [], gemini: [], groq: []
   };
   for (const keyName of ["OPENAI_API_KEY", "OPENAI_API_KEY_2", "OPENAI_API_KEY_3"]) {
     if (process.env[keyName]) all.openai.push({ name: keyName, provider: "openai", run: openAIProvider(process.env[keyName], process.env.OPENAI_MODEL || "gpt-6-luna") });
@@ -109,8 +129,18 @@ function providersFromEnv() {
   for (const [keyName, key] of geminiKeys) {
     if (key) all.gemini.push({ name: keyName, provider: "gemini", run: geminiProvider(key, process.env.GEMINI_MODEL || "gemini-3.5-flash-lite") });
   }
+
+  for (const [keyName, modelName] of [["GROQ_API_KEY", "GROQ_MODEL"], ["GROQ_API_KEY_2", "GROQ_MODEL_2"]]) {
+    if (process.env[keyName]) {
+      all.groq.push({
+        name: keyName,
+        provider: "groq",
+        run: groqProvider(process.env[keyName], process.env[modelName] || process.env.GROQ_MODEL || "qwen/qwen3.8-27b")
+      });
+    }
+  }
   const primary = String(process.env.AI_PROVIDER || "openai").toLowerCase();
-  const order = [primary, ...["openai", "gemini", "xai"].filter(x => x !== primary)];
+  const order = [primary, ...["openai", "gemini", "xai", "groq"].filter(x => x !== primary)];
   return order.flatMap(provider => all[provider] || []);
 }
 

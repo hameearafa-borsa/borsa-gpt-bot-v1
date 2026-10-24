@@ -642,12 +642,16 @@ installFatalProcessHandlers({
   } else {
     console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
   }
-  await ensureWeatherSchedulerSchema(db.pool);
-  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
-  stopWeather = startWeatherScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
-    const report = makeReport({ module: "weather", stage: details?.stage || "scheduled_bulletin", severity: "ERROR", action: "weather_bulletin", error, details });
-    await emitReport({ bot, db, report });
-  } });
+  if (String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() === "true") {
+    await ensureWeatherSchedulerSchema(db.pool);
+    if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
+    stopWeather = startWeatherScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
+      const report = makeReport({ module: "weather", stage: details?.stage || "scheduled_bulletin", severity: "ERROR", action: "weather_bulletin", error, details });
+      await emitReport({ bot, db, report });
+    } });
+  } else {
+    console.log("[WEATHER_SCHEDULER_DISABLED] Set WEATHER_SCHEDULER_ENABLED=true after selecting the authorized test group.");
+  }
   // Webhook-only transport; polling transport is not used by this runtime.
   const allowedUpdates = [
     "message", "edited_message", "callback_query", "my_chat_member",

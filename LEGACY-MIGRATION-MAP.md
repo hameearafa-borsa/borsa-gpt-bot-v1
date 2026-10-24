@@ -5,7 +5,7 @@
 | الملف القديم | وضع V1 RC1 | ما يلزم قبل الإنتاج |
 |---|---|---|
 | `index.js` | أُعيد بناء نقطة التشغيل وبعض التوجيه | مقارنة جميع الأوامر والأحداث والصلاحيات؛ لا يوجد تكافؤ كامل بعد |
-| `ai.js`, `gemini.js` | يوجد مزوّد متعدد مع OpenAI Responses وxAI/Gemini في `core/ai.js` | اختبار فعلي لكل مزوّد/نسخة احتياطية؛ xAI سابقًا أعاد 403 بسبب الرصيد/التراخيص |
+| `ai.js`, `gemini.js` | يوجد مزوّد متعدد مع OpenAI Responses وGemini وGroq في `core/ai.js` | اختبار فعلي لكل مزوّد/نسخة احتياطية؛ تم استبعاد تكامل xAI من الكود النشط بناءً على قرار المستخدم |
 | `db.js` | استبدال تدريجي في `core/database.js` + migrations | تدقيق مخطط الإنتاج والبيانات القديمة قبل أي migration |
 | `prices (1).js` | منطق جديد في `modules/price-intelligence.js` و`price-monitor.js` و`price-list.js` | توسيع parser واختباره على قوائم بيرل وأريال وبونكس وتايد؛ ربط product/variant عند الحفظ ما زال بحاجة إلى إكمال |
 | `deals.js` | `modules/deals.js` + `modules/deal-publication.js` + `modules/deal-sources.js` + `modules/deal-scheduler.js`؛ أمازون ثم مواقع أخرى ثم أفضل العروض؛ توزيع 10/10/10 عند توفر العدد | يحتاج مفتاح SCRAPER_API_KEY صالحًا، وDEALS_CHAT_ID، واختبار حي للمصادر في بيئة التشغيل؛ فشل المصدر لا ينتج عروضًا مخترعة |

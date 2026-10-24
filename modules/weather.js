@@ -31,9 +31,75 @@ function getJson(url, timeoutMs = 8000) {
 const WEATHER_CODES_AR = {
   0: "سماء صافية", 1: "صحو غالبًا", 2: "غائم جزئيًا", 3: "غائم",
   45: "شبورة", 48: "شبورة متجمدة", 51: "رذاذ خفيف", 53: "رذاذ متوسط", 55: "رذاذ كثيف",
-  61: "مطر خفيف", 63: "مطر متوسط", 65: "مطر غزير", 71: "ثلج خفيف", 73: "ثلج متوسط", 75: "ثلج غزير",
-  80: "زخات مطر خفيفة", 81: "زخات مطر متوسطة", 82: "زخات مطر قوية", 95: "عواصف رعدية", 96: "عواصف رعدية مع برد", 99: "عواصف رعدية قوية مع برد"
+  61: "مطر خفيف", 63: "مطر متوسط", 65: "مطر غزير", 71: "ثلج خفيف", 73: "ثلج متوسط", 75: "ثلج غزير", 77: "حبيبات ثلجية",
+  80: "زخات مطر خفيفة", 81: "زخات مطر متوسطة", 82: "زخات مطر قوية", 85: "زخات ثلج خفيفة", 86: "زخات ثلج غزيرة", 95: "عواصف رعدية", 96: "عواصف رعدية مع برد", 99: "عواصف رعدية قوية مع برد"
 };
+
+// Fixed Egyptian coordinates avoid geocoding a same-named city outside Egypt.
+const EGYPT_CITIES = Object.freeze([
+  { name: "الإسكندرية", latitude: 31.2001, longitude: 29.9187 },
+  { name: "القاهرة", latitude: 30.0444, longitude: 31.2357 },
+  { name: "المنيا", latitude: 28.0871, longitude: 30.7618 },
+  { name: "الأقصر", latitude: 25.6872, longitude: 32.6396 }
+]);
+
+function validateCurrentWeather(forecast, cityName) {
+  const c = forecast?.current;
+  const numeric = ["temperature_2m", "relative_humidity_2m", "apparent_temperature", "wind_speed_10m", "precipitation", "weather_code"];
+  if (!c || numeric.some(key => !Number.isFinite(c[key])) ||
+      c.relative_humidity_2m < 0 || c.relative_humidity_2m > 100 ||
+      c.wind_speed_10m < 0 || c.precipitation < 0 ||
+      !Object.hasOwn(WEATHER_CODES_AR, c.weather_code) ||
+      typeof c.time !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(c.time) ||
+      forecast.timezone !== "Africa/Cairo") {
+    throw new Error(`weather_invalid_or_incomplete_data_${cityName}`);
+  }
+  return {
+    city: cityName,
+    temperature: c.temperature_2m,
+    feelsLike: c.apparent_temperature,
+    humidity: c.relative_humidity_2m,
+    wind: c.wind_speed_10m,
+    precipitation: c.precipitation,
+    condition: WEATHER_CODES_AR[c.weather_code],
+    time: c.time,
+    timezone: forecast.timezone,
+    source: "Open-Meteo"
+  };
+}
+
+async function getLiveWeatherAtCoordinates(city, { fetchJson = getJson } = {}) {
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(city.latitude)}&longitude=${encodeURIComponent(city.longitude)}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m&timezone=Africa%2FCairo`;
+  const forecast = await fetchJson(url);
+  return validateCurrentWeather(forecast, city.name);
+}
+
+async function getDailyWeatherReport({ fetchJson = getJson, now = new Date() } = {}) {
+  // Do not return or format a partial report: Promise.all rejects if any city fails.
+  const weather = await Promise.all(EGYPT_CITIES.map(city => getLiveWeatherAtCoordinates(city, { fetchJson })));
+  const stamp = new Intl.DateTimeFormat("ar-EG", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23"
+  }).format(now);
+  const lines = [
+    "🌦️ نشرة الطقس الحية — بورصة المنظفات",
+    `🕒 تحديث النشرة: ${stamp} بتوقيت القاهرة`,
+    ""
+  ];
+  for (const w of weather) {
+    lines.push(
+      `📍 ${w.city}`,
+      `• الحالة: ${w.condition}`,
+      `• الحرارة: ${w.temperature}°م (المحسوسة ${w.feelsLike}°م)`,
+      `• الرطوبة: ${w.humidity}%`,
+      `• الرياح: ${w.wind} كم/س`,
+      `• الهطول: ${w.precipitation} مم`,
+      ""
+    );
+  }
+  lines.push("المصدر: Open-Meteo");
+  return { message: lines.join("\n").trim(), cities: weather, measuredAt: weather.map(w => w.time).sort().at(-1) };
+}
 
 async function getLiveWeather(city = "القاهرة", { fetchJson = getJson } = {}) {
   const cleanCity = String(city || "القاهرة").trim().slice(0, 80);
@@ -66,7 +132,7 @@ async function getWeatherSummary(_ai, city = "القاهرة", options = {}) {
     const details = [
       `🌦️ الطقس الحالي في ${w.city}`,
       `الحالة: ${w.condition}`,
-      `الحرارة: ${w.temperature}°م${w.feelsLike == null ? "" : `، المحسوسة ${w.feelsLike}°م`}`,
+      `الحرارة: ${w.temperature}°م${w.feelsLike == null ? "" : `, المحسوسة ${w.feelsLike}°م`}`,
       w.humidity == null ? null : `الرطوبة: ${w.humidity}%`,
       w.wind == null ? null : `سرعة الرياح: ${w.wind} كم/س`,
       w.precipitation == null ? null : `الهطول: ${w.precipitation} مم`,
@@ -75,7 +141,7 @@ async function getWeatherSummary(_ai, city = "القاهرة", options = {}) {
     ].filter(Boolean);
     return { ok: true, city: w.city, weather: w, searchUrl, message: details.join("\n") };
   } catch (error) {
-    return { ok: false, city, searchUrl, message: "تعذر جلب بيانات الطقس الحية الآن؛ لن أخمّن درجة الحرارة. يمكنك المحاولة لاحقًا أو فتح رابط البحث.", error: String(error?.message || "weather_error").slice(0, 120) };
+    return { ok: false, city, searchUrl, message: "تعذر جلب بيانات الطقس الحية الآن؛ لن أخمّن درجة الحرارة. يمكنك المحاولة لاحقًا.", error: String(error?.message || "weather_error").slice(0, 120) };
   }
 }
-module.exports = { buildWeatherSearch, getWeatherSummary, getLiveWeather, WEATHER_CODES_AR };
+module.exports = { buildWeatherSearch, getWeatherSummary, getLiveWeather, getLiveWeatherAtCoordinates, getDailyWeatherReport, EGYPT_CITIES, WEATHER_CODES_AR };

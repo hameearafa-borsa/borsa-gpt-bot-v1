@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - termux-arm64-sharp-test-2026-10-21
+      - chemical-assistant-gemini-reply-once
   push:
     branches:
       - owner-approved-group-access
@@ -48,3 +49,9 @@ jobs:
         run: npm test
       - name: Run PostgreSQL group approval integration test
         run: node tests/group-approval-postgres.integration.test.js
+      - name: Build production Alpine Docker image
+        run: docker build --tag borsa-gpt-bot-ci:latest .
+      - name: Verify sharp PNG generation inside production image
+        run: >-
+          docker run --rm --entrypoint node borsa-gpt-bot-ci:latest -e
+          "const sharp = require('sharp'); sharp({ create: { width: 2, height: 2, channels: 4, background: '#ffffff' } }).png().toBuffer().then((buffer) => { if (buffer.subarray(1, 4).toString() !== 'PNG') throw new Error('Invalid PNG output'); console.log('sharp Docker PNG smoke test: OK'); }).catch((error) => { console.error(error); process.exit(1); });"

@@ -27,6 +27,7 @@ const protection = require("./modules/protection");
 const scheduler = require("./modules/scheduler");
 const { parseLocalDateTime } = require("./core/cairo-time");
 const weather = require("./modules/weather");
+const { ensureWeatherSchedulerSchema, startWeatherScheduler } = require("./modules/weather-scheduler");
 const { startDealScheduler } = require("./modules/deal-scheduler");
 const legacyAdmin = require("./modules/legacy-admin");
 const adminPanel = require("./modules/admin-panel");
@@ -55,11 +56,12 @@ try {
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
-const chemicalAI = createAI({ provider: "gemini" });
+const chemicalAI = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] });
 const core = createGPTCore({ ai, registry, diagnostics: log });
 let botUserId = null;
 let stopScheduledMessages = () => {};
 let stopDeals = () => {};
+let stopWeather = () => {};
 let shutdownPromise = null;
 let shutdownRequested = false;
 let startupPhase = true;
@@ -458,8 +460,8 @@ bot.on("text", async ctx => {
         const run = await client.query(`INSERT INTO price_list_runs(source_chat_id,source_message_id,raw_text,status,extracted_count,accepted_count,skipped_count)
           VALUES($1,$2,$3,'processed',$4,$5,$6) RETURNING id`, [m.chatId, m.messageId, sourceText, rows.length, accepted.length, rows.length - accepted.length]);
         for (const row of rows) {
-          await client.query(`INSERT INTO price_list_items(run_id,product_label,variant_label,company_label,weight_g,volume_ml,package_sale_price,wholesale_carton_price,consumer_price,pack_count,confidence,raw_line,decision)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, [run.rows[0].id, row.product || row.product_text || null, row.variant || null, row.company || parsedList.company || null, row.weight_g ?? null, row.volume_ml ?? null, row.package_sale_price ?? null, row.wholesale_carton_price ?? null, row.consumer_price ?? null, row.pack_count ?? null, row.confidence ?? null, row.raw_line || row.rawLine || null, row.decision || "review"]);
+          await client.query(`INSERT INTO price_list_items(run_id,product_label,variant_label,company_label,weight_g,volume_ml,package_sale_price,wholesale_carton_price,consumer_price,pack_count,confidence,raw_line,decision,unit_price_type,list_price)
+            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [run.rows[0].id, row.product || row.product_text || null, row.variant || null, row.company || parsedList.company || null, row.weight_g ?? null, row.volume_ml ?? null, row.package_sale_price ?? null, row.wholesale_carton_price ?? null, row.consumer_price ?? null, row.pack_count ?? null, row.confidence ?? null, row.raw_line || row.rawLine || null, row.decision || "review", row.unit_price_type || null, row.list_price ?? null]);
         }
       });
     }
@@ -490,10 +492,10 @@ bot.on("text", async ctx => {
   if (isChemicalCommand) {
     if (!["group", "supergroup"].includes(m.chatType)) return;
     const question = args || "اكتب سؤالك الكيميائي بوضوح.";
-    const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: "gemini_request", severity: "error", status: "safe_fallback", input: question, details: { message: error?.message || "Gemini request failed" } }));
+    const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(question);
     const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    const body = `🧪 المساعد الكيميائي\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }
@@ -568,9 +570,9 @@ bot.on("text", async ctx => {
 
   // In approved groups, automatically answer likely chemistry questions once per incoming message.
   if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
-    const answer = await chemical.answer(chemicalAI, text, error => log({ module: "chemical-assistant", stage: "gemini_request", severity: "error", status: "safe_fallback", input: text, details: { message: error?.message || "Gemini request failed" } }));
+    const answer = await chemical.answer(chemicalAI, text, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: text, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(text);
-    const body = `🧪 الخدمة مقدمة بتقنيات Gemini\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    const body = `🧪 المساعد الكيميائي\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }
@@ -640,6 +642,16 @@ installFatalProcessHandlers({
   } else {
     console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
   }
+  if (String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() !== "false") {
+    await ensureWeatherSchedulerSchema(db.pool);
+    if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
+    stopWeather = startWeatherScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
+      const report = makeReport({ module: "weather", stage: details?.stage || "scheduled_bulletin", severity: "ERROR", action: "weather_bulletin", error, details });
+      await emitReport({ bot, db, report });
+    } });
+  } else {
+    console.log("[WEATHER_SCHEDULER_DISABLED] WEATHER_SCHEDULER_ENABLED=false; scheduled weather bulletins are disabled.");
+  }
   // Webhook-only transport; polling transport is not used by this runtime.
   const allowedUpdates = [
     "message", "edited_message", "callback_query", "my_chat_member",
@@ -681,6 +693,7 @@ async function shutdown(signal) {
     console.log(`[SHUTDOWN] ${signal}: stopping schedulers and closing connections`);
     try { stopScheduledMessages(); } catch (error) { console.error("[SHUTDOWN_SCHEDULER_ERROR]", error?.message || error); }
     try { stopDeals(); } catch (error) { console.error("[SHUTDOWN_DEALS_ERROR]", error?.message || error); }
+    try { stopWeather(); } catch (error) { console.error("[SHUTDOWN_WEATHER_ERROR]", error?.message || error); }
     if (webhookServer?.listening) {
       try { await new Promise((resolve, reject) => webhookServer.close(error => error ? reject(error) : resolve())); }
       catch (error) { console.error("[SHUTDOWN_WEBHOOK_SERVER_ERROR]", error?.message || error); process.exitCode = 1; }

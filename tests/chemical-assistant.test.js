@@ -24,6 +24,12 @@ assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /ترك�
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة أعلى جودة/);
 assert.ok(chemistry.safetyGate("هل أخلط الكلور مع حمض الفلاش؟"));
 assert.ok(chemistry.safetyGate("خلط الكلور مع الأمونيا"));
+assert.ok(chemistry.safetyGate("هل ينفع أخلط كلوركس مع روح الملح؟"));
+assert.ok(chemistry.safetyGate("خلط ماء جافيل مع الخل"));
+assert.ok(chemistry.safetyGate("هل أخلط المبيض مع النشادر؟"));
+assert.equal(chemistry.safetyGate("كيف أقيس pH منظف الأطباق؟"), null);
+assert.match(chemistry.safetyGate("كلور مع فلاش"), /لا تخلط/);
+
 const built = links.buildChemicalLinks("تركيبة صابون سائل");
 assert.match(links.renderChemicalLinks(built), /<a href=/);
 assert.match(links.renderChemicalLinks(built), /قناة التركيبات المحفوظة/);

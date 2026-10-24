@@ -110,7 +110,7 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
     items,
     title: kind === "amazon"
       ? "عروض أمازون للمنظفات والورقيات والعناية"
-      : "عروض نون وجوميا وكارفور وكازيون المختارة"
+      : "عروض المتاجر الأخرى المختارة"
   }];
   const published = [];
   for (const batch of batches) {

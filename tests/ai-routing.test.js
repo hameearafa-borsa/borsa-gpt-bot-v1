@@ -21,7 +21,10 @@ assert.ok(aiSource.includes("fallbackProviders.flatMap"));
 assert.ok(aiSource.includes("https://api.x.ai/v1/responses"));
 assert.ok(!aiSource.includes("https://api.x.ai/v1/chat/completions"));
 assert.ok(aiSource.includes("if (!retryable && !credentialError)"));
-assert.ok(index.includes('createAI({ provider: "gemini", fallbackProviders: ["openai", "xai"] })'));
+assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
+assert.ok(aiSource.includes("GROQ_MODEL"));
+assert.ok(aiSource.includes("GROQ_API_KEY_2"));
+assert.ok(index.includes('createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] })'));
 
 function provider(name, providerName, run) {
   return { name, provider: providerName, run };
@@ -61,12 +64,12 @@ try {
     provider("GEMINI_API_KEY_1", "gemini", async () => { calls.push("gemini-1"); throw httpError(503); }),
     provider("GEMINI_API_KEY_2", "gemini", async () => { calls.push("gemini-2"); throw httpError(503); }),
     provider("OPENAI_API_KEY", "openai", async () => { calls.push("openai"); throw httpError(503); }),
-    provider("XAI_API_KEY", "xai", async () => { calls.push("xai"); return { text: "ok", provider: "xai" }; })
+    provider("GROQ_API_KEY", "groq", async () => { calls.push("groq"); return { text: "ok", provider: "groq" }; })
   ];
-  const routed = createAI({ provider: "gemini", fallbackProviders: ["openai", "xai"], providers });
+  const routed = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"], providers });
   const result = await routed.generate("test prompt");
-  assert.equal(result.provider, "xai");
-  assert.deepEqual(calls, ["gemini-1", "gemini-2", "openai", "xai"]);
+  assert.equal(result.provider, "groq");
+  assert.deepEqual(calls, ["gemini-1", "gemini-2", "openai", "groq"]);
 
   const credentialCalls = [];
   const credentialProviders = [
@@ -93,11 +96,11 @@ try {
   const allFailProviders = [
     provider("GEMINI_API_KEY_1", "gemini", async () => { throw httpError(503, "Gemini unavailable"); }),
     provider("OPENAI_API_KEY", "openai", async () => { throw httpError(503, "OpenAI unavailable"); }),
-    provider("XAI_API_KEY", "xai", async () => { throw httpError(503, "xAI unavailable"); })
+    provider("GROQ_API_KEY", "groq", async () => { throw httpError(503, "Groq unavailable"); })
   ];
-  const allFailRouted = createAI({ provider: "gemini", fallbackProviders: ["openai", "xai"], providers: allFailProviders });
+  const allFailRouted = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"], providers: allFailProviders });
   await assert.rejects(allFailRouted.generate("test prompt"), error => {
-    assert.equal(error.aiProvider, "xai");
+    assert.equal(error.aiProvider, "groq");
     return true;
   });
 

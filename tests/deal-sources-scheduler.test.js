@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards } = require("../modules/deal-sources");
-const { verifyProductUrl, batchKey, isNewsletterWindow, cairoParts } = require("../modules/deal-scheduler");
+const { verifyProductUrl, batchKey, newsletterKindAt, isNewsletterWindow, cairoParts } = require("../modules/deal-scheduler");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
 assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), null);
@@ -21,6 +21,9 @@ const sampleDate = new Date("2026-10-12T15:00:00.000Z");
 assert.equal(batchKey(sampleDate),"2026-10-12");
 assert.equal(isNewsletterWindow(new Date("2026-10-12T13:59:00.000Z")),false);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T14:00:00.000Z")),true);
+assert.equal(newsletterKindAt(new Date("2026-10-12T14:00:00.000Z")),"amazon"); // 5 PM Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-12T15:00:00.000Z")),"other_sites"); // 6 PM Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),null); // no third newsletter
 (async()=>{
  const ok = await verifyProductUrl("https://www.amazon.eg/dp/B0ABCDEF12", {fetchImpl:async url=>({status:200,url:String(url)})});
  assert.equal(ok.ok,true);

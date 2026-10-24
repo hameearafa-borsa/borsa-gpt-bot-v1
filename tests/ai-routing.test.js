@@ -93,6 +93,18 @@ try {
   assert.equal(permanentResult.provider, "openai");
   assert.deepEqual(permanentCalls, ["gemini-1", "openai"]);
 
+  const emptyResponseCalls = [];
+  const emptyResponseProviders = [
+    provider("GEMINI_API_KEY_1", "gemini", async () => { emptyResponseCalls.push("gemini"); return { text: "   ", provider: "gemini" }; }),
+    provider("OPENAI_API_KEY", "openai", async () => { emptyResponseCalls.push("openai"); return { text: "OpenAI answer", provider: "openai" }; }),
+    provider("GROQ_API_KEY", "groq", async () => { emptyResponseCalls.push("groq"); return { text: "Groq answer", provider: "groq" }; })
+  ];
+  const emptyResponseRouted = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"], providers: emptyResponseProviders });
+  const emptyResponseResult = await emptyResponseRouted.generate("test prompt");
+  assert.equal(emptyResponseResult.provider, "openai");
+  assert.equal(emptyResponseResult.text, "OpenAI answer");
+  assert.deepEqual(emptyResponseCalls, ["gemini", "openai"]);
+
   const allFailProviders = [
     provider("GEMINI_API_KEY_1", "gemini", async () => { throw httpError(503, "Gemini unavailable"); }),
     provider("OPENAI_API_KEY", "openai", async () => { throw httpError(503, "OpenAI unavailable"); }),

@@ -9,7 +9,9 @@ const text = `أسعار برسيل\nأوتوماتيك\nبرسيل 2 كيلو 1
   assert.equal(result.method, "deterministic");
   assert.ok(result.items.filter(x => x.decision === "accepted").length >= 3);
 
-  const fallbackText = "أسعار شركة برسيل\\nبرسيل 2 كيلو 100 جنيه\\nبرسيل 3 كيلو 140 جنيه";
+  const fallbackText = `أسعار شركة برسيل
+برسيل 2 كيلو 100 جنيه
+برسيل 3 كيلو 140 جنيه`;
   const empty = await extractList({ generate: async () => ({ text: JSON.stringify({ company: "شركة برسيل", items: [] }) }) }, fallbackText);
   assert.equal(empty.method, "fallback", "empty AI arrays must fall back to local parsing");
   assert.ok(empty.items.length >= 2, "empty AI arrays must not discard locally parseable rows");

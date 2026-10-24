@@ -182,7 +182,15 @@ function createAI(options = {}) {
       const p = providerOrder[i];
       if (skipProvider === p.provider) continue;
       if (skipProvider && skipProvider !== p.provider) skipProvider = null;
-      try { return await p.run(prompt, options); }
+      try {
+        const result = await p.run(prompt, options);
+        if (!String(result?.text || "").trim()) {
+          const error = new Error("AI provider returned an empty response");
+          error.aiProvider = p.provider;
+          throw error;
+        }
+        return result;
+      }
       catch (e) {
         last = e;
         // Preserve the actual failing provider for safe diagnostics after all fallbacks fail.

@@ -100,7 +100,7 @@ async function getDailyWeatherReport({ fetchJson = getJson, now = new Date() } =
     );
   }
   lines.push("المصدر: Open-Meteo");
-  return { message: lines.join("\\n").trim(), cities: weather, measuredAt: [...measuredTimes][0] };
+  return { message: lines.join("\n").trim(), cities: weather, measuredAt: [...measuredTimes][0] };
 }
 
 async function getLiveWeather(city = "القاهرة", { fetchJson = getJson } = {}) {
@@ -141,7 +141,7 @@ async function getWeatherSummary(_ai, city = "القاهرة", options = {}) {
       w.time ? `وقت القياس المحلي: ${w.time.replace("T", " ")} (${w.timezone})` : null,
       `المصدر: ${w.source}`
     ].filter(Boolean);
-    return { ok: true, city: w.city, weather: w, searchUrl, message: details.join("\\n") };
+    return { ok: true, city: w.city, weather: w, searchUrl, message: details.join("\n") };
   } catch (error) {
     return { ok: false, city, searchUrl, message: "تعذر جلب بيانات الطقس الحية الآن؛ لن أخمّن درجة الحرارة. يمكنك المحاولة لاحقًا.", error: String(error?.message || "weather_error").slice(0, 120) };
   }

@@ -8,7 +8,7 @@ const { createAI, providersFromEnv } = require("../core/ai");
 
 assert.ok(aiSource.includes("gemini-3.5-flash-lite"));
 assert.ok(aiSource.includes("x-goog-api-key"));
-const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function extractResponsesText"));
+const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");
 assert.ok(!openAISection.includes("temperature:"), "Responses request must not send unsupported temperature field");
 const geminiSection = aiSource.slice(aiSource.indexOf("function geminiProvider"), aiSource.indexOf("function providersFromEnv"));

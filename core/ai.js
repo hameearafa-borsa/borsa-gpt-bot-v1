@@ -53,31 +53,6 @@ function openAIProvider(key, model) {
   };
 }
 
-function extractResponsesText(data) {
-  if (typeof data?.output_text === "string" && data.output_text) return data.output_text;
-  return (data?.output || [])
-    .flatMap(item => item.content || [])
-    .filter(part => part.type === "output_text" && typeof part.text === "string")
-    .map(part => part.text)
-    .join("");
-}
-
-function xaiProvider(key, model) {
-  return async (prompt, options = {}) => {
-    const selectedModel = model || "grok-4.7";
-    const data = await requestJson("https://api.x.ai/v1/responses", {
-      model: selectedModel,
-      input: [
-        { role: "system", content: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية." },
-        { role: "user", content: String(prompt || "") }
-      ],
-      temperature: options.temperature ?? 0
-    }, { authorization: `Bearer ${key}` });
-    return { text: extractResponsesText(data), provider: "xai", model: selectedModel };
-  };
-}
-
-
 function groqProvider(key, model) {
   return async (prompt, options = {}) => {
     const selectedModel = model || "qwen/qwen3.8-27b";
@@ -111,13 +86,10 @@ function geminiProvider(key, model) {
 
 function providersFromEnv() {
   const all = {
-    openai: [], xai: [], gemini: [], groq: []
+    openai: [], gemini: [], groq: []
   };
   for (const keyName of ["OPENAI_API_KEY", "OPENAI_API_KEY_2", "OPENAI_API_KEY_3"]) {
     if (process.env[keyName]) all.openai.push({ name: keyName, provider: "openai", run: openAIProvider(process.env[keyName], process.env.OPENAI_MODEL || "gpt-6-luna") });
-  }
-  for (const [keyName, modelName] of [["XAI_API_KEY","XAI_MODEL"],["XAI_API_KEY_2","XAI_MODEL_2"]]) {
-    if (process.env[keyName]) all.xai.push({ name: keyName, provider: "xai", run: xaiProvider(process.env[keyName], process.env[modelName] || process.env.XAI_MODEL || "grok-4.7") });
   }
   // Accept the existing Railway variable GEMINI_API_KEY as slot 1, while
   // retaining GEMINI_API_KEY_1 for deployments that use the numbered convention.
@@ -140,7 +112,7 @@ function providersFromEnv() {
     }
   }
   const primary = String(process.env.AI_PROVIDER || "openai").toLowerCase();
-  const order = [primary, ...["openai", "gemini", "xai", "groq"].filter(x => x !== primary)];
+  const order = [primary, ...["openai", "gemini", "groq"].filter(x => x !== primary)];
   return order.flatMap(provider => all[provider] || []);
 }
 
@@ -214,4 +186,4 @@ function createAI(options = {}) {
   return { generate, providers: selected.map(x => x.name), primaryProvider: selected[0]?.provider || null };
 }
 
-module.exports = { createAI, providersFromEnv, formatProviderError, extractResponsesText };
+module.exports = { createAI, providersFromEnv, formatProviderError };

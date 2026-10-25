@@ -147,9 +147,10 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
     try {
       msg = await telegram.sendMessage(chatId, formatted.text, { disable_web_page_preview: true });
     } catch (error) {
-      // Only a confirmed send failure may mark the reservation as failed.
-      // A Telegram timeout can still be ambiguous, so failed/prepared rows are
-      // deliberately not retried automatically to avoid duplicate messages.
+      // A sendMessage error does not prove the message was not delivered:
+      // timeouts and connection drops can leave the outcome ambiguous. Mark the
+      // reservation for manual diagnosis, and never auto-retry failed/prepared
+      // rows, so an uncertain outcome cannot create duplicate messages.
       await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(()=>{});
       await onError(error, { stage: "publish", batchKind: batch.kind, batchKey: key });
       continue;

@@ -2,6 +2,7 @@
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
 const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts } = require("../modules/deal-scheduler");
+const { formatNewsletterMessage } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
 assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), null);
@@ -25,6 +26,15 @@ assert.equal(carrefourCards[0].price, 79.99);
 assert.equal(carrefourCards[0].category, "detergent");
 assert.equal(safeProductUrl("https://evil.example/mafegy/ar/p/velvet-gel", "carrefour"), null);
 assert.equal(extractCards(carrefourFixture.replace('"price":"79.99"', '"price":"0"'), "carrefour").length, 0, "invalid prices must be rejected");
+const newsletterFixture = [
+  { title: "منظف أول", merchant: "متجر", price: 25, url: "https://www.amazon.eg/dp/B0ABCDEF12" },
+  { title: "رابط طويل", merchant: "متجر", price: 35, url: "https://www.amazon.eg/" + "x".repeat(500) }
+];
+const formattedNewsletter = formatNewsletterMessage(newsletterFixture, "اختبار النشرة", 300);
+assert.equal(formattedNewsletter.items.length, 1, "only complete product blocks fitting the limit should be selected");
+assert.ok(formattedNewsletter.text.length <= 300, "newsletter must remain under the Telegram message limit");
+assert.ok(formattedNewsletter.text.includes(newsletterFixture[0].url), "included product URLs must remain intact");
+assert.ok(!formattedNewsletter.text.includes("x".repeat(100)), "an oversized URL must not be partially published");
 const sampleDate = new Date("2026-10-12T15:00:00.000Z");
 assert.equal(batchKey(sampleDate),"2026-10-12");
 assert.equal(isNewsletterWindow(new Date("2026-10-12T13:59:00.000Z")),false);

@@ -7,7 +7,8 @@ const { redactString } = require("../core/diagnostics");
 const SOURCES = Object.freeze({
   amazon: { host: "www.amazon.eg", base: "https://www.amazon.eg/s?k=" },
   jumia: { host: "www.jumia.com.eg", base: "https://www.jumia.com.eg/catalog/?q=" },
-  noon: { host: "www.noon.com", base: "https://www.noon.com/egypt-ar/search/?q=" }
+  noon: { host: "www.noon.com", base: "https://www.noon.com/egypt-ar/search/?q=" },
+  carrefour: { host: "www.carrefouregypt.com", base: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers" }
 });
 const INCLUDE = /غسيل|مسحوق|بودر|جل|منعم|كلور|صابون|شامبو|كريم|مناديل|حفاض|فاين|ديتول|فيري|بريل|برسيل|تايد|اريال|آريال|اومو|أومو|كلوركس|دوف|لوكس|بانتين|بامبرز|مولفكس|محارم|غسول|مرطب|عناية|ورقي|مكياج|تجميل|لوشن|سيروم|مزيل عرق|معجون|فازلين|نيفيا/i;
 const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|ملابس|حذاء|مكيف|ثلاجة|تلفزيون|ايفون|سامسونج جالكسي/i;
@@ -39,6 +40,33 @@ function extractCards(html, sourceName, query = "") {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
   const cards = [];
+  if (sourceName === "carrefour") {
+    const products = [];
+    const scripts = [...html.matchAll(/<script\\b[^>]*type=["\x27]application\\/ld\\+json["\x27][^>]*>([\\s\\S]*?)<\\/script>/gi)];
+    const visit = value => {
+      if (!value || typeof value !== "object") return;
+      const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
+      if (types.includes("Product")) products.push(value);
+      if (Array.isArray(value)) value.forEach(visit);
+      else Object.values(value).forEach(visit);
+    };
+    for (const match of scripts) {
+      try { visit(JSON.parse(match[1].trim())); } catch { /* Ignore malformed structured data. */ }
+    }
+    for (const product of products) {
+      const title = htmlText(product.name || "");
+      if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
+      const url = safeProductUrl(product.url || product.offers?.url || "", sourceName);
+      const offerList = Array.isArray(product.offers) ? product.offers : [product.offers || {}];
+      const prices = offerList.map(offer => money(offer.price ?? offer.lowPrice)).filter(value => value !== null);
+      const price = prices.length ? Math.min(...prices) : null;
+      const oldPrice = money(product.offers?.highPrice || product.highPrice);
+      if (!url || !price) continue;
+      const deal = { merchant: "Carrefour Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
+      if (validateDeal(deal).ok) cards.push(deal);
+    }
+    return cards;
+  }
   let chunks = [];
   if (sourceName === "amazon") chunks = [...html.matchAll(/<div[^>]+data-component-type=["']s-search-result["'][\s\S]*?<\/div>\s*<\/div>/gi)].map(m=>m[0]);
   else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["'][^"']*prd[^"']*["'][\s\S]*?<\/article>/gi)].map(m=>m[0]);
@@ -66,7 +94,7 @@ async function fetchSearch(sourceName, query, { timeoutMs = 25000, fetchImpl = g
   if (!source) throw new Error("unsupported_deal_source");
   const key = String(process.env.SCRAPER_API_KEY || "").trim();
   if (!key) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
-  const targetUrl = `${source.base}${encodeURIComponent(query)}`;
+  const targetUrl = sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`;
   const endpoint = new URL("https://api.scraperapi.com/");
   endpoint.searchParams.set("api_key", key);
   endpoint.searchParams.set("url", targetUrl);
@@ -85,6 +113,7 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   const tasks = [];
   for (const q of amazonQueries) tasks.push(fetchSearch("amazon", q, { fetchImpl }));
   for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push(fetchSearch(source, q, { fetchImpl }));
+  tasks.push(fetchSearch("carrefour", "", { fetchImpl }));
   const results = await Promise.allSettled(tasks);
   const deals = [], errors = [];
   const seen = new Set();

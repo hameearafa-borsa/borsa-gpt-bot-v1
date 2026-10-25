@@ -1,10 +1,12 @@
 "use strict";
 const assert = require("node:assert/strict");
 const {
-  CATALOG_STORES, safeCatalogUrl, extractCatalogs, isRelevantOffer, changedCatalogs
+  CATALOG_REGION, CATALOG_STORES, safeCatalogUrl, extractCatalogs, isRelevantOffer, changedCatalogs, formatCatalogNotice, persistCatalogSnapshots, listPendingCatalogSnapshots, markCatalogSnapshot
 } = require("../modules/catalog-newsletter");
 
 assert.deepEqual(Object.keys(CATALOG_STORES).sort(), ["bim", "kazyon", "metro_market"]);
+assert.equal(CATALOG_REGION, "محافظة القاهرة");
+assert.ok(Object.values(CATALOG_STORES).every(store => store.region === CATALOG_REGION));
 assert.equal(safeCatalogUrl("https://snapflyer.io/eg/downtown/offers/kazyon/1376"), "https://snapflyer.io/eg/downtown/offers/kazyon/1376");
 assert.equal(safeCatalogUrl("https://evil.example/eg/downtown/offers/kazyon/1376"), null);
 assert.equal(safeCatalogUrl("http://snapflyer.io/eg/downtown/offers/kazyon/1376"), null);
@@ -16,6 +18,7 @@ const html = `
 const catalogs = extractCatalogs(html, "kazyon");
 assert.equal(catalogs.length, 1);
 assert.equal(catalogs[0].store, "kazyon");
+assert.equal(catalogs[0].region, "محافظة القاهرة");
 assert.equal(catalogs[0].url, "https://snapflyer.io/eg/downtown/offers/kazyon/1376");
 assert.ok(catalogs[0].fingerprint);
 assert.equal(extractCatalogs(html, "unknown").length, 0);
@@ -24,4 +27,10 @@ assert.equal(isRelevantOffer({ title: "Women's cotton dress", category: "fashion
 assert.equal(isRelevantOffer({ title: "Generic item", category: "personal_care" }), true);
 const all = [{ fingerprint: "a" }, { fingerprint: "b" }, { fingerprint: "a" }];
 assert.deepEqual(changedCatalogs(["a"], all).map(x => x.fingerprint), ["b"]);
+const notice = formatCatalogNotice({ store_key: "kazyon", catalog_url: "https://snapflyer.io/eg/downtown/offers/kazyon/1376", title: "Kazyon flyer", region: CATALOG_REGION });
+assert.match(notice, /النطاق الجغرافي: محافظة القاهرة/);
+assert.match(notice, /https:\/\/snapflyer\.io/);
+assert.equal(typeof persistCatalogSnapshots, "function");
+assert.equal(typeof listPendingCatalogSnapshots, "function");
+assert.equal(typeof markCatalogSnapshot, "function");
 console.log("catalog newsletter helper tests: OK");

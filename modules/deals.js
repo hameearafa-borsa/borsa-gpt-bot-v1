@@ -49,12 +49,16 @@ async function isRecentDuplicate(pool, fingerprint, days = 7, productFingerprint
   if (!pool) return false;
   const safeDays = Number(days);
   if (!Number.isFinite(safeDays) || safeDays <= 0 || safeDays > 365) throw new Error("days must be between 0 and 365");
+  // Suppress only the same offer observation. Product-level suppression would
+  // hide meaningful updates such as a lower price or a bundle with a gift.
+  // Keep productFingerprint in the signature for backward compatibility.
+  void productFingerprint;
   const r = await pool.query(
     `SELECT 1 FROM deal_observations
-     WHERE observed_at > NOW() - ($3::double precision * INTERVAL '1 day')
-       AND (fingerprint=$1 OR ($2::text IS NOT NULL AND product_fingerprint=$2))
+     WHERE observed_at > NOW() - ($2::double precision * INTERVAL '1 day')
+       AND fingerprint=$1
      LIMIT 1`,
-    [fingerprint, productFingerprint, safeDays]
+    [fingerprint, safeDays]
   );
   return r.rowCount > 0;
 }

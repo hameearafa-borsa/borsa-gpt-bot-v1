@@ -42,7 +42,11 @@ function extractCards(html, sourceName, query = "") {
   const cards = [];
   if (sourceName === "carrefour") {
     const products = [];
-    const scripts = [...html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)];
+    // Match script elements first, then inspect the type attribute. This avoids
+    // depending on attribute order or whitespace in retailer-generated HTML.
+    const scripts = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)
+      .filter(match => /\\btype\\s*=\\s*(["'])application\\/ld\\+json\\1/i.test(match[1]))
+      .map(match => match[2]);
     const visit = value => {
       if (!value || typeof value !== "object") return;
       const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
@@ -50,8 +54,8 @@ function extractCards(html, sourceName, query = "") {
       if (Array.isArray(value)) value.forEach(visit);
       else Object.values(value).forEach(visit);
     };
-    for (const match of scripts) {
-      try { visit(JSON.parse(match[1].trim())); } catch { /* Ignore malformed structured data. */ }
+    for (const script of scripts) {
+      try { visit(JSON.parse(script.trim())); } catch { /* Ignore malformed structured data. */ }
     }
     for (const product of products) {
       const title = htmlText(product.name || "");

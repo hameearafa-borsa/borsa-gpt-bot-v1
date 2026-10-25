@@ -43,6 +43,8 @@ async function fetchStorePage(url, { fetchImpl = globalThis.fetch, timeoutMs = F
     if (!response.ok) throw new Error("catalog_http_" + response.status);
     const type = response.headers?.get?.("content-type") || "";
     if (type && !/text\/html|application\/xhtml\+xml/i.test(type)) throw new Error("catalog_unexpected_content_type");
+    const declaredLength = Number(response.headers?.get?.("content-length") || 0);
+    if (declaredLength > MAX_HTML_BYTES) throw new Error("catalog_html_empty_or_too_large");
     const html = await response.text();
     if (!html || html.length > MAX_HTML_BYTES) throw new Error("catalog_html_empty_or_too_large");
     return html;

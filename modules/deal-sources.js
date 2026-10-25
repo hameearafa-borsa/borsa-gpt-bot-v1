@@ -44,7 +44,7 @@ function extractCards(html, sourceName, query = "") {
     const products = [];
     // Match script elements first, then inspect the type attribute. This avoids
     // depending on attribute order or whitespace in retailer-generated HTML.
-    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)
+    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
       .filter(match => /\btype\s*=\s*(["'])application\/ld\+json\1/i.test(match[1]))
       .map(match => match[2]);
     const visit = value => {

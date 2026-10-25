@@ -164,8 +164,8 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
     busy = true;
     try {
       const result = await publishDailyDeals(scheduledOptions);
-      if (result.reason === "no_deals") nextAttemptAt = Date.now() + retryAfterFailureMs;
-      else nextAttemptAt = 0;
+      // One scrape cycle per day, regardless of outcome; never loop through paid API requests after an empty/duplicate result.
+      nextAttemptAt = Date.now() + retryAfterFailureMs;
     } catch (error) {
       nextAttemptAt = Date.now() + retryAfterFailureMs;
       await scheduledOptions.onError?.(error, { stage: "scheduler_tick" });

@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards } = require("../modules/deal-sources");
-const { verifyProductUrl, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts } = require("../modules/deal-scheduler");
+const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts } = require("../modules/deal-scheduler");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
 assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), null);
@@ -69,5 +69,23 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(redirectCalls, 1, "must not make a request to a disallowed redirect target");
  const badPort = await verifyProductUrl("https://www.amazon.eg:8443/dp/B0ABCDEF12");
  assert.equal(badPort.ok, false, "non-standard HTTPS ports must be rejected");
+
+ const candidates = [
+   { merchant: "Amazon.eg", title: "مسحوق غسيل مع هدية", url: "https://www.amazon.eg/dp/B0ABCDEF12", price: 100, category: "detergent" },
+   { merchant: "Amazon.eg", title: "مناديل ورقية", url: "https://www.amazon.eg/dp/B0ABCDEF13", price: 30, category: "paper" }
+ ];
+ const retainedOnBlock = await verifyDeals(candidates, {
+   fetchImpl: async () => ({ status: 403, headers: { get: () => null } })
+ });
+ assert.equal(retainedOnBlock.length, 2, "anti-bot 403 checks must not silently drop otherwise allowlisted offers");
+ assert.ok(retainedOnBlock.every(d => d.verified_url === false));
+ const retainedOnTimeout = await verifyDeals(candidates, {
+   fetchImpl: async () => { const e = new Error("timed out"); e.name = "AbortError"; throw e; }
+ });
+ assert.equal(retainedOnTimeout.length, 2, "temporary verification timeouts must not silently drop offers");
+ const removedUnsafeRedirect = await verifyDeals(candidates.slice(0, 1), {
+   fetchImpl: async () => ({ status: 302, headers: { get: () => "https://evil.example/redirect" } })
+ });
+ assert.equal(removedUnsafeRedirect.length, 0, "unsafe redirects must still be rejected");
  console.log("deal sources + safe URL verification + Cairo scheduler tests: OK");
 })().catch(e=>{console.error(e);process.exit(1)});

@@ -2,10 +2,11 @@
 
 const crypto = require("node:crypto");
 
+const CATALOG_REGION = "محافظة القاهرة";
 const CATALOG_STORES = Object.freeze({
-  kazyon: { name: "كازيون", url: "https://snapflyer.io/eg/downtown/stores/kazyon" },
-  bim: { name: "BIM", url: "https://snapflyer.io/eg/downtown/stores/bim" },
-  metro_market: { name: "مترو ماركت", url: "https://snapflyer.io/eg/downtown/stores/metro-market?lang=en" }
+  kazyon: { name: "كازيون", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/kazyon" },
+  bim: { name: "BIM", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/bim" },
+  metro_market: { name: "مترو ماركت", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/metro-market?lang=en" }
 });
 
 const RELEVANT_CATEGORIES = Object.freeze([
@@ -60,6 +61,7 @@ function extractCatalogs(html, storeKey) {
     results.push({
       store: storeKey,
       storeName: store.name,
+      region: store.region,
       title: title.slice(0, 180),
       url: href,
       displayedDateRange: dateMatch ? dateMatch[1] : null,
@@ -83,6 +85,7 @@ function changedCatalogs(previousFingerprints, currentCatalogs) {
 }
 
 module.exports = {
+  CATALOG_REGION,
   CATALOG_STORES,
   RELEVANT_CATEGORIES,
   normalizeText,

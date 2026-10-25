@@ -30,7 +30,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
     const rowSvg = pageRows.map((item, i) => {
       const y = headerHeight + i * rowHeight;
       const rawName = String(item.product || item.product_label || "منتج");
-      const name = escapeXml(rawName).slice(0, 150);
+      const name = escapeXml(rawName.slice(0, 150));
       const rawCategory = String(item.category || item.section || "");
       const category = escapeXml(rawCategory);
       const variant = String(item.variant || "");

@@ -28,7 +28,7 @@ function msUntilNextCheck(now = new Date()) {
 
 async function fetchStorePage(url, { fetchImpl = globalThis.fetch, timeoutMs = FETCH_TIMEOUT_MS } = {}) {
   const safe = new URL(url);
-  if (safe.protocol !== "https:" || safe.hostname !== "snapflyer.io" || safe.username || safe.password) {
+  if (safe.protocol !== "https:" || safe.hostname !== "snapflyer.io" || safe.username || safe.password || (safe.port && safe.port !== "443")) {
     throw new Error("catalog_source_not_allowed");
   }
   const controller = new AbortController();

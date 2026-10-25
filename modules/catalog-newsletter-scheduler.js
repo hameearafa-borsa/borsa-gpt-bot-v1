@@ -7,6 +7,7 @@ const {
 
 const CAIRO_ZONE = "Africa/Cairo";
 const DAILY_HOUR = 10;
+const DAILY_MINUTE = 10;
 const FETCH_TIMEOUT_MS = 12000;
 const MAX_HTML_BYTES = 2_000_000;
 
@@ -21,7 +22,7 @@ function cairoClock(date = new Date()) {
 function msUntilNextCheck(now = new Date()) {
   const p = cairoClock(now);
   const elapsedToday = ((p.hour * 60 + p.minute) * 60 + p.second) * 1000 + now.getMilliseconds();
-  const target = DAILY_HOUR * 60 * 60 * 1000;
+  const target = (DAILY_HOUR * 60 + DAILY_MINUTE) * 60 * 1000;
   return elapsedToday < target ? target - elapsedToday : 24 * 60 * 60 * 1000 - elapsedToday + target;
 }
 
@@ -68,8 +69,6 @@ async function checkCatalogsOnce({ pool, telegram, chatId, fetchPage = fetchStor
       await onError(error, { stage: "catalog_fetch", store: storeKey });
     }
   }
-  // Only publish versions explicitly identified as new after an existing baseline.
-  // Do not turn fetch/parse failures into a publication.
   if (result.failed === Object.keys(CATALOG_STORES).length) return { ...result, skipped: true, reason: "all_sources_failed" };
   const pending = await listPendingCatalogSnapshots(pool, 20);
   for (const snapshot of pending) {
@@ -107,4 +106,4 @@ function startCatalogNewsletterScheduler(options) {
   return () => { stopped = true; if (timer) clearTimeout(timer); };
 }
 
-module.exports = { CAIRO_ZONE, DAILY_HOUR, FETCH_TIMEOUT_MS, cairoClock, msUntilNextCheck, fetchStorePage, checkCatalogsOnce, startCatalogNewsletterScheduler };
+module.exports = { CAIRO_ZONE, DAILY_HOUR, DAILY_MINUTE, FETCH_TIMEOUT_MS, cairoClock, msUntilNextCheck, fetchStorePage, checkCatalogsOnce, startCatalogNewsletterScheduler };

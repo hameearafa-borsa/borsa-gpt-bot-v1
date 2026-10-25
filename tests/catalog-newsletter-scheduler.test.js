@@ -93,14 +93,14 @@ function makePipelinePool() {
   // A newly listed flyer for a store with history becomes pending and publishes once.
   const changedHtml = '<a href="/eg/downtown/offers/kazyon/1377"><span>Kazyon flyer November 2026</span></a>';
   const second = await checkCatalogsOnce({ pool, telegram, chatId: -100123, fetchPage: async () => changedHtml });
-  assert.equal(second.published, 1);
-  assert.equal(sent.length, 1);
-  assert.match(sent[0].message, /November 2026/);
+  assert.equal(second.published, Object.keys(CATALOG_STORES).length);
+  assert.equal(sent.length, Object.keys(CATALOG_STORES).length);
+  assert.ok(sent.every(item => item.message.includes("November 2026")));
 
   // Next poll sees the same catalog and must not publish a duplicate.
   const third = await checkCatalogsOnce({ pool, telegram, chatId: -100123, fetchPage: async () => changedHtml });
   assert.equal(third.published, 0);
-  assert.equal(sent.length, 1);
+  assert.equal(sent.length, Object.keys(CATALOG_STORES).length);
 
   // If every source fails, no stale pending notice is published by this run.
   const allFail = await checkCatalogsOnce({

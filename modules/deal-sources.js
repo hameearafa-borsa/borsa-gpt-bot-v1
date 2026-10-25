@@ -4,6 +4,8 @@ const { validateDeal } = require("./deals");
 const { normalizeArabic, toAsciiDigits } = require("../core/normalization");
 const { redactString } = require("../core/diagnostics");
 
+let nextApiKeyIndex = 0;
+
 const SOURCES = Object.freeze({
   amazon: { host: "www.amazon.eg", base: "https://www.amazon.eg/s?k=" },
   jumia: { host: "www.jumia.com.eg", base: "https://www.jumia.com.eg/catalog/?q=" },
@@ -64,8 +66,11 @@ function extractCards(html, sourceName, query = "") {
 async function fetchSearch(sourceName, query, { timeoutMs = 25000, fetchImpl = globalThis.fetch } = {}) {
   const source = SOURCES[sourceName];
   if (!source) throw new Error("unsupported_deal_source");
-  const key = String(process.env.SCRAPER_API_KEY || "").trim();
-  if (!key) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
+  const keys = [process.env.SCRAPER_API_KEY, process.env.SCRAPER_API_KEY_2]
+    .map(value => String(value || "").trim()).filter(Boolean);
+  if (!keys.length) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
+  // Rotate between independent account keys without logging or exposing either value.
+  const key = keys[nextApiKeyIndex++ % keys.length];
   const targetUrl = `${source.base}${encodeURIComponent(query)}`;
   const endpoint = new URL("https://api.scraperapi.com/");
   endpoint.searchParams.set("api_key", key);
@@ -81,11 +86,16 @@ async function fetchSearch(sourceName, query, { timeoutMs = 25000, fetchImpl = g
   } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
   finally { clearTimeout(timer); }
 }
-async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], fetchImpl } = {}) {
+async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف"], otherQueries = ["مسحوق غسيل منظف"], fetchImpl } = {}) {
   const tasks = [];
-  for (const q of amazonQueries) tasks.push(fetchSearch("amazon", q, { fetchImpl }));
-  for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push(fetchSearch(source, q, { fetchImpl }));
-  const results = await Promise.allSettled(tasks);
+  for (const q of amazonQueries) tasks.push(() => fetchSearch("amazon", q, { fetchImpl }));
+  for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push(() => fetchSearch(source, q, { fetchImpl }));
+  // Run requests sequentially to avoid bursts that trigger 429s and waste credits.
+  const results = [];
+  for (const task of tasks) {
+    try { results.push({ status: "fulfilled", value: await task() }); }
+    catch { results.push({ status: "rejected" }); }
+  }
   const deals = [], errors = [];
   const seen = new Set();
   for (const r of results) {

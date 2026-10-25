@@ -29,6 +29,15 @@ assert.equal(msUntilNextCheck(after), 24 * 60 * 60 * 1000 - 60 * 1000);
     fetchImpl: async () => ({ ok: true, status: 200, headers: { get: () => "text/html" }, text: async () => "<html>ok</html>" })
   });
   assert.equal(html, "<html>ok</html>");
+  let oversizedBodyRead = false;
+  await assert.rejects(() => fetchStorePage("https://snapflyer.io/eg/downtown/stores/kazyon", {
+    fetchImpl: async () => ({
+      ok: true, status: 200,
+      headers: { get: name => name === "content-type" ? "text/html" : name === "content-length" ? "2000001" : null },
+      text: async () => { oversizedBodyRead = true; return "<html>too large</html>"; }
+    })
+  }), /catalog_html_empty_or_too_large/);
+  assert.equal(oversizedBodyRead, false, "reject oversized declared bodies before buffering the response");
   const skipped = await checkCatalogsOnce({ pool: null, telegram: null, chatId: null });
   assert.equal(skipped.skipped, true);
   console.log("catalog newsletter scheduler tests: OK");

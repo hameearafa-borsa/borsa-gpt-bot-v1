@@ -42,7 +42,7 @@ function extractCards(html, sourceName, query = "") {
   const cards = [];
   if (sourceName === "carrefour") {
     const products = [];
-    const scripts = [...html.matchAll(/<script\\b[^>]*type=["\x27]application\\/ld\\+json["\x27][^>]*>([\\s\\S]*?)<\\/script>/gi)];
+    const scripts = [...html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)];
     const visit = value => {
       if (!value || typeof value !== "object") return;
       const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];

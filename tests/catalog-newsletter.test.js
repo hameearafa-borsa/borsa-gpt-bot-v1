@@ -81,7 +81,8 @@ async function runPersistenceTests() {
     region: CATALOG_REGION
   };
   assert.deepEqual(await persistCatalogSnapshots(pool, [catalog]), { baseline: 1, changed: 0, unchanged: 0 });
-  assert.match(calls.at(-1).sql, /'ignored'/);
+  assert.match(calls.at(-1).sql, /ON CONFLICT\(store_key,catalog_url,fingerprint\) DO NOTHING/);
+  assert.equal(calls.at(-1).params[6], "ignored");
   assert.deepEqual(await persistCatalogSnapshots(pool, [catalog]), { baseline: 0, changed: 0, unchanged: 1 });
   assert.match(calls.at(-1).sql, /last_seen_at=NOW\(\)/);
   const changed = { ...catalog, fingerprint: "fp-2", title: "Kazyon flyer updated" };

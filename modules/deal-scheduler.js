@@ -131,15 +131,14 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   }
   return { batchKey: key, verified: verified.length, recent: recent.length, saved: published.reduce((n,x) => n + x.count, 0), published, sourceErrors: gathered.errors || [] };
 }
-function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 15 * 60_000 } = {}) {
+function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 24 * 60 * 60_000 } = {}) {
   let busy = false;
   let nextAttemptAt = 0;
   let activeDay = batchKey();
   const reportedFetchFailures = new Set();
 
   // A failed source query used to emit the same diagnostic every minute. Keep
-  // trying periodically, but emit only one identical fetch-failure report per
-  // Cairo day. A changed source/status signature is still reported immediately.
+  // Retry at most once per day after a failed fetch to protect API credits. A changed source/status signature is reported on the next daily attempt.
   const scheduledOptions = {
     ...options,
     onError: async (error, details = {}) => {

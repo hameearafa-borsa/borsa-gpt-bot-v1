@@ -42,6 +42,9 @@ async function runPersistenceTests() {
   const pool = {
     async query(sql, params) {
       calls.push({ sql, params });
+      if (sql.startsWith("SELECT id FROM catalog_newsletter_snapshots WHERE store_key")) {
+        return { rows: existingFingerprints.size ? [{ id: 1 }] : [] };
+      }
       if (sql.startsWith("SELECT fingerprint")) {
         return { rows: latestFingerprint ? [{ fingerprint: latestFingerprint }] : [] };
       }

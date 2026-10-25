@@ -24,11 +24,14 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     const png = await renderPriceListImage({ company: "شركة اختبار", watermark: "بورصة المنظفات", items: [
       { product: "منتج أول", package_sale_price: 10 },
       { product: "منتج ثان", package_sale_price: 20 },
-      { product: "منتج ثالث", package_sale_price: 30 }
+      { product: "منتج ثالث", package_sale_price: 30 },
+      { product: "A".repeat(149) + "&end", package_sale_price: 40 }
     ] });
     assert.equal(png.toString(), "mock-png");
     assert.match(capturedSvg, /شركة اختبار/);
     assert.match(capturedSvg, /بورصة المنظفات/);
+    assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
+    assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);
   } finally { Module._load = originalLoad; }
   console.log("price list image validation tests: OK");

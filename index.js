@@ -32,6 +32,7 @@ const { startDealScheduler } = require("./modules/deal-scheduler");
 const legacyAdmin = require("./modules/legacy-admin");
 const adminPanel = require("./modules/admin-panel");
 const { fetchSearch } = require("./modules/deal-sources");
+const { startCatalogNewsletterScheduler } = require("./modules/catalog-newsletter-scheduler");
 
 const APP_VERSION = require("./package.json").version;
 const BOT_CREDIT = "مدعوم بتقنيات ChatGPT";
@@ -61,6 +62,7 @@ const core = createGPTCore({ ai, registry, diagnostics: log });
 let botUserId = null;
 let stopScheduledMessages = () => {};
 let stopDeals = () => {};
+let stopCatalogs = () => {};
 let stopWeather = () => {};
 let shutdownPromise = null;
 let shutdownRequested = false;
@@ -642,6 +644,20 @@ installFatalProcessHandlers({
   } else {
     console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
   }
+  if (process.env.DEALS_CHAT_ID && Number.isSafeInteger(Number(process.env.DEALS_CHAT_ID))) {
+    stopCatalogs = startCatalogNewsletterScheduler({
+      pool: db.pool,
+      telegram: bot.telegram,
+      chatId: Number(process.env.DEALS_CHAT_ID),
+      onError: async (error, details) => {
+        const report = makeReport({ module: "catalog_newsletter", stage: details?.stage || "daily_check", severity: "ERROR", action: "catalog_newsletter", error, details });
+        await emitReport({ bot, db, report });
+      }
+    });
+    console.log("[CATALOG_NEWSLETTER_SCHEDULER] Daily check scheduled for 10:00 Africa/Cairo.");
+  } else {
+    console.warn("[CATALOG_NEWSLETTER_DISABLED] Set a valid DEALS_CHAT_ID to enable catalog publication.");
+  }
   if (String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() !== "false") {
     await ensureWeatherSchedulerSchema(db.pool);
     if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
@@ -693,6 +709,7 @@ async function shutdown(signal) {
     console.log(`[SHUTDOWN] ${signal}: stopping schedulers and closing connections`);
     try { stopScheduledMessages(); } catch (error) { console.error("[SHUTDOWN_SCHEDULER_ERROR]", error?.message || error); }
     try { stopDeals(); } catch (error) { console.error("[SHUTDOWN_DEALS_ERROR]", error?.message || error); }
+    try { stopCatalogs(); } catch (error) { console.error("[SHUTDOWN_CATALOGS_ERROR]", error?.message || error); }
     try { stopWeather(); } catch (error) { console.error("[SHUTDOWN_WEATHER_ERROR]", error?.message || error); }
     if (webhookServer?.listening) {
       try { await new Promise((resolve, reject) => webhookServer.close(error => error ? reject(error) : resolve())); }

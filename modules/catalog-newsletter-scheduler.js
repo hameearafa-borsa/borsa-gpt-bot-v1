@@ -79,7 +79,6 @@ async function checkCatalogsOnce({ pool, telegram, chatId, fetchPage = fetchStor
       if (marked) result.published++;
     } catch (error) {
       result.failed++;
-      await markCatalogSnapshot(pool, snapshot.id, "failed", error?.message || "telegram_send_failed").catch(() => {});
       await onError(error, { stage: "catalog_publish", store: snapshot.store_key, snapshotId: snapshot.id });
     }
   }

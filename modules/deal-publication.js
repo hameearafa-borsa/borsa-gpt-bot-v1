@@ -37,17 +37,27 @@ async function filterRecentDeals(pool, deals, days = 7) {
   }
   return output;
 }
-function buildNewsletter(deals, title) {
+function formatNewsletterMessage(deals, title, maxLength = 3900) {
   const safeTitle = String(title || "عروض بورصة المنظفات").slice(0, 120);
-  const lines = [`🛍️ ${safeTitle}`, "بورصة المنظفات لأصحاب المحلات", ""];
-  for (const [i,d] of deals.entries()) {
-    lines.push(`${i+1}) ${String(d.title).slice(0,180)}`);
-    if (d.merchant) lines.push(`🏪 المتجر: ${String(d.merchant).slice(0,80)}`);
-    lines.push(`💰 السعر: ${Number(d.price).toFixed(2)} جنيه`);
-    if (Number(d.old_price) > Number(d.price)) lines.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه`);
-    lines.push(`🔗 ${d.url}`, "");
+  const header = [`🛍️ ${safeTitle}`, "بورصة المنظفات لأصحاب المحلات", ""];
+  const footer = "مدعوم بتقنيات ChatGPT";
+  const items = [];
+  const blocks = [];
+  const render = current => [...header, ...current.flatMap((block, i) => [...block.map((line, j) => j === 0 ? `${i + 1}) ${line}` : line), ""]), footer].join("\n");
+  for (const d of deals || []) {
+    const block = [String(d.title || "منتج").slice(0, 180)];
+    if (d.merchant) block.push(`🏪 المتجر: ${String(d.merchant).slice(0, 80)}`);
+    block.push(`💰 السعر: ${Number(d.price).toFixed(2)} جنيه`);
+    if (Number(d.old_price) > Number(d.price)) block.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه`);
+    block.push(`🔗 ${String(d.url || "")}`);
+    const candidate = render([...blocks, block]);
+    if (candidate.length > maxLength) continue;
+    blocks.push(block);
+    items.push(d);
   }
-  lines.push("مدعوم بتقنيات ChatGPT");
-  return lines.join("\n").slice(0,3900);
+  return { text: render(blocks), items };
 }
-module.exports = { TARGETS, scoreDeal, rankDeals, distributeDeals, filterRecentDeals, buildNewsletter };
+function buildNewsletter(deals, title) {
+  return formatNewsletterMessage(deals, title).text;
+}
+module.exports = { TARGETS, scoreDeal, rankDeals, distributeDeals, filterRecentDeals, formatNewsletterMessage, buildNewsletter };

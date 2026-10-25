@@ -99,11 +99,17 @@ async function persistCatalogSnapshots(pool, catalogs) {
       [catalog.store, catalog.url]
     );
     if (!latest.rows.length) {
-      await pool.query(
-        "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,'ignored') ON CONFLICT(store_key,catalog_url,fingerprint) DO NOTHING",
-        [catalog.store, catalog.url, catalog.fingerprint, catalog.title, catalog.region || CATALOG_REGION, catalog.displayedDateRange || null]
+      const storeHistory = await pool.query(
+        "SELECT id FROM catalog_newsletter_snapshots WHERE store_key=$1 LIMIT 1",
+        [catalog.store]
       );
-      result.baseline++;
+      const isFirstObservationForStore = storeHistory.rows.length === 0;
+      await pool.query(
+        "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(store_key,catalog_url,fingerprint) DO NOTHING",
+        [catalog.store, catalog.url, catalog.fingerprint, catalog.title, catalog.region || CATALOG_REGION, catalog.displayedDateRange || null, isFirstObservationForStore ? "ignored" : "pending"]
+      );
+      if (isFirstObservationForStore) result.baseline++;
+      else result.changed++;
       continue;
     }
     if (latest.rows[0].fingerprint === catalog.fingerprint) {

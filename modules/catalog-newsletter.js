@@ -92,7 +92,7 @@ function changedCatalogs(previousFingerprints, currentCatalogs) {
 async function persistCatalogSnapshots(pool, catalogs) {
   if (!pool || typeof pool.query !== "function") throw new TypeError("persistCatalogSnapshots requires a PostgreSQL pool");
   const result = { baseline: 0, changed: 0, unchanged: 0 };
-  const storesObservedThisPass = new Set();
+  const storeHadHistory = new Map();
   for (const catalog of catalogs || []) {
     if (!catalog || !CATALOG_STORES[catalog.store] || !safeCatalogUrl(catalog.url) || !catalog.fingerprint || !catalog.title) continue;
     const latest = await pool.query(
@@ -100,12 +100,14 @@ async function persistCatalogSnapshots(pool, catalogs) {
       [catalog.store, catalog.url]
     );
     if (!latest.rows.length) {
-      const storeHistory = await pool.query(
-        "SELECT id FROM catalog_newsletter_snapshots WHERE store_key=$1 LIMIT 1",
-        [catalog.store]
-      );
-      const isFirstObservationForStore = storeHistory.rows.length === 0 || storesObservedThisPass.has(catalog.store);
-      storesObservedThisPass.add(catalog.store);
+      if (!storeHadHistory.has(catalog.store)) {
+        const storeHistory = await pool.query(
+          "SELECT id FROM catalog_newsletter_snapshots WHERE store_key=$1 LIMIT 1",
+          [catalog.store]
+        );
+        storeHadHistory.set(catalog.store, storeHistory.rows.length > 0);
+      }
+      const isFirstObservationForStore = !storeHadHistory.get(catalog.store);
       await pool.query(
         "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(store_key,catalog_url,fingerprint) DO NOTHING",
         [catalog.store, catalog.url, catalog.fingerprint, catalog.title, catalog.region || CATALOG_REGION, catalog.displayedDateRange || null, isFirstObservationForStore ? "ignored" : "pending"]

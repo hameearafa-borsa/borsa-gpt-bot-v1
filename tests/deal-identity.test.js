@@ -12,10 +12,20 @@ assert.notEqual(dealProductFingerprint(base), dealProductFingerprint({ ...base, 
   let args;
   const pool = { query: async (_sql, values) => { args = values; return { rowCount: 1, rows: [{}] }; } };
   assert.equal(await isRecentDuplicate(pool, "deal-fp", 7, "product-fp"), true);
-  assert.deepEqual(args, ["deal-fp", "product-fp", 7]);
-  let calls = 0;
-  const fakePool = { query: async () => ({ rowCount: calls++ === 0 ? 1 : 0, rows: [] }) };
-  const deals = await filterRecentDeals(fakePool, [base, { ...base, title: "عرض جديد", url: "https://www.amazon.eg/dp/B098765432" }], 7);
-  assert.equal(deals.length, 1, "recent product identity is excluded while a distinct product remains");
-  console.log("deal product identity + weekly duplicate tests: OK");
-})().catch(error => { console.error(error); process.exit(1); });
+  assert.deepEqual(args, ["deal-fp", 7], "weekly suppression checks the exact offer fingerprint only");
+
+  const changedPrice = { ...base, price: 90, old_price: 120, discount_pct: 25 };
+  const giftBundle = { ...base, title: "مسحوق بيرل 2 كجم مع هدية", price: 100 };
+  const existingFingerprint = dealFingerprint(base);
+  const fakePool = {
+    query: async (_sql, values) => ({
+      rowCount: values[0] === existingFingerprint ? 1 : 0,
+      rows: values[0] === existingFingerprint ? [{}] : []
+    })
+  };
+  const deals = await filterRecentDeals(fakePool, [base, changedPrice, giftBundle], 7);
+  assert.equal(deals.length, 2, "a changed price and a gift bundle remain publishable even when the base product was recently observed");
+  assert.ok(deals.some(d => d.price === 90), "changed-price offer should remain");
+  assert.ok(deals.some(d => d.title.includes("هدية")), "gift bundle should remain distinct");
+  console.log("deal identity + exact-observation weekly duplicate tests: OK");
+(error => { console.error(error); process.exit(1); });

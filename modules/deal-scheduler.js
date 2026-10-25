@@ -69,7 +69,19 @@ async function verifyDeals(deals, options = {}) {
   for (let i = 0; i < deals.length; i += 5) {
     const group = deals.slice(i, i + 5);
     const results = await Promise.all(group.map(d => verifyProductUrl(d.url, options)));
-    results.forEach((r,j) => { if (r.ok) output.push({ ...group[j], url: r.finalUrl, verified_url: true }); });
+    results.forEach((r,j) => {
+      if (r.ok) {
+        output.push({ ...group[j], url: r.finalUrl, verified_url: true });
+        return;
+      }
+      // Retailers and scraping proxies may block HEAD/GET checks even when a
+      // product page exists. Keep allowlisted candidates when reachability is
+      // inconclusive; drop only links explicitly rejected by URL/redirect safety.
+      const transientHttp = r.reason === "http_error" &&
+        (r.status === 403 || r.status === 429 || r.status >= 500);
+      const inconclusive = transientHttp || r.reason === "timeout" || r.reason === "fetch_failed";
+      if (inconclusive) output.push({ ...group[j], verified_url: false, verification_note: r.reason });
+    });
   }
   return output;
 }

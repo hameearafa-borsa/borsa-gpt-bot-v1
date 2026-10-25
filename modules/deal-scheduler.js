@@ -143,14 +143,31 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
       // Do not auto-repeat a prepared/failed post; leave it for diagnosis and manual repair.
       continue;
     }
+    let msg;
     try {
-      const msg = await telegram.sendMessage(chatId, formatted.text, { disable_web_page_preview: true });
-      await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id,reservation.rows[0].id]);
-      await persistDeals(pool, batch.items);
-      published.push({ kind: batch.kind, count: batch.items.length });
+      msg = await telegram.sendMessage(chatId, formatted.text, { disable_web_page_preview: true });
     } catch (error) {
+      // Only a confirmed send failure may mark the reservation as failed.
+      // A Telegram timeout can still be ambiguous, so failed/prepared rows are
+      // deliberately not retried automatically to avoid duplicate messages.
       await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(()=>{});
       await onError(error, { stage: "publish", batchKind: batch.kind, batchKey: key });
+      continue;
+    }
+
+    // Telegram has accepted the message. Never downgrade this to "failed"
+    // because a later database operation fails: the external side effect has
+    // already happened and an automatic retry could publish a duplicate.
+    published.push({ kind: batch.kind, count: batch.items.length, messageId: msg.message_id });
+    try {
+      await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id,reservation.rows[0].id]);
+    } catch (error) {
+      await onError(error, { stage: "publication_record", batchKind: batch.kind, batchKey: key, messageId: msg.message_id });
+    }
+    try {
+      await persistDeals(pool, batch.items);
+    } catch (error) {
+      await onError(error, { stage: "persist_deals", batchKind: batch.kind, batchKey: key, messageId: msg.message_id });
     }
   }
   return { batchKey: key, verified: verified.length, recent: recent.length, saved: published.reduce((n,x) => n + x.count, 0), published, sourceErrors: gathered.errors || [] };

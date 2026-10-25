@@ -11,7 +11,7 @@ const SOURCES = Object.freeze({
   carrefour: { host: "www.carrefouregypt.com", base: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers" }
 });
 const INCLUDE = /غسيل|مسحوق|بودر|جل|منعم|كلور|صابون|شامبو|كريم|مناديل|حفاض|فاين|ديتول|فيري|بريل|برسيل|تايد|اريال|آريال|اومو|أومو|كلوركس|دوف|لوكس|بانتين|بامبرز|مولفكس|محارم|غسول|مرطب|عناية|ورقي|مكياج|تجميل|لوشن|سيروم|مزيل عرق|معجون|فازلين|نيفيا/i;
-const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|ملابس|حذاء|مكيف|ثلاجة|تلفزيون|ايفون|سامسونج جالكسي/i;
+const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|حذاء|مكيف|ثلاجة|تلفزيون|ايفون|سامسونج جالكسي/i;
 function categoryOf(title) {
   const s = normalizeArabic(title);
   if (/حفاض|بامبرز|مولفكس|مناديل|فاين|محارم|كلينكس|ورقي/.test(s)) return "paper";

@@ -3,12 +3,15 @@ name: Borsa Bot Tests
 on:
   pull_request:
     branches:
+      - main
+      - termux-arm64-sharp-test-2026-10-21
       - termux-arm64-sharp-test-2026-10-21
       - chemical-assistant-gemini-reply-once
   push:
     branches:
       - owner-approved-group-access
       - chemical-assistant-gemini-reply-once
+      - feature/deals-two-newsletters-carrefour-kazyon-2026-10-25
 
 permissions:
   contents: read

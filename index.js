@@ -654,7 +654,7 @@ installFatalProcessHandlers({
         await emitReport({ bot, db, report });
       }
     });
-    console.log("[CATALOG_NEWSLETTER_SCHEDULER] Daily check scheduled for 10:00 Africa/Cairo.");
+    console.log("[CATALOG_NEWSLETTER_SCHEDULER] Daily check scheduled for 10:10 Africa/Cairo.");
   } else {
     console.warn("[CATALOG_NEWSLETTER_DISABLED] Set a valid DEALS_CHAT_ID to enable catalog publication.");
   }

@@ -84,6 +84,74 @@ function changedCatalogs(previousFingerprints, currentCatalogs) {
   return (currentCatalogs || []).filter(c => c && c.fingerprint && !previous.has(c.fingerprint));
 }
 
+/**
+ * Persist catalog versions. The first observation establishes a quiet baseline;
+ * only later unseen fingerprints for the same store+URL become pending notices.
+ * The database unique constraint makes concurrent pollers idempotent.
+ */
+async function persistCatalogSnapshots(pool, catalogs) {
+  if (!pool || typeof pool.query !== "function") throw new TypeError("persistCatalogSnapshots requires a PostgreSQL pool");
+  const result = { baseline: 0, changed: 0, unchanged: 0 };
+  for (const catalog of catalogs || []) {
+    if (!catalog || !CATALOG_STORES[catalog.store] || !safeCatalogUrl(catalog.url) || !catalog.fingerprint || !catalog.title) continue;
+    const latest = await pool.query(
+      "SELECT fingerprint FROM catalog_newsletter_snapshots WHERE store_key=$1 AND catalog_url=$2 ORDER BY last_seen_at DESC, id DESC LIMIT 1",
+      [catalog.store, catalog.url]
+    );
+    if (!latest.rows.length) {
+      await pool.query(
+        "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,'ignored') ON CONFLICT(store_key,catalog_url,fingerprint) DO NOTHING",
+        [catalog.store, catalog.url, catalog.fingerprint, catalog.title, catalog.region || CATALOG_REGION, catalog.displayedDateRange || null]
+      );
+      result.baseline++;
+      continue;
+    }
+    if (latest.rows[0].fingerprint === catalog.fingerprint) {
+      await pool.query(
+        "UPDATE catalog_newsletter_snapshots SET last_seen_at=NOW() WHERE store_key=$1 AND catalog_url=$2 AND fingerprint=$3",
+        [catalog.store, catalog.url, catalog.fingerprint]
+      );
+      result.unchanged++;
+      continue;
+    }
+    const inserted = await pool.query(
+      "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,'pending') ON CONFLICT(store_key,catalog_url,fingerprint) DO NOTHING RETURNING id",
+      [catalog.store, catalog.url, catalog.fingerprint, catalog.title, catalog.region || CATALOG_REGION, catalog.displayedDateRange || null]
+    );
+    if (inserted.rowCount) result.changed++;
+    else result.unchanged++;
+  }
+  return result;
+}
+
+async function listPendingCatalogSnapshots(pool, limit = 20) {
+  if (!pool || typeof pool.query !== "function") throw new TypeError("listPendingCatalogSnapshots requires a PostgreSQL pool");
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(Number(limit) || 20)));
+  const r = await pool.query(
+    "SELECT id,store_key,catalog_url,fingerprint,title,region,displayed_date_range,first_seen_at FROM catalog_newsletter_snapshots WHERE status='pending' ORDER BY first_seen_at,id LIMIT $1",
+    [safeLimit]
+  );
+  return r.rows;
+}
+
+async function markCatalogSnapshot(pool, id, status, error = null) {
+  if (!pool || typeof pool.query !== "function") throw new TypeError("markCatalogSnapshot requires a PostgreSQL pool");
+  if (!["published", "ignored", "failed"].includes(status)) throw new TypeError("invalid catalog snapshot status");
+  const r = await pool.query(
+    "UPDATE catalog_newsletter_snapshots SET status=$2, published_at=CASE WHEN $2='published' THEN NOW() ELSE published_at END, last_error=$3 WHERE id=$1 AND status='pending' RETURNING id",
+    [id, status, error ? String(error).slice(0, 500) : null]
+  );
+  return r.rowCount === 1;
+}
+
+function formatCatalogNotice(snapshot) {
+  const store = CATALOG_STORES[snapshot?.store_key];
+  const url = safeCatalogUrl(snapshot?.catalog_url);
+  if (!store || !url) throw new TypeError("invalid catalog snapshot");
+  const date = snapshot.displayed_date_range ? `\\nالفترة الظاهرة: ${normalizeText(snapshot.displayed_date_range)}` : "";
+  return `🛒 تحديث كتالوج ${store.name}\\n📍 النطاق الجغرافي: ${snapshot.region || CATALOG_REGION}\\n\\n${normalizeText(snapshot.title)}${date}\\n\\nرابط الكتالوج: ${url}`;
+}
+
 module.exports = {
   CATALOG_REGION,
   CATALOG_STORES,
@@ -93,5 +161,9 @@ module.exports = {
   safeCatalogUrl,
   extractCatalogs,
   isRelevantOffer,
-  changedCatalogs
+  changedCatalogs,
+  persistCatalogSnapshots,
+  listPendingCatalogSnapshots,
+  markCatalogSnapshot,
+  formatCatalogNotice
 };

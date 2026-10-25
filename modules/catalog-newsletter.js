@@ -148,8 +148,8 @@ function formatCatalogNotice(snapshot) {
   const store = CATALOG_STORES[snapshot?.store_key];
   const url = safeCatalogUrl(snapshot?.catalog_url);
   if (!store || !url) throw new TypeError("invalid catalog snapshot");
-  const date = snapshot.displayed_date_range ? `\\nالفترة الظاهرة: ${normalizeText(snapshot.displayed_date_range)}` : "";
-  return `🛒 تحديث كتالوج ${store.name}\\n📍 النطاق الجغرافي: ${snapshot.region || CATALOG_REGION}\\n\\n${normalizeText(snapshot.title)}${date}\\n\\nرابط الكتالوج: ${url}`;
+  const date = snapshot.displayed_date_range ? `\nالفترة الظاهرة: ${normalizeText(snapshot.displayed_date_range)}` : "";
+  return `🛒 تحديث كتالوج ${store.name}\n📍 النطاق الجغرافي: ${snapshot.region || CATALOG_REGION}\n\n${normalizeText(snapshot.title)}${date}\n\nرابط الكتالوج: ${url}`;
 }
 
 module.exports = {

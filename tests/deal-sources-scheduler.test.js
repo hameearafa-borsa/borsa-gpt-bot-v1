@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { safeProductUrl, categoryOf, extractCards } = require("../modules/deal-sources");
+const { safeProductUrl, categoryOf, extractCards, collectDealCandidates } = require("../modules/deal-sources");
 const { verifyProductUrl, batchKey, isNewsletterWindow, cairoParts } = require("../modules/deal-scheduler");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
@@ -39,5 +39,13 @@ assert.equal(isNewsletterWindow(new Date("2026-10-12T14:00:00.000Z")),true);
  assert.equal(redirectCalls, 1, "must not make a request to a disallowed redirect target");
  const badPort = await verifyProductUrl("https://www.amazon.eg:8443/dp/B0ABCDEF12");
  assert.equal(badPort.ok, false, "non-standard HTTPS ports must be rejected");
+
+ const calls = [];
+ const gathered = await collectDealCandidates({
+   amazonQueries: ["one"], otherQueries: ["one"],
+   fetchImpl: async url => { calls.push(String(url)); return { ok: true, status: 200, text: async () => "" }; }
+ });
+ assert.equal(calls.length, 3, "default one-query-per-source path must stay bounded");
+ assert.equal(gathered.sourceCount, 3);
  console.log("deal sources + safe URL verification + Cairo scheduler tests: OK");
 })().catch(e=>{console.error(e);process.exit(1)});

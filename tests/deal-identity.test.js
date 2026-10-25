@@ -28,4 +28,4 @@ assert.notEqual(dealProductFingerprint(base), dealProductFingerprint({ ...base, 
   assert.ok(deals.some(d => d.price === 90), "changed-price offer should remain");
   assert.ok(deals.some(d => d.title.includes("هدية")), "gift bundle should remain distinct");
   console.log("deal identity + exact-observation weekly duplicate tests: OK");
-(error => { console.error(error); process.exit(1); });
+})().catch(error => { console.error(error); process.exit(1); });

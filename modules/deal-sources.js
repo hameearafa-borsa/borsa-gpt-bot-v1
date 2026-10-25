@@ -63,7 +63,7 @@ function extractCards(html, sourceName, query = "") {
   }
   return cards;
 }
-async function fetchSearch(sourceName, query, { timeoutMs = 25000, fetchImpl = globalThis.fetch } = {}) {
+async function fetchSearch(sourceName, query, { timeoutMs = 65000, fetchImpl = globalThis.fetch } = {}) {
   const source = SOURCES[sourceName];
   if (!source) throw new Error("unsupported_deal_source");
   const keys = [process.env.SCRAPER_API_KEY, process.env.SCRAPER_API_KEY_2]

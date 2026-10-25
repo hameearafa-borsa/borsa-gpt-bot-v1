@@ -313,11 +313,11 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
   if (action === "health") {
     let dbState = "غير متاح";
     try { await db.query("SELECT 1"); dbState = "متصل"; } catch (e) { dbState = `فشل (${String(e.code || e.message).slice(0,80)})`; }
-    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || []).join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nDEALS_CHAT_ID: ${process.env.DEALS_CHAT_ID ? "مضبوط" : "غير مضبوط"}\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
+    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || []).join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nSCRAPER_API_KEY_2: ${process.env.SCRAPER_API_KEY_2 ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nDEALS_CHAT_ID: ${process.env.DEALS_CHAT_ID ? "مضبوط" : "غير مضبوط"}\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
     await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
   if (action === "scraper_test") {
-    const result = await fetchSearch("amazon", "مسحوق غسيل", { timeoutMs: 10000 });
+    const result = await fetchSearch("amazon", "مسحوق غسيل", { timeoutMs: 70000 });
     const body = result.ok
       ? `🌐 اختبار ScraperAPI\nالحالة: اتصال HTTP ناجح\nالمصدر: Amazon.eg\nالعناصر المستخرجة: ${result.deals.length}\n\nتنبيه: الاتصال ناجح، لكن صفر عناصر قد يعني تغيّر صفحة المتجر أو حجب المحتوى.`
       : `🌐 اختبار ScraperAPI\nالحالة: فشل\nالسبب: ${result.reason || "unknown"}\n\nلم تُعرض قيمة المفتاح في التقرير.`;

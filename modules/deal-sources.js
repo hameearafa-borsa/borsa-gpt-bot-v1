@@ -4,6 +4,8 @@ const { validateDeal } = require("./deals");
 const { normalizeArabic, toAsciiDigits } = require("../core/normalization");
 const { redactString } = require("../core/diagnostics");
 
+let nextScraperKeyIndex = 0;
+const MAX_CONCURRENT_SCRAPER_REQUESTS = 2;
 const SOURCES = Object.freeze({
   amazon: { host: "www.amazon.eg", base: "https://www.amazon.eg/s?k=" },
   jumia: { host: "www.jumia.com.eg", base: "https://www.jumia.com.eg/catalog/?q=" },
@@ -93,11 +95,19 @@ function extractCards(html, sourceName, query = "") {
   }
   return cards;
 }
-async function fetchSearch(sourceName, query, { timeoutMs = 25000, fetchImpl = globalThis.fetch } = {}) {
+function getScraperKeys() {
+  return [...new Set([
+    String(process.env.SCRAPER_API_KEY || "").trim(),
+    String(process.env.SCRAPER_API_KEY_2 || "").trim()
+  ].filter(Boolean))];
+}
+async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = globalThis.fetch } = {}) {
   const source = SOURCES[sourceName];
   if (!source) throw new Error("unsupported_deal_source");
-  const key = String(process.env.SCRAPER_API_KEY || "").trim();
-  if (!key) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
+  const keys = getScraperKeys();
+  if (!keys.length) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
+  const key = keys[nextScraperKeyIndex % keys.length];
+  nextScraperKeyIndex = (nextScraperKeyIndex + 1) % keys.length;
   const targetUrl = sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`;
   const endpoint = new URL("https://api.scraperapi.com/");
   endpoint.searchParams.set("api_key", key);
@@ -113,12 +123,26 @@ async function fetchSearch(sourceName, query, { timeoutMs = 25000, fetchImpl = g
   } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
   finally { clearTimeout(timer); }
 }
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function runWorker() {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      try { results[index] = { status: "fulfilled", value: await worker(items[index], index) }; }
+      catch (reason) { results[index] = { status: "rejected", reason }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
+  return results;
+}
 async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], fetchImpl } = {}) {
   const tasks = [];
-  for (const q of amazonQueries) tasks.push(fetchSearch("amazon", q, { fetchImpl }));
-  for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push(fetchSearch(source, q, { fetchImpl }));
-  tasks.push(fetchSearch("carrefour", "", { fetchImpl }));
-  const results = await Promise.allSettled(tasks);
+  for (const q of amazonQueries) tasks.push({ source: "amazon", query: q });
+  for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push({ source, query: q });
+  tasks.push({ source: "carrefour", query: "" });
+  const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
   const deals = [], errors = [];
   const seen = new Set();
   for (const r of results) {
@@ -131,4 +155,4 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   }
   return { deals, errors, sourceCount: tasks.length };
 }
-module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, fetchSearch, collectDealCandidates };
+module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, getScraperKeys, fetchSearch, collectDealCandidates };

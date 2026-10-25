@@ -1,6 +1,6 @@
 "use strict";
 const { collectDealCandidates } = require("./deal-sources");
-const { filterRecentDeals, distributeDeals } = require("./deal-publication");
+const { filterRecentDeals, distributeDeals, formatNewsletterMessage } = require("./deal-publication");
 const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
 
 function cairoParts(date = new Date()) {
@@ -129,6 +129,12 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   const published = [];
   for (const batch of batches) {
     if (!batch.items.length) continue;
+    const formatted = formatNewsletterMessage(batch.items, batch.title);
+    batch.items = formatted.items;
+    if (!batch.items.length) {
+      await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: batch.kind, batchKey: key });
+      continue;
+    }
     const reservation = await pool.query(`INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status)
       VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind) DO NOTHING RETURNING id`, [key,batch.kind,chatId,batch.items.length]);
     if (!reservation.rowCount) {
@@ -137,15 +143,8 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
       // Do not auto-repeat a prepared/failed post; leave it for diagnosis and manual repair.
       continue;
     }
-    const lines = [`🛍️ ${batch.title}`, "بورصة المنظفات لأصحاب المحلات", ""];
-    for (const [i,d] of batch.items.entries()) {
-      lines.push(`${i+1}. ${d.title}`, `🏪 ${d.merchant || "المتجر"}`, `💰 ${Number(d.price).toFixed(2)} جنيه`);
-      if (Number(d.old_price) > Number(d.price)) lines.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه (${Number(d.discount_pct).toFixed(0)}%)`);
-      lines.push(`🔗 ${d.url}`, "");
-    }
-    lines.push("مدعوم بتقنيات ChatGPT");
     try {
-      const msg = await telegram.sendMessage(chatId, lines.join("\n").slice(0,3900), { disable_web_page_preview: true });
+      const msg = await telegram.sendMessage(chatId, formatted.text, { disable_web_page_preview: true });
       await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id,reservation.rows[0].id]);
       await persistDeals(pool, batch.items);
       published.push({ kind: batch.kind, count: batch.items.length });

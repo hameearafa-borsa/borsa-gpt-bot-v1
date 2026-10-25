@@ -23,6 +23,8 @@ assert.equal(msUntilNextCheck(after), 24 * 60 * 60 * 1000 - 60 * 1000);
 
 (async () => {
   await assert.rejects(() => fetchStorePage("https://evil.example/"), /catalog_source_not_allowed/);
+  await assert.rejects(() => fetchStorePage("https://snapflyer.io:8443/"), /catalog_source_not_allowed/);
+  await assert.rejects(() => fetchStorePage("https://user:pass@snapflyer.io/"), /catalog_source_not_allowed/);
   const html = await fetchStorePage("https://snapflyer.io/eg/downtown/stores/kazyon", {
     fetchImpl: async () => ({ ok: true, status: 200, headers: { get: () => "text/html" }, text: async () => "<html>ok</html>" })
   });

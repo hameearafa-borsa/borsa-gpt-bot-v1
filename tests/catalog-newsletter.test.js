@@ -33,4 +33,71 @@ assert.match(notice, /https:\/\/snapflyer\.io/);
 assert.equal(typeof persistCatalogSnapshots, "function");
 assert.equal(typeof listPendingCatalogSnapshots, "function");
 assert.equal(typeof markCatalogSnapshot, "function");
-console.log("catalog newsletter helper tests: OK");
+
+async function runPersistenceTests() {
+  const calls = [];
+  let latestFingerprint = null;
+  const existingFingerprints = new Set();
+  let nextId = 1;
+  const pool = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (sql.startsWith("SELECT fingerprint")) {
+        return { rows: latestFingerprint ? [{ fingerprint: latestFingerprint }] : [] };
+      }
+      if (sql.startsWith("INSERT") && sql.includes("RETURNING id")) {
+        const key = [params[0], params[1], params[2]].join("|");
+        if (existingFingerprints.has(key)) return { rowCount: 0, rows: [] };
+        existingFingerprints.add(key);
+        latestFingerprint = params[2];
+        return { rowCount: 1, rows: [{ id: nextId++ }] };
+      }
+      if (sql.startsWith("INSERT")) {
+        const key = [params[0], params[1], params[2]].join("|");
+        existingFingerprints.add(key);
+        latestFingerprint = params[2];
+        return { rowCount: 1, rows: [] };
+      }
+      if (sql.startsWith("UPDATE") && sql.includes("last_seen_at")) {
+        return { rowCount: 1, rows: [] };
+      }
+      if (sql.startsWith("SELECT id,store_key")) {
+        return { rows: [{ id: 9, status: "pending" }] };
+      }
+      if (sql.startsWith("UPDATE") && sql.includes("RETURNING id")) {
+        return { rowCount: params[1] === "published" ? 1 : 0, rows: [{ id: params[0] }] };
+      }
+      throw new Error("Unexpected SQL in persistence test: " + sql);
+    }
+  };
+  const catalog = {
+    store: "kazyon",
+    url: "https://snapflyer.io/eg/downtown/offers/kazyon/1376",
+    fingerprint: "fp-1",
+    title: "Kazyon flyer",
+    region: CATALOG_REGION
+  };
+  assert.deepEqual(await persistCatalogSnapshots(pool, [catalog]), { baseline: 1, changed: 0, unchanged: 0 });
+  assert.match(calls.at(-1).sql, /'ignored'/);
+  assert.deepEqual(await persistCatalogSnapshots(pool, [catalog]), { baseline: 0, changed: 0, unchanged: 1 });
+  assert.match(calls.at(-1).sql, /last_seen_at=NOW\(\)/);
+  const changed = { ...catalog, fingerprint: "fp-2", title: "Kazyon flyer updated" };
+  assert.deepEqual(await persistCatalogSnapshots(pool, [changed]), { baseline: 0, changed: 1, unchanged: 0 });
+  assert.match(calls.at(-1).sql, /'pending'/);
+  assert.deepEqual(await persistCatalogSnapshots(pool, [changed]), { baseline: 0, changed: 0, unchanged: 1 });
+  assert.deepEqual(await listPendingCatalogSnapshots(pool, 1000), [{ id: 9, status: "pending" }]);
+  assert.match(calls.at(-1).sql, /LIMIT \$1/);
+  assert.deepEqual(calls.at(-1).params, [100]);
+  assert.equal(await markCatalogSnapshot(pool, 9, "published"), true);
+  assert.match(calls.at(-1).sql, /status='pending'/);
+  await assert.rejects(() => markCatalogSnapshot(pool, 9, "unknown"), /invalid catalog snapshot status/);
+  await assert.rejects(() => persistCatalogSnapshots(null, [catalog]), /requires a PostgreSQL pool/);
+}
+
+runPersistenceTests().then(() => {
+  console.log("catalog newsletter helper and mocked persistence tests: OK");
+}).catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});
+

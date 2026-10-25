@@ -156,10 +156,12 @@ async function configureCommandMenus() {
   const adminCommands = [
     { command: "panel", description: "لوحة التحكم الخاصة" },
     { command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة" },
+    { command: "chemical", description: "المساعد الكيميائي" },
     { command: "claim", description: "ربط المجموعة بواسطة منشئها" },
     { command: "settings", description: "إعدادات المجموعة" },
     { command: "antispam", description: "إعدادات مانع الإزعاج" },
     { command: "schedule", description: "جدولة رسالة" },
+    { command: "weather", description: "نشرة الطقس" },
     { command: "warn", description: "تسجيل إنذار" },
     { command: "warnings", description: "عرض الإنذارات" },
     { command: "clearwarn", description: "إغلاق الإنذارات" },
@@ -169,27 +171,46 @@ async function configureCommandMenus() {
     { command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة" },
     { command: "chemical", description: "المساعد الكيميائي" },
     { command: "settings", description: "إعدادات المجموعة" },
-    { command: "antispam", description: "إعدادات مانع الإزعاج" },
-    { command: "schedule", description: "جدولة رسالة" },
-    { command: "claim", description: "ربط المجموعة بواسطة منشئها" }
+    { command: "claim", description: "ربط المجموعة بواسطة منشئها" },
+    { command: "weather", description: "نشرة الطقس" }
   ];
-  // Keep the default menu empty; publish the real user-facing command set to groups
-  // and the controller-only administrative set to verified owners in private chats.
-  await bot.telegram.setMyCommands([], { scope: { type: "default" } });
-  await bot.telegram.setMyCommands(groupCommands, { scope: { type: "all_group_chats" } });
-  // Include every explicitly configured bot owner, not only the legacy hard-coded MASTER_ID.
-  const ids = new Set([...authorizedUserIds()].map(String));
+  async function publish(commands, scope, label) {
+    try {
+      await bot.telegram.setMyCommands(commands, { scope });
+      console.log(`[COMMAND_MENU] ${label} count=${commands.length}`);
+    } catch (error) {
+      console.warn(`[COMMAND_MENU_FAIL] ${label} ${error.message}`);
+      await sendLog({ module: "security", stage: "command_menu", severity: "warn", status: "failed", details: { label, code: error.code || null, message: error.message } }).catch(() => {});
+    }
+  }
+  // Group admins still see the previous menu until this higher-priority scope is replaced.
+  await publish([], { type: "default" }, "default");
+  await publish(groupCommands, { type: "all_group_chats" }, "all_group_chats");
+  await publish(adminCommands, { type: "all_chat_administrators" }, "all_chat_administrators");
+  const ownerIds = new Set([...authorizedUserIds()].map(String));
+  const groupIds = new Set();
+  for (const raw of [process.env.DEALS_CHAT_ID, process.env.GROUP_ID, process.env.GROUP_CHAT_IDS]) {
+    for (const part of String(raw || "").split(/[,\s]+/)) if (/^-?\d+$/.test(part)) groupIds.add(part);
+  }
   try {
-    const r = await db.query(`SELECT DISTINCT owner_user_id FROM authorized_chats WHERE active=TRUE AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL`);
-    for (const row of r.rows) if (row.owner_user_id != null) ids.add(String(row.owner_user_id));
+    const r = await db.query(`SELECT chat_id, chat_type, owner_user_id FROM authorized_chats WHERE active=TRUE`);
+    for (const row of r.rows) {
+      if (row.owner_user_id != null) ownerIds.add(String(row.owner_user_id));
+      if (row.chat_id != null && ["group", "supergroup"].includes(row.chat_type)) groupIds.add(String(row.chat_id));
+    }
   } catch (error) {
     await sendLog({ module: "security", stage: "command_menu_owner_lookup", severity: "warn", status: "partial", details: { code: error.code || null } });
   }
-  for (const id of ids) {
+  for (const id of ownerIds) {
     const chatId = Number(id);
     if (!Number.isSafeInteger(chatId)) continue;
-    try { await bot.telegram.setMyCommands(adminCommands, { scope: { type: "chat", chat_id: chatId } }); }
-    catch (error) { await sendLog({ module: "security", stage: "command_menu_private_scope", severity: "warn", status: "failed", details: { ownerId: chatId, code: error.code || null, message: error.message } }); }
+    await publish(adminCommands, { type: "chat", chat_id: chatId }, `private:${chatId}`);
+  }
+  for (const id of groupIds) {
+    const chatId = Number(id);
+    if (!Number.isSafeInteger(chatId)) continue;
+    await publish(groupCommands, { type: "chat", chat_id: chatId }, `group:${chatId}`);
+    await publish(adminCommands, { type: "chat_administrators", chat_id: chatId }, `group_admins:${chatId}`);
   }
 }
 

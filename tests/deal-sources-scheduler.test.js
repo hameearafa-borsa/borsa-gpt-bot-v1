@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { safeProductUrl, categoryOf, extractCards } = require("../modules/deal-sources");
+const { safeProductUrl, categoryOf, extractCards, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
 const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts } = require("../modules/deal-scheduler");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
@@ -87,5 +87,38 @@ for (const edition of [editionAmazon, editionOther]) {
    fetchImpl: async () => ({ status: 302, headers: { get: () => "https://evil.example/redirect" } })
  });
  assert.equal(removedUnsafeRedirect.length, 0, "unsafe redirects must still be rejected");
- console.log("deal sources + safe URL verification + Cairo scheduler tests: OK");
+
+ const oldKey1 = process.env.SCRAPER_API_KEY;
+ const oldKey2 = process.env.SCRAPER_API_KEY_2;
+ process.env.SCRAPER_API_KEY = "test-account-one";
+ process.env.SCRAPER_API_KEY_2 = "test-account-two";
+ assert.deepEqual(getScraperKeys(), ["test-account-one", "test-account-two"]);
+ const usedKeys = [];
+ const fakeScraperFetch = async url => {
+   usedKeys.push(new URL(String(url)).searchParams.get("api_key"));
+   return { ok: true, status: 200, text: async () => "<html></html>" };
+ };
+ await fetchSearch("amazon", "test one", { fetchImpl: fakeScraperFetch });
+ await fetchSearch("amazon", "test two", { fetchImpl: fakeScraperFetch });
+ assert.deepEqual(usedKeys, ["test-account-one", "test-account-two"], "independent scraper keys should rotate between requests");
+ let activeRequests = 0, peakRequests = 0, requestCount = 0;
+ const concurrencyFetch = async () => {
+   activeRequests++;
+   requestCount++;
+   peakRequests = Math.max(peakRequests, activeRequests);
+   await new Promise(resolve => setTimeout(resolve, 5));
+   activeRequests--;
+   return { ok: true, status: 200, text: async () => "<html></html>" };
+ };
+ const collected = await collectDealCandidates({
+   amazonQueries: ["a", "b", "c"],
+   otherQueries: ["d", "e", "f"],
+   fetchImpl: concurrencyFetch
+ });
+ assert.equal(requestCount, 10, "all source queries should still be attempted");
+ assert.ok(peakRequests <= 2, "ScraperAPI requests must be bounded to two concurrent requests");
+ assert.equal(collected.sourceCount, 10);
+ if (oldKey1 === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = oldKey1;
+ if (oldKey2 === undefined) delete process.env.SCRAPER_API_KEY_2; else process.env.SCRAPER_API_KEY_2 = oldKey2;
+ console.log("deal sources + safe URL verification + Cairo scheduler + scraper key rotation/concurrency tests: OK");
 })().catch(e=>{console.error(e);process.exit(1)});

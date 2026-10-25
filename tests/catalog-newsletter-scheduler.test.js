@@ -19,7 +19,7 @@ assert.equal(newsletterKindAt(new Date("2026-10-25T15:00:00.000Z")), "other_site
 const before = new Date("2026-10-25T07:09:00.000Z"); // 10:09 Cairo
 assert.equal(msUntilNextCheck(before), 60 * 1000);
 const after = new Date("2026-10-25T07:11:00.000Z"); // 10:11 Cairo
-assert.equal(msUntilNextCheck(after), 23 * 60 * 60 * 1000 - 60 * 1000);
+assert.equal(msUntilNextCheck(after), 24 * 60 * 60 * 1000 - 60 * 1000);
 
 (async () => {
   await assert.rejects(() => fetchStorePage("https://evil.example/"), /catalog_source_not_allowed/);

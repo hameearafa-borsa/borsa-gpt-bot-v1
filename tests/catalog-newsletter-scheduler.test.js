@@ -106,8 +106,12 @@ function makePipelinePool() {
 (async () => {
   const { CATALOG_STORES } = require("../modules/catalog-newsletter");
   const pool = makePipelinePool();
-  const html = '<a href="/eg/downtown/offers/kazyon/1376"><span>Kazyon flyer October 2026</span></a>';
-  const fetchPage = async () => html;
+  const fetchPage = async url => {
+    const storeKey = Object.entries(CATALOG_STORES).find(([, store]) => store.url === url)?.[0];
+    assert.ok(storeKey, "scheduler requested a configured store URL");
+    const slug = CATALOG_STORES[storeKey].catalogSlug;
+    return `<a href="/eg/downtown/offers/${slug}/1376"><span>${storeKey} flyer October 2026</span></a>`;
+  };
   const sent = [];
   const telegram = { sendMessage: async (chatId, message) => { sent.push({ chatId, message }); } };
 

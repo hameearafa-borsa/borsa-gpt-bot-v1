@@ -10,7 +10,7 @@
     "preflight:live": "node tests/preflight-live.js"
   },
   "engines": {
-    "node": ">=20 <26"
+    "node": ">=24 <25"
   },
   "dependencies": {
     "dotenv": "^16.4.7",

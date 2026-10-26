@@ -89,8 +89,8 @@ function makePipelinePool() {
         if (row && row.status === "prepared") { row.status = params[1]; row.message_id = params[2]; }
         return { rowCount: row ? 1 : 0, rows: [] };
       }
-      if (sql.startsWith("SELECT status FROM catalog_newsletter_deliveries")) {
-        return { rows: [...rows.values()].filter(r => r.delivery === true && r.snapshot_id === params[0]).map(r => ({ status: r.status })) };
+      if (sql.startsWith("SELECT chat_id,status FROM catalog_newsletter_deliveries")) {
+        return { rows: [...rows.values()].filter(r => r.delivery === true && r.snapshot_id === params[0]).map(r => ({ chat_id: r.chat_id, status: r.status })) };
       }
       if (sql.startsWith("UPDATE") && sql.includes("RETURNING id")) {
         const row = rows.get(params[0]);

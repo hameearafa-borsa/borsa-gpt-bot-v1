@@ -764,15 +764,22 @@ bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
     return;
   }
   const action = ctx.match[1], id = Number(ctx.match[2]);
+  let resolved = false;
   try {
     const result = await priceReview.resolveReview({ db, id, action, reviewerId: ctx.from.id });
-    if (!result.ok) { await ctx.answerCbQuery("تمت معالجة هذا السجل سابقًا أو لم يعد معلّقًا.", { show_alert: true }).catch(() => {}); return; }
+    if (!result.ok) {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+      await ctx.answerCbQuery("تمت معالجة هذا السجل سابقًا أو لم يعد معلّقًا.", { show_alert: true }).catch(() => {});
+      return;
+    }
+    resolved = true;
     await ctx.answerCbQuery(action === "ignore" ? "تم تجاهل السجل." : "تم اعتماد السجل.");
     const status = action === "ignore" ? "🚫 تم التجاهل" : action === "new" ? "🆕 تم اعتماد السعر والصنف الجديد" : "✅ تم اعتماد السعر";
     const original = ctx.callbackQuery.message?.text || `مراجعة السعر #${id}`;
     await ctx.editMessageText(`${original}\n\n${status} — بواسطة المسؤول ${ctx.from.id}`, { reply_markup: { inline_keyboard: [] } });
   } catch (error) {
-    await ctx.answerCbQuery("تعذر حفظ القرار. لم تُزل أزرار المراجعة؛ حاول مرة أخرى.", { show_alert: true }).catch(() => {});
+    if (resolved) await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    await ctx.answerCbQuery(resolved ? "تم الحفظ، وحاول البوت إزالة الأزرار مرة أخرى." : "تعذر حفظ القرار. لم تُزل أزرار المراجعة؛ حاول مرة أخرى.", { show_alert: true }).catch(() => {});
     await sendLog({ module: "price-monitor", stage: "review_action", severity: "error", status: "failed", details: { observationId: id, action, error: redactString(error?.message || "review action failed") } });
   }
 });

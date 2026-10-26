@@ -4,6 +4,9 @@ const { normalizeArabic } = require("./normalization");
 
 function deterministicType(input) {
   const s = normalizeArabic(input);
+  // Common short greetings and social acknowledgements do not need an AI call.
+  // Keep this deliberately narrow so useful questions are not silently ignored.
+  if (s.length <= 100 && /^(?:(?:السلام عليكم|وعليكم السلام)(?: ورحمة الله وبركاته)?(?: اخ العرب)?|صباح الخير|مساء الخير|اهلا(?: وسهلا)?|مرحبا|ازيك(?: عامل ايه)?|كيف الحال|شكرا(?: جزيلا)?|متشكر(?: جدا)?|جزاك الله خيرا|بارك الله فيك|الله يبارك فيك|تمام|حاضر|بالتوفيق|الحمد لله)[.!؟?\s]*$/i.test(s)) return "other";
   if (/(كلور|مطهر|ماده|تركيبه|pH|حامض|حمض|قلوي|خلط)/i.test(s)) return "chemical";
   if (/(^|\s)\/قائمه|قائمه اسعار|قائمه شركة|قائمه شركه/i.test(s)) return "price_list";
   if (/(تاجر|محل|عنوان|تليفون|هاتف|واتساب|واتس)/i.test(s) && !/ج\s|جنيه/.test(s)) return "merchant";

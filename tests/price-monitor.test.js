@@ -131,5 +131,27 @@ const registry = require("../data/product-registry.json");
   assert.equal(retail.accepted.length, 0);
   assert.equal(retailQueries, 0);
 
-  console.log("price monitor eligibility, extraction, persistence, duplicate protection, retail exclusion, and silent-mode tests: OK");
+  // Caption-only price lists should be observed just like text messages.
+  const captionQueries = [];
+  const captionPool = {
+    async query(sql) {
+      captionQueries.push(sql);
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 94 }], rowCount: 1 };
+      throw new Error("unexpected caption query");
+    }
+  };
+  const caption = await observe({
+    pool: captionPool,
+    message: {
+      chatId: -100123, messageId: 461, userId: 789,
+      text: "", caption: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج"
+    },
+    registry
+  });
+  assert.equal(caption.saved, 1);
+  assert.equal(caption.savedRows[0].row.package_sale_price, 18.75);
+  assert.equal(captionQueries.length, 2);
+
+  console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -44,8 +44,16 @@ assert.equal(fieldRows[4].package_sale_price, 487.4);
 assert.equal(fieldRows[4].confidence, 0.65);
 assert.equal(fieldRows[5].package_sale_price, 915.87);
 assert.equal(fieldRows[5].confidence, 0.65);
+assert.equal(fieldRows[4].price_kind, "wholesale");
+assert.equal(fieldRows[4].confidence, 0.65);
+assert.equal(fieldRows[5].price_kind, "wholesale");
+assert.equal(fieldRows[5].confidence, 0.65);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
+
+// A bare number such as 503 is not a product or a price observation by itself.
+assert.deepEqual(extractPriceCandidates("503"), []);
+assert.deepEqual(extractPriceCandidates("503\n"), []);
 
 // Weight and product-use variant are part of product identity, not price noise.
 const variants = extractPriceCandidates(`اريال ٢ ك يدوي ٤٩٠ج ٤ق

@@ -167,7 +167,8 @@ function makePipelinePool() {
     pool: retryPool, telegram: { sendMessage: async (_id, message) => retrySent.push(message) },
     chatId: -100123, fetchPage
   });
-  assert.ok(retrySent.some(message => message.includes("December 2026")));
-  assert.ok(![...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "pending"));
+  assert.equal(retrySent.length, 0, "an ambiguous Telegram send outcome must not be retried automatically");
+  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "pending"),
+    "the snapshot remains pending for manual diagnosis while its delivery record is terminal");
   console.log("catalog newsletter end-to-end mocked pipeline tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -159,11 +159,13 @@ async function showPrivatePanel(ctx, edit = false) {
 }
 
 async function configureCommandMenus() {
-  const adminCommands = [
+  const privateAdminCommands = [
     { command: "panel", description: "لوحة التحكم الخاصة" },
+    { command: "approvechat", description: "اعتماد مجموعة (مالك البوت فقط)" }
+  ];
+  const groupOwnerCommands = [
     { command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة" },
     { command: "claim", description: "طلب اعتماد المجموعة" },
-    { command: "approvechat", description: "اعتماد مجموعة (مالك البوت فقط)" },
     { command: "settings", description: "إعدادات المجموعة" },
     { command: "antispam", description: "إعدادات مانع الإزعاج" },
     { command: "schedule", description: "جدولة رسالة" },
@@ -173,30 +175,68 @@ async function configureCommandMenus() {
     { command: "inactive", description: "تقرير الأعضاء الخاملين" }
   ];
   const groupCommands = [
-    { command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة" },
-    { command: "chemical", description: "المساعد الكيميائي" },
-    { command: "settings", description: "إعدادات المجموعة" },
-    { command: "antispam", description: "إعدادات مانع الإزعاج" },
-    { command: "schedule", description: "جدولة رسالة" },
-    { command: "claim", description: "طلب اعتماد المجموعة" }
+    { command: "chemical", description: "المساعد الكيميائي" }
   ];
-  // Keep the default menu empty; publish the real user-facing command set to groups
-  // and the controller-only administrative set to verified owners in private chats.
+
+  // Keep management commands out of the shared group menu. Telegram supports
+  // per-member command scopes, so only each group's creator and configured bot
+  // owners receive the management menu inside that group.
   await bot.telegram.setMyCommands([], { scope: { type: "default" } });
   await bot.telegram.setMyCommands(groupCommands, { scope: { type: "all_group_chats" } });
-  // Include every explicitly configured bot owner, not only the legacy hard-coded MASTER_ID.
-  const ids = new Set([...authorizedUserIds()].map(String));
+
+  const botOwnerIds = new Set([...authorizedUserIds()].map(String));
+  const privateOwnerIds = new Set(botOwnerIds);
+  const groupOwners = [];
   try {
-    const r = await db.query(`SELECT DISTINCT owner_user_id FROM authorized_chats WHERE active=TRUE AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL`);
-    for (const row of r.rows) if (row.owner_user_id != null) ids.add(String(row.owner_user_id));
+    const r = await db.query(`SELECT chat_id, owner_user_id FROM authorized_chats
+      WHERE active=TRUE AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL
+      UNION
+      SELECT chat_id, owner_user_id FROM pending_group_approvals
+      WHERE status='pending' AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL`);
+    for (const row of r.rows) {
+      const chatId = Number(row.chat_id);
+      const ownerId = String(row.owner_user_id);
+      if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(Number(ownerId))) continue;
+      groupOwners.push({ chatId, ownerId });
+      privateOwnerIds.add(ownerId);
+    }
+    for (const { chatId, ownerId } of groupOwners) {
+      try {
+        await bot.telegram.setMyCommands(groupOwnerCommands, {
+          scope: { type: "chat_member", chat_id: chatId, user_id: Number(ownerId) }
+        });
+      } catch (error) {
+        await sendLog({ module: "security", stage: "command_menu_group_owner_scope", severity: "warn", status: "failed", details: { chatId, ownerId: Number(ownerId), code: error.code || null, message: error.message } });
+      }
+      for (const id of botOwnerIds) {
+        const userId = Number(id);
+        if (!Number.isSafeInteger(userId) || id === ownerId) continue;
+        try {
+          await bot.telegram.setMyCommands(groupOwnerCommands, {
+            scope: { type: "chat_member", chat_id: chatId, user_id: userId }
+          });
+        } catch (error) {
+          await sendLog({ module: "security", stage: "command_menu_bot_owner_group_scope", severity: "warn", status: "failed", details: { chatId, ownerId: userId, code: error.code || null, message: error.message } });
+        }
+      }
+    }
   } catch (error) {
     await sendLog({ module: "security", stage: "command_menu_owner_lookup", severity: "warn", status: "partial", details: { code: error.code || null } });
   }
-  for (const id of ids) {
-    const chatId = Number(id);
-    if (!Number.isSafeInteger(chatId)) continue;
-    try { await bot.telegram.setMyCommands(adminCommands, { scope: { type: "chat", chat_id: chatId } }); }
-    catch (error) { await sendLog({ module: "security", stage: "command_menu_private_scope", severity: "warn", status: "failed", details: { ownerId: chatId, code: error.code || null, message: error.message } }); }
+
+  // Private controller commands are scoped to known bot owners and verified
+  // group creators. Authorization is still enforced by each command handler.
+  for (const id of privateOwnerIds) {
+    const userId = Number(id);
+    if (!Number.isSafeInteger(userId)) continue;
+    const commands = botOwnerIds.has(id)
+      ? [...privateAdminCommands, ...groupOwnerCommands.filter(command => command.command !== "claim")]
+      : [{ command: "panel", description: "لوحة التحكم الخاصة" }, ...groupOwnerCommands.filter(command => command.command !== "claim")];
+    try {
+      await bot.telegram.setMyCommands(commands, { scope: { type: "chat", chat_id: userId } });
+    } catch (error) {
+      await sendLog({ module: "security", stage: "command_menu_private_scope", severity: "warn", status: "failed", details: { ownerId: userId, code: error.code || null, message: error.message } });
+    }
   }
 }
 

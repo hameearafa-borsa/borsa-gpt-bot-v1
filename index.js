@@ -361,6 +361,45 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
     const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || []).join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nSCRAPER_API_KEY_2: ${process.env.SCRAPER_API_KEY_2 ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nوجهة النشرات: المجموعات المعتمدة النشطة من قاعدة البيانات\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
     await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
+  if (action === "prices") {
+    let counts = [];
+    let pending = [];
+    let countsAvailable = true;
+    try {
+      const result = await db.query("SELECT decision, COUNT(*)::int AS n FROM price_observations GROUP BY decision");
+      counts = result.rows;
+    } catch {
+      countsAvailable = false;
+    }
+    try {
+      const result = await db.query(
+        "SELECT product_text, package_sale_price, price_kind, confidence, raw_text, observed_at FROM price_observations WHERE decision='pending' ORDER BY observed_at DESC LIMIT 5"
+      );
+      pending = result.rows;
+    } catch {
+      countsAvailable = false;
+    }
+    const countText = countsAvailable
+      ? ["accepted", "pending"].map(kind => {
+          const row = counts.find(item => item.decision === kind);
+          return `${kind === "accepted" ? "مرصودة بثقة عالية" : "تحتاج مراجعة"}: ${row?.n ?? 0}`;
+        }).join("\\n")
+      : "تعذر قراءة ملخص الرصد من قاعدة البيانات؛ لم يتم تغيير أي سجل.";
+    const pendingText = pending.length
+      ? pending.map((row, i) => {
+          const name = String(row.product_text || row.raw_text || "صنف غير محدد").replace(/\\s+/g, " ").slice(0, 90);
+          const price = Number(row.package_sale_price);
+          const confidence = row.confidence == null ? "غير محددة" : `${Math.round(Number(row.confidence) * 100)}٪`;
+          const date = row.observed_at ? new Date(row.observed_at).toLocaleString("ar-EG") : "وقت غير محدد";
+          return `${i + 1}. ${name} — ${Number.isFinite(price) ? price.toFixed(2) + " ج.م" : "سعر غير واضح"}\\n   النوع: ${row.price_kind || "غير محدد"} — الثقة: ${confidence} — ${date}`;
+        }).join("\\n")
+      : "لا توجد سجلات معلقة حديثة، أو تعذر تحميلها.";
+    await ctx.editMessageText(
+      `💰 رصد الأسعار — مراجعة داخلية\\n\\n${countText}\\n\\nآخر الأسعار التي تحتاج مراجعة:\\n${pendingText}\\n\\nهذه شاشة متابعة فقط؛ لا تعتمد الأسعار أو تعدّلها تلقائيًا. السعر الملتبس يظل قيد المراجعة.`,
+      { reply_markup: adminPanel.actionKeyboard() }
+    );
+    return;
+  }
   if (action === "scraper_test") {
     const result = await fetchSearch("amazon", "مسحوق غسيل", { timeoutMs: 70000 });
     const body = result.ok

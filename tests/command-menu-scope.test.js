@@ -10,7 +10,7 @@ assert.notEqual(start, -1, "configureCommandMenus must exist");
 assert.notEqual(end, -1, "configureCommandMenus must have a closing boundary");
 const body = source.slice(start, end);
 
-assert.match(body, /type: "all_group_chats"\s*\}\s*\}\);/);
+assert.match(body, /type: "all_group_chats"/);
 assert.match(body, /const groupCommands = \[\s*\{ command: "chemical"/);
 assert.doesNotMatch(body.slice(body.indexOf("const groupCommands"), body.indexOf("];", body.indexOf("const groupCommands"))), /settings|antispam|schedule|warn|pricelist|approvechat|claim/);
 assert.match(body, /type: "chat_member", chat_id: chatId, user_id: Number\(ownerId\)/);

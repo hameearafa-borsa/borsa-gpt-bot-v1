@@ -25,7 +25,7 @@ function parsePackCount(text) {
 }
 
 function parseExtraWeight(text) {
-  const m = String(text || "").match(EXTRA_RE);
+  const m = toAsciiDigits(String(text || "")).match(EXTRA_RE);
   if (!m) return null;
   const q = parseQuantity(`${m[1]} ${m[2]}`);
   return q?.grams ?? null;

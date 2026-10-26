@@ -125,8 +125,9 @@ function makePipelinePool() {
   const fetchTwoNewCatalogs = async url => {
     const storeKey = Object.entries(CATALOG_STORES).find(([, store]) => store.url === url)?.[0];
     assert.ok(storeKey, "scheduler requested a configured store URL");
-    return `<a href="/eg/downtown/offers/${storeKey}/1377"><span>${storeKey} flyer November 2026</span></a>` +
-      `<a href="/eg/downtown/offers/${storeKey}/1378"><span>${storeKey} flyer December 2026</span></a>`;
+    const slug = CATALOG_STORES[storeKey].catalogSlug;
+    return `<a href="/eg/downtown/offers/${slug}/1377"><span>${storeKey} flyer November 2026</span></a>` +
+      `<a href="/eg/downtown/offers/${slug}/1378"><span>${storeKey} flyer December 2026</span></a>`;
   };
   const second = await checkCatalogsOnce({ pool, telegram, chatIds: [-100123, -100456], fetchPage: fetchTwoNewCatalogs });
   assert.equal(second.published, Object.keys(CATALOG_STORES).length * 2 * 2, "each new catalog should be delivered to both approved groups");

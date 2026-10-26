@@ -145,7 +145,7 @@ function makePipelinePool() {
   assert.equal(allFail.skipped, true);
   assert.equal(allFail.reason, "all_sources_failed");
 
-  // A Telegram failure leaves the pending row untouched; a later run retries it.
+  // A Telegram failure leaves the snapshot pending for diagnosis, but its terminal delivery record prevents duplicate retries.
   const retryPool = makePipelinePool();
   await checkCatalogsOnce({ pool: retryPool, telegram, chatId: -100123, fetchPage });
   await retryPool.query(

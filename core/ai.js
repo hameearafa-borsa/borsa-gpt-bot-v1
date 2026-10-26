@@ -3,7 +3,7 @@ const { redactString } = require("./diagnostics");
 
 const https = require("node:https");
 
-function requestJson(url, body, headers = {}) {
+function requestJson(url, body, headers = {}, timeoutMs = Number(process.env.AI_TIMEOUT_MS || 20000)) {
   return new Promise((resolve, reject) => {
     const u = new URL(url);
     const req = https.request({
@@ -11,7 +11,7 @@ function requestJson(url, body, headers = {}) {
       path: u.pathname + u.search,
       method: "POST",
       headers: { "content-type": "application/json", ...headers },
-      timeout: Number(process.env.AI_TIMEOUT_MS || 20000),
+      timeout: timeoutMs,
     }, res => {
       let data = "";
       res.setEncoding("utf8");
@@ -79,7 +79,7 @@ function geminiProvider(key, model) {
     // Gemini 3.5 Flash-Lite request intentionally omits sampling configuration.
     const data = await requestJson(endpoint, {
       contents: [{ role: "user", parts: [{ text: String(prompt || "") }] }]
-    }, { "x-goog-api-key": key });
+    }, { "x-goog-api-key": key }, Number(process.env.GEMINI_TIMEOUT_MS || 45000));
     return { text: data.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("") || "", provider: "gemini", model: selectedModel };
   };
 }

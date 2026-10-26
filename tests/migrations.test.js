@@ -17,7 +17,7 @@ async function successCase() {
   assert.deepEqual(result.files, [...MIGRATION_FILES]);
   assert.equal(calls[0], "BEGIN");
   assert.deepEqual(calls[1], { sql: "SELECT pg_advisory_xact_lock($1)", params: [MIGRATION_LOCK_KEY] });
-  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 14, "lock plus 15 migration statements should run in one transaction");
+  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 16, "lock plus 15 migration statements should run in one transaction");
   assert.equal(calls.at(-1), "COMMIT");
   assert.ok(calls.indexOf("COMMIT") > calls.findIndex(x => x?.read?.endsWith(MIGRATION_FILES.at(-1))));
 }

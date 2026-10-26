@@ -18,4 +18,24 @@ assert.equal(offer.offer_extra_weight_g, 500);
 assert.equal(commercialMetrics(offer).package_sale_price, 110);
 assert.equal(commercialMetrics(offer).effective_weight_g, 2500);
 
+ 
+// Real-world list variants: Arabic digits, decimal commas, per-piece prices,
+// and multi-column rows with a clearly labelled wholesale value.
+const fieldRows = extractPriceCandidates(`اريال 25 جم 12.75 ج
+اوكسي 50 جم 18,75 ج
+جيل 25 جم 2.4909 ج
+اريال ٢ك يدوي ٤٩٠ج ٤ق
+بيرل 9 ك: 505.31 | جملة 487.40 | مستهلك 525
+بيرل 5 ك: 308.43 | جملة 915.87 | مستهلك 325
+سيجنال 120مل ق 42,33 ج`);
+assert.equal(fieldRows.length, 7);
+assert.equal(fieldRows[0].package_sale_price, 12.75);
+assert.equal(fieldRows[1].package_sale_price, 18.75);
+assert.equal(fieldRows[2].package_sale_price, 2.4909);
+assert.equal(fieldRows[3].package_sale_price, 490);
+assert.equal(fieldRows[3].pack_count, 4);
+assert.equal(fieldRows[4].package_sale_price, 487.4);
+assert.equal(fieldRows[5].package_sale_price, 915.87);
+assert.equal(fieldRows[6].package_sale_price, 42.33);
+
 console.log("price intelligence tests: OK");

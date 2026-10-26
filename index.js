@@ -20,6 +20,7 @@ const { isListLike, deterministicList, extractList } = require("./modules/price-
 const { renderPriceListImages } = require("./modules/price-list-image");
 const priceMonitor = require("./modules/price-monitor");
 const priceReview = require("./modules/price-review");
+const priceReviewRecovery = require("./modules/price-review-recovery");
 const { saveMerchant } = require("./modules/merchant-intelligence");
 const chemical = require("./modules/chemical-assistant");
 const deals = require("./modules/deals");
@@ -824,6 +825,34 @@ installFatalProcessHandlers({
   const me = await bot.telegram.getMe();
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   botUserId = me.id;
+  try {
+    const recovered = await priceReviewRecovery.recoverPendingNotifications({
+      db,
+      telegram: bot.telegram,
+      defaultLogChatId: LOG_CHAT_ID,
+      onError: async (error, details) => {
+        await sendLog({
+          module: "price-monitor",
+          stage: "review_notification_recovery",
+          severity: "warn",
+          status: "failed",
+          details: { ...details, error: redactString(error?.message || "review recovery failed") }
+        });
+      }
+    });
+    if (recovered.found > 0) {
+      console.log(`[PRICE_REVIEW_RECOVERY] found=${recovered.found} sent=${recovered.sent} failed=${recovered.failed}`);
+    }
+  } catch (error) {
+    console.warn("[PRICE_REVIEW_RECOVERY_FAILED]", redactString(error?.message || "review recovery failed"));
+    await sendLog({
+      module: "price-monitor",
+      stage: "review_notification_recovery",
+      severity: "warn",
+      status: "failed",
+      details: { error: redactString(error?.message || "review recovery failed") }
+    }).catch(() => {});
+  }
   await configureCommandMenus().catch(error => sendLog({ module: "security", stage: "command_menu_setup", severity: "warn", status: "failed", details: { code: error.code || null, message: error.message } }));
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);

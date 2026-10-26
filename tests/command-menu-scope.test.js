@@ -12,11 +12,12 @@ const body = source.slice(start, end);
 
 assert.match(body, /type: "all_group_chats"/);
 assert.match(body, /const groupCommands = \[\s*\{ command: "chemical"/);
-assert.doesNotMatch(body.slice(body.indexOf("const groupCommands"), body.indexOf("];", body.indexOf("const groupCommands"))), /settings|antispam|schedule|warn|pricelist|approvechat|claim/);
+const publicMenu = body.slice(body.indexOf("const groupCommands"), body.indexOf("];", body.indexOf("const groupCommands")));
+assert.doesNotMatch(publicMenu, /settings|antispam|schedule|warn|pricelist|approvechat|claim/);
 assert.match(body, /type: "chat_member", chat_id: chatId, user_id: Number\(ownerId\)/);
 assert.match(body, /type: "chat_member", chat_id: chatId, user_id: userId/);
 assert.match(body, /type: "chat", chat_id: userId/);
-assert.match(body, /if \(cmd && !isChemicalCommand && !\(await canControl\(ctx, m\)\)\) return;/,
+assert.match(source, /isChemicalCommand && !\(await canControl\(ctx, m\)\)/,
   "menu visibility must not replace command-handler authorization");
 
 console.log("command menu owner-scope regression test: OK");

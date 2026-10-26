@@ -116,9 +116,15 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     "SELECT channel_kind,status,chat_id FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
     [key, kind, targetChatIds]
   );
+  const reservedChats = new Set(existing.rows.filter(row => row.channel_kind === kind).map(row => Number(row.chat_id)));
   const publishedChats = new Set(existing.rows.filter(row => row.channel_kind === kind && row.status === "published").map(row => Number(row.chat_id)));
-  if (targetChatIds.every(id => publishedChats.has(id))) {
-    return { skipped: true, reason: "already_published", batchKey: key, kind };
+  const unreservedTargets = targetChatIds.filter(id => !reservedChats.has(id));
+  if (!unreservedTargets.length) {
+    return {
+      skipped: true,
+      reason: targetChatIds.every(id => publishedChats.has(id)) ? "already_published" : "all_targets_already_reserved",
+      batchKey: key, kind
+    };
   }
 
   // Collect and verify once per edition, regardless of the number of target groups.
@@ -146,8 +152,7 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   }
 
   const published = [];
-  for (const targetId of targetChatIds) {
-    if (publishedChats.has(targetId)) continue;
+  for (const targetId of unreservedTargets) {
     const reservation = await pool.query(
       "INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status) VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind,chat_id) DO NOTHING RETURNING id",
       [key, kind, targetId, formattedItems.length]

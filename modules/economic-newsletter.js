@@ -74,7 +74,7 @@ function numberAfterLabel(text, labels, maxDistance = 16) {
     let index = haystack.indexOf(needle);
     while (index >= 0) {
       const tail = text.slice(index + label.length, index + label.length + maxDistance);
-      const match = tail.match(/(?:EGP|ج\.م|جنيه مصري|USD|\$)?\s*([0-9٠-٩۰-۹][0-9٠-٩۰-۹,.]*(?:\.[0-9٠-٩۰-۹]+)?)/i);
+      const match = tail.match(/^\s*(?:EGP|ج\.م|جنيه مصري|USD|\$)?\s*([0-9٠-٩۰-۹][0-9٠-٩۰-۹,.]*(?:\.[0-9٠-٩۰-۹]+)?)/i);
       const value = match && parsePositiveNumber(match[1]);
       if (value !== null && value !== undefined) return value;
       index = haystack.indexOf(needle, index + needle.length);

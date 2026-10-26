@@ -20,7 +20,7 @@ assert.ok(!geminiSection.includes("generationConfig"), "Gemini request should om
 assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
 assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
-assert.ok(aiSource.includes("if (!retryable && !credentialError)"));
+assert.ok(aiSource.includes("isProviderWideFailure(e) || (!retryable && !credentialError)"), "provider-wide failures should skip sibling keys when cross-provider fallback is enabled");
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
@@ -62,7 +62,7 @@ try {
   const routed = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"], providers });
   const result = await routed.generate("test prompt");
   assert.equal(result.provider, "groq");
-  assert.deepEqual(calls, ["gemini-1", "gemini-2", "openai", "groq"]);
+  assert.deepEqual(calls, ["gemini-1", "openai", "groq"], "provider-wide failures should skip remaining keys for the same provider");
 
   const slowGeminiCalls = [];
   const slowGeminiProviders = [

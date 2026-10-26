@@ -124,19 +124,21 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
       const statuses = await pool.query("SELECT chat_id,status FROM catalog_newsletter_deliveries WHERE snapshot_id=$1", [snapshot.id]);
       const statusByChat = new Map(statuses.rows.map(row => [Number(row.chat_id), row.status]));
       const allPublished = targets.every(target => statusByChat.get(target) === "published");
-      const allTerminal = targets.every(target => ["published", "failed"].includes(statusByChat.get(target)));
+      const terminalStatuses = ["published", "failed", "prepared"];
+      const allTerminal = targets.every(target => terminalStatuses.includes(statusByChat.get(target)));
       if (allPublished) {
         await markCatalogSnapshot(pool, snapshot.id, "published");
       } else if (allTerminal) {
-        // A failed/ambiguous Telegram delivery is intentionally not retried. Move
-        // the snapshot out of the pending queue once every target has a terminal
-        // delivery record, so old failures cannot starve newer catalogs.
-        const failedTargets = targets.filter(target => statusByChat.get(target) === "failed");
+        // "prepared" is also terminal here: the process may have stopped after
+        // reserving delivery but before receiving Telegram's response. Never
+        // retry an ambiguous send automatically, and do not let it starve newer
+        // snapshots in the pending queue.
+        const unresolvedTargets = targets.filter(target => statusByChat.get(target) !== "published");
         await markCatalogSnapshot(
           pool,
           snapshot.id,
           "failed",
-          `Terminal delivery failure for chat IDs: ${failedTargets.join(",")}`
+          `Terminal or ambiguous delivery for chat IDs: ${unresolvedTargets.join(",")}`
         );
       }
     } catch (error) {

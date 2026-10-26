@@ -68,17 +68,20 @@ function htmlToText(html) {
 }
 
 function numberAfterLabel(text, labels, maxDistance = 180) {
+  const haystack = text.toLowerCase();
   for (const label of labels) {
-    const index = text.toLowerCase().indexOf(label.toLowerCase());
-    if (index < 0) continue;
-    const tail = text.slice(index + label.length, index + label.length + maxDistance);
-    const match = tail.match(/(?:EGP|ج\.م|جنيه مصري|USD|\$)?\s*([0-9٠-٩۰-۹][0-9٠-٩۰-۹,.]*(?:\.[0-9٠-٩۰-۹]+)?)/i);
-    const value = match && parsePositiveNumber(match[1]);
-    if (value !== null && value !== undefined) return value;
+    const needle = label.toLowerCase();
+    let index = haystack.indexOf(needle);
+    while (index >= 0) {
+      const tail = text.slice(index + label.length, index + label.length + maxDistance);
+      const match = tail.match(/(?:EGP|ج\.م|جنيه مصري|USD|\$)?\s*([0-9٠-٩۰-۹][0-9٠-٩۰-۹,.]*(?:\.[0-9٠-٩۰-۹]+)?)/i);
+      const value = match && parsePositiveNumber(match[1]);
+      if (value !== null && value !== undefined) return value;
+      index = haystack.indexOf(needle, index + needle.length);
+    }
   }
   return null;
 }
-
 function parseBrentPayload(payload, now = new Date()) {
   const price = Number(payload?.price);
   const timestamp = Date.parse(payload?.timestamp || "");

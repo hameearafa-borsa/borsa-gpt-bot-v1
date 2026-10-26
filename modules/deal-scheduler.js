@@ -97,13 +97,31 @@ async function persistDeals(pool, deals) {
   }
   return saved;
 }
-async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
-  if (!pool || !telegram || !chatId) return { skipped: true, reason: "database_telegram_or_deals_chat_missing" };
+async function resolveDealChatIds({ pool, chatId, chatIds }) {
+  if (Array.isArray(chatIds)) return [...new Set(chatIds.map(Number).filter(Number.isSafeInteger))];
+  // Explicit chatId is retained for tests and intentional single-group runs.
+  if (chatId !== undefined && chatId !== null && Number.isSafeInteger(Number(chatId))) return [Number(chatId)];
+  const r = await pool.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE AND chat_type IN ('group','supergroup') ORDER BY chat_id");
+  return [...new Set((r.rows || []).map(row => Number(row.chat_id)).filter(Number.isSafeInteger))];
+}
+
+async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
+  if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
+  const targetChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
+  if (!targetChatIds.length) return { skipped: true, reason: "no_active_authorized_groups" };
   const kind = newsletterKindAt(now);
   if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
   const key = batchKey(now);
-  const existing = await pool.query("SELECT channel_kind,status FROM deal_publications WHERE batch_key=$1", [key]);
-  if (existing.rows.some(r => r.channel_kind === kind && r.status === "published")) return { skipped: true, reason: "already_published", batchKey: key, kind };
+  const existing = await pool.query(
+    "SELECT channel_kind,status FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
+    [key, kind, targetChatIds]
+  );
+  const publishedChats = new Set(existing.rows.filter(row => row.channel_kind === kind && row.status === "published").map(row => Number(row.chat_id)));
+  if (targetChatIds.every(id => publishedChats.has(id))) {
+    return { skipped: true, reason: "already_published", batchKey: key, kind };
+  }
+
+  // Collect and verify once per edition, regardless of the number of target groups.
   const gathered = await fetcher({ edition: kind });
   if (!gathered.deals?.length) {
     await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [] });
@@ -112,66 +130,63 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   const verified = await verify(gathered.deals);
   const recent = await filterRecentDeals(pool, verified, 7);
   if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
-  // Each of the two daily newsletters is capped at five products per category.
-  // The 5 PM edition is Amazon-only; the 6 PM edition uses non-Amazon retailers.
   const items = selectNewsletterDeals(recent, kind);
   if (!items.length) {
     await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], batchKind: kind });
     return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
   }
-  const batches = [{
-    kind,
-    items,
-    title: kind === "amazon"
-      ? "عروض أمازون للمنظفات والورقيات والعناية"
-      : "عروض المتاجر الأخرى المختارة"
-  }];
+  const title = kind === "amazon"
+    ? "عروض أمازون للمنظفات والورقيات والعناية"
+    : "عروض المتاجر الأخرى المختارة";
+  const formatted = formatNewsletterMessage(items, title);
+  const formattedItems = formatted.items;
+  if (!formattedItems.length) {
+    await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: kind, batchKey: key });
+    return { skipped: true, reason: "message_too_long", batchKey: key, kind };
+  }
+
   const published = [];
-  for (const batch of batches) {
-    if (!batch.items.length) continue;
-    const formatted = formatNewsletterMessage(batch.items, batch.title);
-    batch.items = formatted.items;
-    if (!batch.items.length) {
-      await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: batch.kind, batchKey: key });
-      continue;
-    }
-    const reservation = await pool.query(`INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status)
-      VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind) DO NOTHING RETURNING id`, [key,batch.kind,chatId,batch.items.length]);
+  for (const targetId of targetChatIds) {
+    if (publishedChats.has(targetId)) continue;
+    const reservation = await pool.query(
+      "INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status) VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind,chat_id) DO NOTHING RETURNING id",
+      [key, kind, targetId, formattedItems.length]
+    );
     if (!reservation.rowCount) {
-      const old = await pool.query("SELECT status FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2", [key,batch.kind]);
-      if (old.rows[0]?.status === "published") continue;
-      // Do not auto-repeat a prepared/failed post; leave it for diagnosis and manual repair.
+      // A prepared/failed reservation may represent an ambiguous Telegram outcome.
+      // Never auto-repeat it; a human can inspect and repair the record if needed.
       continue;
     }
     let msg;
     try {
-      msg = await telegram.sendMessage(chatId, formatted.text, { disable_web_page_preview: true });
+      msg = await telegram.sendMessage(targetId, formatted.text, { disable_web_page_preview: true });
     } catch (error) {
-      // A sendMessage error does not prove the message was not delivered:
-      // timeouts and connection drops can leave the outcome ambiguous. Mark the
-      // reservation for manual diagnosis, and never auto-retry failed/prepared
-      // rows, so an uncertain outcome cannot create duplicate messages.
-      await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(()=>{});
-      await onError(error, { stage: "publish", batchKind: batch.kind, batchKey: key });
+      await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(() => {});
+      await onError(error, { stage: "publish", batchKind: kind, batchKey: key, chatId: targetId });
       continue;
     }
 
-    // Telegram has accepted the message. Never downgrade this to "failed"
-    // because a later database operation fails: the external side effect has
-    // already happened and an automatic retry could publish a duplicate.
-    published.push({ kind: batch.kind, count: batch.items.length, messageId: msg.message_id });
+    published.push({ kind, count: formattedItems.length, messageId: msg.message_id, chatId: targetId });
     try {
-      await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id,reservation.rows[0].id]);
+      await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id, reservation.rows[0].id]);
     } catch (error) {
-      await onError(error, { stage: "publication_record", batchKind: batch.kind, batchKey: key, messageId: msg.message_id });
-    }
-    try {
-      await persistDeals(pool, batch.items);
-    } catch (error) {
-      await onError(error, { stage: "persist_deals", batchKind: batch.kind, batchKey: key, messageId: msg.message_id });
+      await onError(error, { stage: "publication_record", batchKind: kind, batchKey: key, messageId: msg.message_id, chatId: targetId });
     }
   }
-  return { batchKey: key, verified: verified.length, recent: recent.length, saved: published.reduce((n,x) => n + x.count, 0), published, sourceErrors: gathered.errors || [] };
+
+  // Persist each observed offer once after at least one Telegram send was confirmed.
+  if (published.length) {
+    try {
+      await persistDeals(pool, formattedItems);
+    } catch (error) {
+      await onError(error, { stage: "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) });
+    }
+  }
+  return {
+    batchKey: key, kind, verified: verified.length, recent: recent.length,
+    saved: published.reduce((count, item) => count + item.count, 0),
+    published, sourceErrors: gathered.errors || []
+  };
 }
 function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 15 * 60_000 } = {}) {
   let busy = false;

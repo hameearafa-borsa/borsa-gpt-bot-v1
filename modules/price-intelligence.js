@@ -81,7 +81,7 @@ function extractPriceCandidates(text) {
     const numbers = numericPriceTokens(stripped);
     if (!numbers.length) continue;
 
-    const productText = extractProductText(line);
+    const productText = extractProductText(parsedLine);
     const normalizedProduct = normalizeArabic(productText);
     if (normalizedProduct.length < 2 || /^\d/.test(normalizedProduct)) continue;
     if (/^(?:جنيه|ج|egp|ق|قطعه|قطعة)$/.test(normalizedProduct)) continue;

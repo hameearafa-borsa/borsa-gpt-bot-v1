@@ -196,6 +196,7 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
 function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 15 * 60_000 } = {}) {
   let busy = false;
   let nextAttemptAt = 0;
+  let backoffKind = null;
   let activeDay = batchKey();
   const reportedFetchFailures = new Set();
 
@@ -223,14 +224,25 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
   };
 
   const timer = setInterval(async () => {
+    const currentKind = newsletterKindAt();
+    if (shouldResetDealBackoff(backoffKind, currentKind)) {
+      nextAttemptAt = 0;
+      backoffKind = null;
+    }
     if (busy || Date.now() < nextAttemptAt) return;
     busy = true;
     try {
       const result = await publishDailyDeals(scheduledOptions);
-      if (shouldBackoffAfterDealAttempt(result)) nextAttemptAt = Date.now() + retryAfterFailureMs;
-      else nextAttemptAt = 0;
+      if (shouldBackoffAfterDealAttempt(result)) {
+        nextAttemptAt = Date.now() + retryAfterFailureMs;
+        backoffKind = newsletterKindAt();
+      } else {
+        nextAttemptAt = 0;
+        backoffKind = null;
+      }
     } catch (error) {
       nextAttemptAt = Date.now() + retryAfterFailureMs;
+      backoffKind = newsletterKindAt();
       await scheduledOptions.onError?.(error, { stage: "scheduler_tick" });
     } finally {
       busy = false;
@@ -242,5 +254,8 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
 function shouldBackoffAfterDealAttempt(result) {
   return Boolean(result?.skipped && ["no_deals", "all_recent_or_invalid", "message_too_long"].includes(result.reason));
 }
+function shouldResetDealBackoff(previousKind, currentKind) {
+  return Boolean(previousKind && currentKind && previousKind !== currentKind);
+}
 
-module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, startDealScheduler };
+module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, startDealScheduler };

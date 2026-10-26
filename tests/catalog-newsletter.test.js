@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const {
-  CATALOG_REGION, CATALOG_STORES, safeCatalogUrl, extractCatalogs, isRelevantOffer, changedCatalogs, formatCatalogNotice, persistCatalogSnapshots, listPendingCatalogSnapshots, markCatalogSnapshot
+  CATALOG_REGION, CATALOG_STORES, safeCatalogUrl, catalogUrlBelongsToStore, extractCatalogs, isRelevantOffer, changedCatalogs, formatCatalogNotice, persistCatalogSnapshots, listPendingCatalogSnapshots, markCatalogSnapshot
 } = require("../modules/catalog-newsletter");
 
 assert.deepEqual(Object.keys(CATALOG_STORES).sort(), ["bim", "kazyon", "metro_market"]);
@@ -10,13 +10,19 @@ assert.ok(Object.values(CATALOG_STORES).every(store => store.region === CATALOG_
 assert.equal(safeCatalogUrl("https://snapflyer.io/eg/downtown/offers/kazyon/1376"), "https://snapflyer.io/eg/downtown/offers/kazyon/1376");
 assert.equal(safeCatalogUrl("https://evil.example/eg/downtown/offers/kazyon/1376"), null);
 assert.equal(safeCatalogUrl("http://snapflyer.io/eg/downtown/offers/kazyon/1376"), null);
+assert.equal(catalogUrlBelongsToStore("https://snapflyer.io/eg/downtown/offers/kazyon/1376", "kazyon"), true);
+assert.equal(catalogUrlBelongsToStore("https://snapflyer.io/eg/downtown/offers/bim/1376", "kazyon"), false);
+assert.equal(catalogUrlBelongsToStore("https://snapflyer.io/eg/downtown/offers/metro-market/1376", "bim"), false);
+assert.equal(catalogUrlBelongsToStore("https://evil.example/eg/downtown/offers/kazyon/1376", "kazyon"), false);
 const html = `
 <a href="/eg/downtown/offers/kazyon/1376"><span>Kazyon — Lowest Price Everyday</span></a>
+<a href="/eg/downtown/offers/bim/1376"><span>BIM weekly offers November 2026</span></a>
+<a href="/eg/downtown/offers/metro-market/1376"><span>Metro Market offers November 2026</span></a>
 <a href="https://evil.example/eg/downtown/offers/kazyon/1377">Bad link should not pass</a>
 <a href="/eg/downtown/stores/kazyon">Store link should not pass</a>
 `;
 const catalogs = extractCatalogs(html, "kazyon");
-assert.equal(catalogs.length, 1);
+assert.equal(catalogs.length, 1, "only the configured store's catalog should be accepted");
 assert.equal(catalogs[0].store, "kazyon");
 assert.equal(catalogs[0].region, "محافظة القاهرة");
 assert.equal(catalogs[0].url, "https://snapflyer.io/eg/downtown/offers/kazyon/1376");

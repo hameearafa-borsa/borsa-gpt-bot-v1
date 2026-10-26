@@ -681,14 +681,12 @@ installFatalProcessHandlers({
     const report = makeReport({ module: "scheduler", stage: "dispatch_due", severity: "ERROR", action: "scheduled_message", error, details: { jobId: job?.id, chatId: job?.chat_id }, chatId: job?.chat_id });
     await emitReport({ bot, db, report });
   } });
-  if (process.env.DEALS_CHAT_ID) {
-    stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, chatId: Number(process.env.DEALS_CHAT_ID), onError: async (error, details) => {
-      const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
-      await emitReport({ bot, db, report });
-    } });
-  } else {
-    console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
-  }
+  // Deal newsletters resolve their destinations from currently approved groups.
+  // DEALS_CHAT_ID is no longer required for group selection.
+  stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
+    const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
+    await emitReport({ bot, db, report });
+  } });
   // Catalog notices target every currently approved group. DEALS_CHAT_ID is
   // retained only for legacy deal publication while that scheduler is migrated.
   stopCatalogs = startCatalogNewsletterScheduler({

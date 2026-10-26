@@ -758,7 +758,7 @@ bot.on("text", async ctx => {
 });
 
 
-bot.action(/^prv:(approve|new|ignore):(\\d+)$/, async ctx => {
+bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
   if (!isLogChat(ctx.chat?.id) || !(await isPrivateController(ctx.from?.id))) {
     await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
     return;
@@ -777,7 +777,7 @@ bot.action(/^prv:(approve|new|ignore):(\\d+)$/, async ctx => {
   }
 });
 
-bot.action(/^prv:edit:(\\d+)$/, async ctx => {
+bot.action(/^prv:edit:(\d+)$/, async ctx => {
   if (!isLogChat(ctx.chat?.id) || !(await isPrivateController(ctx.from?.id))) {
     await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
     return;

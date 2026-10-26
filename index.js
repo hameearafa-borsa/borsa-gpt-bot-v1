@@ -125,10 +125,6 @@ async function authorizeChat(chatId, chatType, ownerUserId, authorizedBy = owner
   return true;
 }
 
-function isLogChat(chatId) {
-  return chatId != null && String(chatId) === String(LOG_CHAT_ID);
-}
-
 async function isAuthorizedChat(chatId) {
   if (!db.pool) return false;
   const r = await db.query(`SELECT active FROM authorized_chats WHERE chat_id=$1`, [chatId]);

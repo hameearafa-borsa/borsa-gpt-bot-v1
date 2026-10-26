@@ -689,20 +689,17 @@ installFatalProcessHandlers({
   } else {
     console.warn("[DEALS_SCHEDULER_DISABLED] Set DEALS_CHAT_ID after selecting the publication group.");
   }
-  if (process.env.DEALS_CHAT_ID && Number.isSafeInteger(Number(process.env.DEALS_CHAT_ID))) {
-    stopCatalogs = startCatalogNewsletterScheduler({
-      pool: db.pool,
-      telegram: bot.telegram,
-      chatId: Number(process.env.DEALS_CHAT_ID),
-      onError: async (error, details) => {
-        const report = makeReport({ module: "catalog_newsletter", stage: details?.stage || "daily_check", severity: "ERROR", action: "catalog_newsletter", error, details });
-        await emitReport({ bot, db, report });
-      }
-    });
-    console.log("[CATALOG_NEWSLETTER_SCHEDULER] Daily check scheduled for 10:10 Africa/Cairo.");
-  } else {
-    console.warn("[CATALOG_NEWSLETTER_DISABLED] Set a valid DEALS_CHAT_ID to enable catalog publication.");
-  }
+  // Catalog notices target every currently approved group. DEALS_CHAT_ID is
+  // retained only for legacy deal publication while that scheduler is migrated.
+  stopCatalogs = startCatalogNewsletterScheduler({
+    pool: db.pool,
+    telegram: bot.telegram,
+    onError: async (error, details) => {
+      const report = makeReport({ module: "catalog_newsletter", stage: details?.stage || "daily_check", severity: "ERROR", action: "catalog_newsletter", error, details });
+      await emitReport({ bot, db, report });
+    }
+  });
+  console.log("[CATALOG_NEWSLETTER_SCHEDULER] Daily check scheduled for 10:10 Africa/Cairo; targets active approved groups.");
   if (String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() !== "false") {
     await ensureWeatherSchedulerSchema(db.pool);
     if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }

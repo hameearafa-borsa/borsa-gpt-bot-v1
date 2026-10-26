@@ -2,6 +2,7 @@
 
 const { extractPriceCandidates, commercialMetrics, fingerprint } = require("./price-intelligence");
 const { resolve } = require("../core/product-registry");
+const { identityKey } = require("./price-review");
 
 function isOwnMessage({ botUserId, fromId }) { return botUserId != null && String(botUserId) === String(fromId); }
 function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage }) {
@@ -24,8 +25,17 @@ async function observe({ pool, message, merchantId = null, registry }) {
       registry_confidence: match.confidence,
       brand_key: match.brand?.key || null,
     };
-    // Registry matches improve confidence; they must not be a prerequisite for preserving source data.
-    row.confidence = Math.min(candidate.confidence, match.matched ? 0.98 : 0.45);
+    // An explicitly approved product identity prevents repeat review based on the name alone.
+    // Other ambiguities (multiple prices, unknown price kind) still remain pending.
+    let previouslyReviewed = false;
+    if (pool && !match.matched && candidate.confidence >= 0.8 && candidate.price_kind === "wholesale") {
+      const known = await pool.query(
+        "SELECT 1 FROM reviewed_price_products WHERE identity_key=$1 LIMIT 1",
+        [identityKey(row)]
+      );
+      previouslyReviewed = known.rowCount > 0;
+    }
+    row.confidence = Math.min(candidate.confidence, match.matched || previouslyReviewed ? 0.98 : 0.45);
     row.decision = row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
     const fp = fingerprint(row);
     if (seen.has(fp)) continue;

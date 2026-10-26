@@ -19,6 +19,7 @@ const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { renderPriceListImages } = require("./modules/price-list-image");
 const priceMonitor = require("./modules/price-monitor");
+const priceReview = require("./modules/price-review");
 const { saveMerchant } = require("./modules/merchant-intelligence");
 const chemical = require("./modules/chemical-assistant");
 const deals = require("./modules/deals");
@@ -444,6 +445,39 @@ bot.on("text", async ctx => {
   const text = m.text;
   const cmd = commandName(text);
   const args = commandText(text);
+  if (cmd === "priceedit" && m.chatType === "private") {
+    if (!(await isPrivateController(m.userId))) { await ctx.reply("هذا الإجراء متاح للمسؤولين المخوّلين فقط."); return; }
+    const fields = args.split("|").map(value => value.trim());
+    if (fields.length !== 6) { await ctx.reply("صيغة غير صحيحة. استخدم: /priceedit ID | اسم الصنف | السعر | الوزن_جرام أو - | الحجم_مللي أو - | عدد العبوات أو -"); return; }
+    const [idText, productText, priceText, weightText, volumeText, packText] = fields;
+    const id = Number(idText), price = Number(priceText.replace(",", "."));
+    const parseOptional = value => value === "-" || value === "" ? null : Number(value.replace(",", "."));
+    const weightG = parseOptional(weightText), volumeMl = parseOptional(volumeText), packCount = parseOptional(packText);
+    if (!Number.isSafeInteger(id) || id < 1 || !productText || productText.length > 160 ||
+        !Number.isFinite(price) || price <= 0 || price >= 100000 ||
+        (weightG !== null && (!Number.isFinite(weightG) || weightG <= 0)) ||
+        (volumeMl !== null && (!Number.isFinite(volumeMl) || volumeMl <= 0)) ||
+        (packCount !== null && (!Number.isInteger(packCount) || packCount <= 0 || packCount > 1000))) {
+      await ctx.reply("القيم غير صالحة. راجع رقم السجل واسم الصنف والسعر والوزن والحجم والعدد."); return;
+    }
+    try {
+      const result = await priceReview.saveEditedReview({ db, id, reviewerId: m.userId, productText, price, weightG, volumeMl, packCount });
+      if (!result.ok) { await ctx.reply("لم يتم التعديل: السجل غير موجود أو تمت مراجعته مسبقًا."); return; }
+      const queue = await db.query("SELECT log_chat_id, log_message_id FROM price_review_queue WHERE observation_id=$1", [id]);
+      const target = queue.rows[0];
+      if (target?.log_chat_id && target?.log_message_id) {
+        await ctx.telegram.editMessageText(target.log_chat_id, target.log_message_id, undefined,
+          `✏️ تم تعديل واعتماد سجل السعر #${id}\nالصنف: ${productText}\nالسعر: ${price.toFixed(2)} ج.م\nنوع السعر: جملة\nالمراجع: ${m.userId}`,
+          { reply_markup: { inline_keyboard: [] } }).catch(() => {});
+      }
+      await ctx.reply("تم حفظ التعديل واعتماد السعر، وأزيلت أزرار المراجعة من رسالة السجل.");
+    } catch (error) {
+      await ctx.reply("تعذر حفظ التعديل. لم يتم تأكيد نجاح العملية؛ راجع لوحة الأسعار وحاول لاحقًا.");
+      await sendLog({ module: "price-monitor", stage: "review_edit", severity: "error", status: "failed", details: { observationId: id, error: redactString(error?.message || "review edit failed") } });
+    }
+    return;
+  }
+
 
   // /claim submits a request only; it never grants group access.
   if (cmd === "claim" && ["group", "supergroup"].includes(m.chatType)) {
@@ -677,12 +711,28 @@ bot.on("text", async ctx => {
   try {
     const result = await priceMonitor.observe({ pool: db.pool, message: m, merchantId, registry });
     if (result.saved > 0) {
-      const pending = result.savedRows.filter(item => item.row.decision === "pending").length;
+      const pendingRows = result.savedRows.filter(item => item.row.decision === "pending");
+      for (const item of pendingRows) {
+        try {
+          const queued = await db.query(
+            `INSERT INTO price_review_queue(observation_id, source_chat_id, log_chat_id)
+             VALUES($1,$2,$3) ON CONFLICT(observation_id) DO NOTHING RETURNING id`,
+            [item.id, m.chatId || null, LOG_CHAT_ID]
+          );
+          if (!queued.rowCount) continue;
+          const sent = await bot.telegram.sendMessage(LOG_CHAT_ID, priceReview.formatReviewMessage(item.id, item.row), {
+            reply_markup: priceReview.reviewKeyboard(item.id), disable_web_page_preview: true
+          });
+          await db.query("UPDATE price_review_queue SET log_message_id=$1 WHERE observation_id=$2", [sent.message_id, item.id]);
+        } catch (reviewError) {
+          await sendLog({ module: "price-monitor", stage: "review_notification", severity: "warn", status: "failed", details: { observationId: item.id, error: redactString(reviewError?.message || "review notification failed") } });
+        }
+      }
       await sendLog({
         module: "price-monitor",
         stage: "saved",
         status: "ok",
-        details: { saved: result.saved, pending, candidates: result.accepted.length, merchantId, messageId: m.messageId }
+        details: { saved: result.saved, pending: pendingRows.length, candidates: result.accepted.length, merchantId, messageId: m.messageId }
       });
     }
   } catch (error) {
@@ -705,6 +755,37 @@ bot.on("text", async ctx => {
   }
 
 
+});
+
+
+bot.action(/^prv:(approve|new|ignore):(\\d+)$/, async ctx => {
+  if (!isLogChat(ctx.chat?.id) || !(await isPrivateController(ctx.from?.id))) {
+    await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
+    return;
+  }
+  const action = ctx.match[1], id = Number(ctx.match[2]);
+  try {
+    const result = await priceReview.resolveReview({ db, id, action, reviewerId: ctx.from.id });
+    if (!result.ok) { await ctx.answerCbQuery("تمت معالجة هذا السجل سابقًا أو لم يعد معلّقًا.", { show_alert: true }).catch(() => {}); return; }
+    await ctx.answerCbQuery(action === "ignore" ? "تم تجاهل السجل." : "تم اعتماد السجل.");
+    const status = action === "ignore" ? "🚫 تم التجاهل" : action === "new" ? "🆕 تم اعتماد السعر والصنف الجديد" : "✅ تم اعتماد السعر";
+    const original = ctx.callbackQuery.message?.text || `مراجعة السعر #${id}`;
+    await ctx.editMessageText(`${original}\n\n${status} — بواسطة المسؤول ${ctx.from.id}`, { reply_markup: { inline_keyboard: [] } });
+  } catch (error) {
+    await ctx.answerCbQuery("تعذر حفظ القرار. لم تُزل أزرار المراجعة؛ حاول مرة أخرى.", { show_alert: true }).catch(() => {});
+    await sendLog({ module: "price-monitor", stage: "review_action", severity: "error", status: "failed", details: { observationId: id, action, error: redactString(error?.message || "review action failed") } });
+  }
+});
+
+bot.action(/^prv:edit:(\\d+)$/, async ctx => {
+  if (!isLogChat(ctx.chat?.id) || !(await isPrivateController(ctx.from?.id))) {
+    await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
+    return;
+  }
+  const id = Number(ctx.match[1]);
+  const prompt = `✏️ تعديل سجل السعر #${id}\n\nأرسل الأمر التالي في الخاص بعد استبدال القيم، مع الفصل بعلامة | :\n/priceedit ${id} | اسم الصنف | السعر | الوزن_بالجرام أو - | الحجم_بالمللي أو - | عدد العبوات أو -\n\nسيُحفظ السعر المعدل كسعر جملة معتمد. لا تستخدمه إذا لم تتأكد أن السعر سعر جملة.`;
+  try { await ctx.telegram.sendMessage(ctx.from.id, prompt); await ctx.answerCbQuery("أرسلت تعليمات التعديل إلى الخاص."); }
+  catch { await ctx.answerCbQuery("تعذر مراسلتك على الخاص. افتح محادثة البوت أولًا ثم أعد المحاولة.", { show_alert: true }).catch(() => {}); }
 });
 
 bot.catch(async (err, ctx) => {

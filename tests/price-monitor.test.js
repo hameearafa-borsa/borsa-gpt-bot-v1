@@ -153,5 +153,25 @@ const registry = require("../data/product-registry.json");
   assert.equal(caption.savedRows[0].row.package_sale_price, 18.75);
   assert.equal(captionQueries.length, 2);
 
+  // An explicitly approved identity prevents repeated review for the same clear wholesale product.
+  const { identityKey } = require("../modules/price-review");
+  const identity = identityKey({ product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: null, brand_key: null });
+  const reviewedProductPool = {
+    async query(sql) {
+      if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 95 }], rowCount: 1 };
+      throw new Error("unexpected reviewed product query");
+    }
+  };
+  assert.equal(identity.length, 64);
+  const reviewed = await observe({
+    pool: reviewedProductPool,
+    message: { chatId: -100123, messageId: 462, text: "منظف جديد 500 جم جملة 22 ج" },
+    registry: []
+  });
+  assert.equal(reviewed.saved, 1);
+  assert.equal(reviewed.savedRows[0].row.decision, "accepted");
+
   console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

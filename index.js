@@ -465,12 +465,20 @@ bot.on("text", async ctx => {
       if (!result.ok) { await ctx.reply("لم يتم التعديل: السجل غير موجود أو تمت مراجعته مسبقًا."); return; }
       const queue = await db.query("SELECT log_chat_id, log_message_id FROM price_review_queue WHERE observation_id=$1", [id]);
       const target = queue.rows[0];
+      let buttonsRemoved = false;
       if (target?.log_chat_id && target?.log_message_id) {
-        await ctx.telegram.editMessageText(target.log_chat_id, target.log_message_id, undefined,
-          `✏️ تم تعديل واعتماد سجل السعر #${id}\nالصنف: ${productText}\nالسعر: ${price.toFixed(2)} ج.م\nنوع السعر: جملة\nالمراجع: ${m.userId}`,
-          { reply_markup: { inline_keyboard: [] } }).catch(() => {});
+        try {
+          await ctx.telegram.editMessageText(target.log_chat_id, target.log_message_id, undefined,
+            `✏️ تم تعديل واعتماد سجل السعر #${id}\nالصنف: ${productText}\nالسعر: ${price.toFixed(2)} ج.م\nنوع السعر: جملة\nالمراجع: ${m.userId}`,
+            { reply_markup: { inline_keyboard: [] } });
+          buttonsRemoved = true;
+        } catch (editError) {
+          await sendLog({ module: "price-monitor", stage: "review_edit_clear_buttons", severity: "warn", status: "failed", details: { observationId: id, error: redactString(editError?.message || "could not clear review buttons") } });
+        }
       }
-      await ctx.reply("تم حفظ التعديل واعتماد السعر، وأزيلت أزرار المراجعة من رسالة السجل.");
+      await ctx.reply(buttonsRemoved
+        ? "تم حفظ التعديل واعتماد السعر، وأزيلت أزرار المراجعة من رسالة السجل."
+        : "تم حفظ التعديل واعتماد السعر، لكن تعذر تحديث رسالة المراجعة أو إزالة أزرارها. يرجى مراجعة قناة السجل.");
     } catch (error) {
       await ctx.reply("تعذر حفظ التعديل. لم يتم تأكيد نجاح العملية؛ راجع لوحة الأسعار وحاول لاحقًا.");
       await sendLog({ module: "price-monitor", stage: "review_edit", severity: "error", status: "failed", details: { observationId: id, error: redactString(error?.message || "review edit failed") } });

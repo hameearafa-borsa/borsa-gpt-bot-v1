@@ -160,7 +160,8 @@ function makePipelinePool() {
   });
   assert.ok(failedPublish.failed >= 1);
   assert.ok(publishErrors >= 1);
-  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "pending"));
+  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
+    "terminal delivery failures must leave the pending queue so newer snapshots are not starved");
 
   const retrySent = [];
   const retry = await checkCatalogsOnce({
@@ -168,7 +169,7 @@ function makePipelinePool() {
     chatId: -100123, fetchPage
   });
   assert.equal(retrySent.length, 0, "an ambiguous Telegram send outcome must not be retried automatically");
-  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "pending"),
-    "the snapshot remains pending for manual diagnosis while its delivery record is terminal");
+  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
+    "the snapshot is terminally failed and its delivery record prevents automatic retry");
   console.log("catalog newsletter end-to-end mocked pipeline tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

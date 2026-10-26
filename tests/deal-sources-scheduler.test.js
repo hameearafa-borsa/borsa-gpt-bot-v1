@@ -80,6 +80,8 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(ok.ok,true);
  const bad = await verifyProductUrl("https://evil.example/x", {fetchImpl:async()=>({status:200,url:"https://evil.example/x"})});
  assert.equal(bad.ok,false);
+ const notModified = await verifyProductUrl("https://www.amazon.eg/dp/B0ABCDEF12", {fetchImpl:async()=>({status:304})});
+ assert.equal(notModified.ok,false, "an unhandled 304 response must not count as a verified product URL");
  let redirectCalls = 0;
  const redirected = await verifyProductUrl("https://www.amazon.eg/dp/B0ABCDEF12", {
    fetchImpl: async (_url, options) => {

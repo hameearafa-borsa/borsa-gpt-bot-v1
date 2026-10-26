@@ -2,6 +2,11 @@
 const { log, redactString } = require("./diagnostics");
 const { normalizeArabic } = require("./normalization");
 
+function isPotentialBotTask(input) {
+  const s = normalizeArabic(input);
+  return /(سعر|اسعار|بكام|بكم|جنيه|ج\\s|بـ|ب\\s*\\d|العبوه|عبوه|علبه|كرتونه|مسحوق|منظف|منظفات|اريال|تايد|بريكس|اوكسي|بيرل|ليدر|قائمه|كتالوج|عروض|خصم|امازون|نون|جوميا|تاجر|محل|عنوان|تليفون|هاتف|واتساب|واتس)/i.test(s);
+}
+
 function deterministicType(input) {
   const s = normalizeArabic(input);
   // Common short greetings and social acknowledgements do not need an AI call.
@@ -12,7 +17,7 @@ function deterministicType(input) {
   if (/(تاجر|محل|عنوان|تليفون|هاتف|واتساب|واتس)/i.test(s) && !/ج\s|جنيه/.test(s)) return "merchant";
   if (/(خصم|عرض|سعر خاص|amazon|امازون|نون|jumia|جوميا)/i.test(s)) return "deals";
   if (/(مسحوق|جيل|اريال|أريال|تايد|بريكس|اوكسي|أوكسي|بيرل|ليدر|سعر|جنيه|ج\s)/i.test(s)) return "price_observation";
-  return null;
+  return isPotentialBotTask(s) ? null : "other";
 }
 
 function createGPTCore({ ai, registry, diagnostics = log }) {

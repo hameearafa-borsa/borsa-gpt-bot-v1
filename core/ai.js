@@ -74,9 +74,9 @@ function groqProvider(key, model) {
 
 function geminiProvider(key, model) {
   return async (prompt, options = {}) => {
-    const selectedModel = model || "gemini-3.5-flash-lite";
+    const selectedModel = model || "gemini-3.8-flash";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`;
-    // Gemini 3.5 Flash-Lite request intentionally omits sampling configuration.
+    // Gemini 3.8 Flash request intentionally omits sampling configuration.
     const data = await requestJson(endpoint, {
       contents: [{ role: "user", parts: [{ text: String(prompt || "") }] }]
     }, { "x-goog-api-key": key }, Number(process.env.GEMINI_TIMEOUT_MS || 45000));
@@ -99,7 +99,7 @@ function providersFromEnv() {
     ["GEMINI_API_KEY_3", process.env.GEMINI_API_KEY_3]
   ];
   for (const [keyName, key] of geminiKeys) {
-    if (key) all.gemini.push({ name: keyName, provider: "gemini", run: geminiProvider(key, process.env.GEMINI_MODEL || "gemini-3.5-flash-lite") });
+    if (key) all.gemini.push({ name: keyName, provider: "gemini", run: geminiProvider(key, process.env.GEMINI_MODEL || "gemini-3.8-flash") });
   }
 
   for (const [keyName, modelName] of [["GROQ_API_KEY", "GROQ_MODEL"], ["GROQ_API_KEY_2", "GROQ_MODEL_2"]]) {

@@ -17,6 +17,7 @@ const MIGRATION_FILES = Object.freeze([
   "009_group_approval.sql",
   "010_price_list_item_types.sql",
   "011_catalog_newsletter_snapshots.sql",
+  "012_catalog_newsletter_deliveries.sql",
 ]);
 
 // A single transaction prevents a failed migration from leaving a partially

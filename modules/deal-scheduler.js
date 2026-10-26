@@ -113,7 +113,7 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
   const key = batchKey(now);
   const existing = await pool.query(
-    "SELECT channel_kind,status FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
+    "SELECT channel_kind,status,chat_id FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
     [key, kind, targetChatIds]
   );
   const publishedChats = new Set(existing.rows.filter(row => row.channel_kind === kind && row.status === "published").map(row => Number(row.chat_id)));

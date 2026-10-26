@@ -231,18 +231,21 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
     }
     if (busy || Date.now() < nextAttemptAt) return;
     busy = true;
+    // Associate backoff with the edition that started this attempt, not the
+    // wall-clock hour when a slow request happens to finish.
+    const attemptKind = currentKind;
     try {
       const result = await publishDailyDeals(scheduledOptions);
       if (shouldBackoffAfterDealAttempt(result)) {
         nextAttemptAt = Date.now() + retryAfterFailureMs;
-        backoffKind = newsletterKindAt();
+        backoffKind = attemptKind;
       } else {
         nextAttemptAt = 0;
         backoffKind = null;
       }
     } catch (error) {
       nextAttemptAt = Date.now() + retryAfterFailureMs;
-      backoffKind = newsletterKindAt();
+      backoffKind = attemptKind;
       await scheduledOptions.onError?.(error, { stage: "scheduler_tick" });
     } finally {
       busy = false;

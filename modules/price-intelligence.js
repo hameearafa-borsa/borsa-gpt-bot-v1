@@ -46,6 +46,16 @@ function numericPriceTokens(text) {
   return [...attached, ...standalone].filter(n => n != null && n > 0 && n < 100000);
 }
 
+ 
+function selectSalePrice(text, fallbackPrices) {
+  const s = toAsciiDigits(text);
+  // Prefer the value explicitly labelled as wholesale when a row has multiple prices.
+  const explicitWholesale = s.match(/(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i);
+  const labelled = explicitWholesale ? parseNumber(explicitWholesale[1]) : null;
+  if (labelled != null && labelled > 0 && labelled < 100000) return labelled;
+  return fallbackPrices[0] ?? null;
+}
+
 function extractProductText(line) {
   return stripQuantityTokens(line)
     .replace(/\d+(?:[.,]\d+)?\s*(?:ج|جنيه|EGP)?/gi, " ")
@@ -82,7 +92,7 @@ function extractPriceCandidates(text) {
     out.push({
       raw_line: line,
       product_text: productText,
-      package_sale_price: numbers[0],
+      package_sale_price: selectSalePrice(stripped, numbers),
       price_kind: priceKind,
       weight_g: q?.grams ?? null,
       volume_ml: q?.milliliters ?? null,

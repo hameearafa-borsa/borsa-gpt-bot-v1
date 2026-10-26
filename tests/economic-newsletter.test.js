@@ -13,9 +13,16 @@ const {
   assert.throws(() => parseBrentPayload({ price: 0, timestamp: "2026-10-26T07:00:00.000Z" }, now), /invalid/);
 
   const html = `<html><body>
-    <div>دولار أمريكي (USD)</div><strong>56.25</strong>
-    <div>ذهب عيار 21</div><strong>6,305.00</strong>
-    <div>جنيه الذهب</div><strong>50,468</strong>
+    <nav>ذهب عيار 24 ذهب عيار 21 جنيه الذهب ذهب عيار 18 ذهب عيار 14
+      البنوك الأهلي المصري كريدي أجريكول مركز دعم واتخاذ القرار أبوظبي التجاري الأهلي الكويتي
+      مصادر بيانات الذهب BTC الجلا جولد جولد بيليون جولد نت eDahab جولدادي
+      ذهب عيار 21 جنيه الذهب ذهب عيار 18 ذهب عيار 14 عملات أخرى
+    </nav>
+    <main>
+      <div>دولار أمريكي (USD)</div><strong>56.25</strong>
+      <div>ذهب عيار 21</div><strong>6,305.00</strong>
+      <div>جنيه الذهب</div><strong>50,468</strong>
+    </main>
   </body></html>`;
   assert.deepEqual(parseLocalMarketHtml(html), { usdEgp: 56.25, gold21Egp: 6305, goldPoundEgp: 50468 });
   assert.throws(() => parseLocalMarketHtml("<html>لا توجد أسعار</html>"), /incomplete/);

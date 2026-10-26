@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
-const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts } = require("../modules/deal-scheduler");
+const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt } = require("../modules/deal-scheduler");
 const { formatNewsletterMessage } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
@@ -12,6 +12,13 @@ assert.equal(safeProductUrl("https://www.amazon.eg/", "amazon"), null);
 assert.equal(categoryOf("مناديل فاين"), "paper");
 assert.equal(categoryOf("شامبو نيفيا"), "personal_care");
 assert.equal(categoryOf("مسحوق غسيل"), "detergent");
+assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "no_deals" }), true);
+assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "all_recent_or_invalid" }), true,
+  "recent duplicate-only results should not trigger another paid scrape every minute");
+assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "message_too_long" }), true,
+  "unpublishable formatting results should be throttled");
+assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "already_published" }), false);
+assert.equal(shouldBackoffAfterDealAttempt({ published: [{ chatId: -100123 }] }), false);
 const html = `<article class="prd"><a href="/paper-product"><h3 class="name">مناديل فاين ورقية</h3></a><div class="prc">25.00 ج</div><div class="old">35.00 ج</div></article>`;
 const cards = extractCards(html,"jumia");
 assert.equal(cards.length,1);

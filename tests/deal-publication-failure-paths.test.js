@@ -79,5 +79,24 @@ function makePool({ failPublishedUpdate = false, failObservation = false } = {})
   assert.ok(errors.includes("publish"));
   assert.equal(pool.calls.some(c => c.sql.startsWith("UPDATE deal_publications SET status='failed'")), true);
   assert.equal(pool.calls.some(c => c.sql.startsWith("INSERT INTO deal_observations")), false);
+
+  // A multi-group run must gather candidates once and send once to each group.
+  const multiPool = makePool();
+  const sentTo = [];
+  let fetchCount = 0;
+  const multi = await publishDailyDeals({
+    pool: multiPool,
+    telegram: { sendMessage: async (target, _message) => { sentTo.push(Number(target)); return { message_id: 9100 + sentTo.length }; } },
+    chatIds: [-100123, -100456],
+    fetcher: async () => { fetchCount++; return { deals: candidates }; },
+    verify: async deals => deals,
+    now: date
+  });
+  assert.equal(fetchCount, 1, "candidate collection should happen once for all groups");
+  assert.deepEqual(sentTo, [-100123, -100456]);
+  assert.equal(multi.published.length, 2, "both approved groups should receive the newsletter");
+  assert.equal(multiPool.calls.filter(c => c.sql.startsWith("INSERT INTO deal_observations")).length, 1,
+    "observed offers should be persisted once, not once per group");
+
   console.log("deal publication failure-path tests: OK");
 })().catch(error => { console.error(error); process.exit(1); });

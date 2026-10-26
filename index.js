@@ -615,7 +615,7 @@ bot.on("text", async ctx => {
 
   if (cmd) return; // commands are intentionally invisible/unusable to unauthorized users
 
-  if (!priceMonitor.isEligibleMessage({ chatType: m.chatType, text, isLogChannel: false, isCommand: false, ownMessage: isBotMessage(ctx, botUserId) })) return;
+  if (!priceMonitor.isEligibleMessage({ chatType: m.chatType, text: text || m.caption || "", isLogChannel: false, isCommand: false, ownMessage: isBotMessage(ctx, botUserId) })) return;
 
   let merchantId = null;
   const phone = text.match(/(?:\+?20|0)?1\d{9,10}/)?.[0];

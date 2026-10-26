@@ -188,17 +188,22 @@ async function configureCommandMenus() {
   const privateOwnerIds = new Set(botOwnerIds);
   const groupOwners = [];
   try {
-    const r = await db.query(`SELECT chat_id, owner_user_id FROM authorized_chats
-      WHERE active=TRUE AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL
-      UNION
-      SELECT chat_id, owner_user_id FROM pending_group_approvals
+    const activeGroups = await db.query(`SELECT chat_id, owner_user_id FROM authorized_chats
+      WHERE active=TRUE AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL`);
+    const pendingGroups = await db.query(`SELECT chat_id, owner_user_id FROM pending_group_approvals
       WHERE status='pending' AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL`);
-    for (const row of r.rows) {
+    for (const row of activeGroups.rows) {
       const chatId = Number(row.chat_id);
       const ownerId = String(row.owner_user_id);
       if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(Number(ownerId))) continue;
       groupOwners.push({ chatId, ownerId });
       privateOwnerIds.add(ownerId);
+    }
+    for (const row of pendingGroups.rows) {
+      const chatId = Number(row.chat_id);
+      const ownerId = String(row.owner_user_id);
+      if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(Number(ownerId))) continue;
+      groupOwners.push({ chatId, ownerId });
     }
     for (const { chatId, ownerId } of groupOwners) {
       try {

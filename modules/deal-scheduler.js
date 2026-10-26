@@ -227,7 +227,7 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
     busy = true;
     try {
       const result = await publishDailyDeals(scheduledOptions);
-      if (result.reason === "no_deals") nextAttemptAt = Date.now() + retryAfterFailureMs;
+      if (shouldBackoffAfterDealAttempt(result)) nextAttemptAt = Date.now() + retryAfterFailureMs;
       else nextAttemptAt = 0;
     } catch (error) {
       nextAttemptAt = Date.now() + retryAfterFailureMs;
@@ -239,4 +239,8 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
   timer.unref?.();
   return () => clearInterval(timer);
 }
-module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, startDealScheduler };
+function shouldBackoffAfterDealAttempt(result) {
+  return Boolean(result?.skipped && ["no_deals", "all_recent_or_invalid", "message_too_long"].includes(result.reason));
+}
+
+module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, startDealScheduler };

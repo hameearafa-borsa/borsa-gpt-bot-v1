@@ -42,10 +42,7 @@ async function recoverPendingNotifications({
           RETURNING observation_id`,
         [sentMessage.message_id, row.observation_id]
       );
-      if (!saved.rowCount) {
-        await telegram.deleteMessage?.(row.target_log_chat_id, sentMessage.message_id).catch(() => {});
-        throw new Error("price_review_notification_claim_lost");
-      }
+      if (!saved.rowCount) throw new Error("price_review_notification_claim_lost");
       stats.sent += 1;
     } catch (error) {
       stats.failed += 1;

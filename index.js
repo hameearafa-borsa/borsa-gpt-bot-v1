@@ -383,19 +383,19 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
       ? ["accepted", "pending"].map(kind => {
           const row = counts.find(item => item.decision === kind);
           return `${kind === "accepted" ? "مرصودة بثقة عالية" : "تحتاج مراجعة"}: ${row?.n ?? 0}`;
-        }).join("\\n")
+        }).join("\n")
       : "تعذر قراءة ملخص الرصد من قاعدة البيانات؛ لم يتم تغيير أي سجل.";
     const pendingText = pending.length
       ? pending.map((row, i) => {
-          const name = String(row.product_text || row.raw_text || "صنف غير محدد").replace(/\\s+/g, " ").slice(0, 90);
+          const name = String(row.product_text || row.raw_text || "صنف غير محدد").replace(/\s+/g, " ").slice(0, 90);
           const price = Number(row.package_sale_price);
           const confidence = row.confidence == null ? "غير محددة" : `${Math.round(Number(row.confidence) * 100)}٪`;
           const date = row.observed_at ? new Date(row.observed_at).toLocaleString("ar-EG") : "وقت غير محدد";
-          return `${i + 1}. ${name} — ${Number.isFinite(price) ? price.toFixed(2) + " ج.م" : "سعر غير واضح"}\\n   النوع: ${row.price_kind || "غير محدد"} — الثقة: ${confidence} — ${date}`;
-        }).join("\\n")
+          return `${i + 1}. ${name} — ${Number.isFinite(price) ? price.toFixed(2) + " ج.م" : "سعر غير واضح"}\n   النوع: ${row.price_kind || "غير محدد"} — الثقة: ${confidence} — ${date}`;
+        }).join("\n")
       : "لا توجد سجلات معلقة حديثة، أو تعذر تحميلها.";
     await ctx.editMessageText(
-      `💰 رصد الأسعار — مراجعة داخلية\\n\\n${countText}\\n\\nآخر الأسعار التي تحتاج مراجعة:\\n${pendingText}\\n\\nهذه شاشة متابعة فقط؛ لا تعتمد الأسعار أو تعدّلها تلقائيًا. السعر الملتبس يظل قيد المراجعة.`,
+      `💰 رصد الأسعار — مراجعة داخلية\n\n${countText}\n\nآخر الأسعار التي تحتاج مراجعة:\n${pendingText}\n\nهذه شاشة متابعة فقط؛ لا تعتمد الأسعار أو تعدّلها تلقائيًا. السعر الملتبس يظل قيد المراجعة.`,
       { reply_markup: adminPanel.actionKeyboard() }
     );
     return;

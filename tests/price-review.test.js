@@ -29,5 +29,27 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   assert.equal(edited.ok, true);
   assert.match(editedCalls[0].sql, /decision='accepted'/);
   assert.match(editedCalls[1].sql, /status='accepted'/);
-  console.log("price review identity, controls, atomic resolution and edit-save tests: OK");
+
+  // A missing queue row must fail the transaction rather than leave the
+  // observation accepted while its review request is still unresolved.
+  const missingQueueDb = { async withTransaction(fn) { return fn({ async query(sql) {
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ ...row, id: 43 }] };
+    if (sql.includes("reviewed_price_products")) return { rowCount: 1, rows: [] };
+    if (sql.includes("UPDATE price_review_queue")) return { rowCount: 0, rows: [] };
+    throw new Error("unexpected query");
+  } }); } };
+  await assert.rejects(
+    resolveReview({ db: missingQueueDb, id: 43, action: "new", reviewerId: 7 }),
+    /price_review_queue_missing_or_resolved/
+  );
+  const missingEditQueueDb = { async withTransaction(fn) { return fn({ async query(sql) {
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ id: 44 }] };
+    if (sql.includes("UPDATE price_review_queue")) return { rowCount: 0, rows: [] };
+    throw new Error("unexpected query");
+  } }); } };
+  await assert.rejects(
+    saveEditedReview({ db: missingEditQueueDb, id: 44, reviewerId: 7, productText: "منظف مصحح", price: 23 }),
+    /price_review_queue_missing_or_resolved/
+  );
+  console.log("price review identity, controls, atomic resolution, edit-save and queue consistency tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

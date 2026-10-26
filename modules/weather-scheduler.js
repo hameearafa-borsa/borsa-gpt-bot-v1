@@ -33,11 +33,9 @@ async function reservePublication(pool, date, slotKey, chatId) {
   const inserted = await pool.query(`INSERT INTO weather_publications(cairo_date,slot_key,chat_id,status)
     VALUES($1,$2,$3,'prepared') ON CONFLICT(cairo_date,slot_key,chat_id) DO NOTHING RETURNING id`, [date, slotKey, chatId]);
   if (inserted.rowCount) return inserted.rows[0].id;
-  // Retry only a known failed send in the same five-minute window. A prepared
-  // row is intentionally not retried: Telegram may have accepted it before a crash.
-  const retry = await pool.query(`UPDATE weather_publications SET status='prepared',last_error=NULL,created_at=NOW()
-    WHERE cairo_date=$1 AND slot_key=$2 AND chat_id=$3 AND status='failed' RETURNING id`, [date, slotKey, chatId]);
-  return retry.rows[0]?.id || null;
+  // A failed send can still have reached Telegram if its acknowledgement was lost.
+  // Treat every existing reservation as handled; reconcile failed rows manually.
+  return null;
 }
 
 async function publishWeatherSlot({ pool, telegram, now = new Date(), getReport = getDailyWeatherReport, onError = async () => {} }) {

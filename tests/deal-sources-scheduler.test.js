@@ -93,6 +93,12 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(redirected.ok, false);
  assert.equal(redirected.reason, "redirect_host_not_allowed");
  assert.equal(redirectCalls, 1, "must not make a request to a disallowed redirect target");
+ const malformedRedirect = await verifyProductUrl("https://www.amazon.eg/dp/B0ABCDEF12", {
+   fetchImpl: async () => ({ status: 302, headers: { get: () => "http://[" } })
+ });
+ assert.equal(malformedRedirect.ok, false, "malformed redirect targets must be rejected");
+ assert.equal(malformedRedirect.reason, "redirect_host_not_allowed");
+
  const badPort = await verifyProductUrl("https://www.amazon.eg:8443/dp/B0ABCDEF12");
  assert.equal(badPort.ok, false, "non-standard HTTPS ports must be rejected");
 

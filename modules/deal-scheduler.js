@@ -56,7 +56,9 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
         url = next;
         continue;
       }
-      const ok = response.status >= 200 && response.status < 400;
+      // Only successful 2xx responses verify a product page. Unhandled 3xx
+      // statuses (for example 304) are not proof that the URL is reachable.
+      const ok = response.status >= 200 && response.status < 300;
       return { ok, status: response.status, finalUrl: url.href, reason: ok ? null : "http_error" };
     }
     return { ok: false, reason: "too_many_redirects" };

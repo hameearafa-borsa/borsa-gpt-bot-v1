@@ -9,13 +9,13 @@ const DAILY_MINUTE = 30;
 const GRACE_MINUTES = 5;
 const FETCH_TIMEOUT_MS = 9000;
 const MAX_RESPONSE_BYTES = 2_000_000;
-const BRENT_URL = "https://croncopia.com/api/energy/brent_crude.json";
+const BRENT_URL = "https://query1.finance.yahoo.com/v8/finance/chart/BZ%3DF?range=5d&interval=1d";
 const LOCAL_MARKET_URL = "https://ta3weem.com/ar";
 
 function getText(url, timeoutMs = FETCH_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
-    if (target.protocol !== "https:" || !["croncopia.com", "ta3weem.com"].includes(target.hostname)) {
+    if (target.protocol !== "https:" || !["query1.finance.yahoo.com", "ta3weem.com"].includes(target.hostname)) {
       reject(new Error("economic_source_not_allowed"));
       return;
     }
@@ -83,8 +83,19 @@ function numberAfterLabel(text, labels, maxDistance = 16) {
   return null;
 }
 function parseBrentPayload(payload, now = new Date()) {
-  const price = Number(payload?.price);
-  const timestamp = Date.parse(payload?.timestamp || "");
+  // Yahoo Finance's public chart endpoint provides the Brent futures quote (BZ=F)
+  // and its exchange timestamp. Keep the older flat JSON shape parseable for
+  // deterministic fixtures, but the live request uses Yahoo's chart response.
+  const quote = payload?.chart?.result?.[0];
+  if (payload?.chart && (!quote || payload.chart.error)) throw new Error("economic_brent_invalid_data");
+  if (quote && (quote.meta?.currency !== "USD" || quote.meta?.symbol !== "BZ=F")) {
+    throw new Error("economic_brent_invalid_data");
+  }
+  const price = Number(quote?.meta?.regularMarketPrice ?? payload?.price);
+  const rawTimestamp = quote?.meta?.regularMarketTime;
+  const timestamp = Number.isFinite(Number(rawTimestamp))
+    ? Number(rawTimestamp) * 1000
+    : Date.parse(payload?.timestamp || "");
   if (!Number.isFinite(price) || price <= 0 || !Number.isFinite(timestamp)) throw new Error("economic_brent_invalid_data");
   // The feed is refreshed hourly; allow a weekend gap but never accept a clearly stale quote.
   if (timestamp > now.getTime() + 5 * 60_000 || now.getTime() - timestamp > 96 * 60 * 60_000) {

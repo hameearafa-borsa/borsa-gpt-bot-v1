@@ -7,8 +7,16 @@ const {
 
 (async () => {
   const now = new Date("2026-10-26T07:31:00.000Z"); // 10:31 Africa/Cairo
-  const brent = parseBrentPayload({ price: 88.13, timestamp: "2026-10-26T07:00:00.000Z" }, now);
-  assert.equal(brent.price, 88.13);
+  const brent = parseBrentPayload({ chart: { result: [{ meta: {
+    currency: "USD", symbol: "BZ=F", regularMarketPrice: 111.7,
+    regularMarketTime: Math.floor(Date.parse("2026-10-26T07:00:00.000Z") / 1000)
+  } }], error: null } }, now);
+  assert.equal(brent.price, 111.7);
+  assert.equal(parseBrentPayload({ price: 88.13, timestamp: "2026-10-26T07:00:00.000Z" }, now).price, 88.13);
+  assert.throws(() => parseBrentPayload({ chart: { result: [{ meta: {
+    currency: "USD", symbol: "BZ=F", regularMarketPrice: 111.7,
+    regularMarketTime: Math.floor(Date.parse("2026-10-20T07:00:00.000Z") / 1000)
+  } }], error: null } }, now), /stale/);
   assert.throws(() => parseBrentPayload({ price: 88.13, timestamp: "2026-10-20T07:00:00.000Z" }, now), /stale/);
   assert.throws(() => parseBrentPayload({ price: 0, timestamp: "2026-10-26T07:00:00.000Z" }, now), /invalid/);
 

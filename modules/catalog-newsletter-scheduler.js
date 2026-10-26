@@ -121,8 +121,8 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
     // Preserve legacy snapshot status as a summary only. Per-group delivery records
     // are authoritative, and no snapshot is marked published while any target failed.
     try {
-      const statuses = await pool.query("SELECT status FROM catalog_newsletter_deliveries WHERE snapshot_id=$1", [snapshot.id]);
-      const allPublished = targets.every(target => statuses.rows.some(row => row.status === "published"));
+      const statuses = await pool.query("SELECT chat_id,status FROM catalog_newsletter_deliveries WHERE snapshot_id=$1", [snapshot.id]);
+      const allPublished = targets.every(target => statuses.rows.some(row => Number(row.chat_id) === target && row.status === "published"));
       if (allPublished) await markCatalogSnapshot(pool, snapshot.id, "published");
     } catch (error) {
       await onError(error, { stage: "catalog_snapshot_summary", store: snapshot.store_key, snapshotId: snapshot.id });

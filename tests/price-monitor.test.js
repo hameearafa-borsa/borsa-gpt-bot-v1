@@ -32,8 +32,25 @@ const registry = require("../data/product-registry.json");
   assert.equal(result.savedRows[0].id, 91);
   assert.equal(result.accepted[0].price_kind, "wholesale");
   assert.equal(result.accepted[0].package_sale_price, 18.75);
+  assert.equal(result.accepted[0].decision, "accepted");
   assert.equal(savedQueries.length, 2);
   assert.ok(savedQueries[1].sql.includes("INSERT INTO price_observations"));
+  assert.ok(savedQueries[1].sql.includes("product_text"));
+  assert.ok(savedQueries[1].sql.includes("offer_extra_weight_g"));
+  assert.equal(savedQueries[1].params[13], "accepted");
+
+  // A plausible price without an explicit wholesale marker or registry match
+  // is retained as pending review data instead of being silently discarded.
+  const uncertain = await observe({
+    pool,
+    message: { chatId: -100123, messageId: 457, userId: 789, text: "منظف مجهول 30 جنيه" },
+    registry
+  });
+  assert.equal(uncertain.silent, true);
+  assert.equal(uncertain.saved, 1);
+  assert.equal(uncertain.savedRows[0].row.decision, "pending");
+  assert.ok(uncertain.savedRows[0].row.confidence < 0.8);
+  assert.equal(savedQueries.length, 4);
 
   const noDb = await observe({ message: { text: base.text }, registry });
   assert.equal(noDb.saved, 0);

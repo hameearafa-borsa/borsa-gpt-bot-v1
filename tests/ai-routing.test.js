@@ -62,6 +62,28 @@ try {
   assert.equal(result.provider, "groq");
   assert.deepEqual(calls, ["gemini-1", "gemini-2", "openai", "groq"]);
 
+  const slowGeminiCalls = [];
+  const slowGeminiProviders = [
+    provider("GEMINI_API_KEY_1", "gemini", async () => { slowGeminiCalls.push("gemini-1"); throw httpError(503, "upstream overloaded"); }),
+    provider("GEMINI_API_KEY_2", "gemini", async () => { slowGeminiCalls.push("gemini-2"); return { text: "must not call sibling key", provider: "gemini" }; }),
+    provider("OPENAI_API_KEY", "openai", async () => { slowGeminiCalls.push("openai"); return { text: "recovered answer", provider: "openai" }; })
+  ];
+  const slowGeminiRouted = createAI({ provider: "gemini", fallbackProviders: ["openai"], providers: slowGeminiProviders });
+  const recovered = await slowGeminiRouted.generate("test prompt");
+  assert.equal(recovered.provider, "openai");
+  assert.deepEqual(slowGeminiCalls, ["gemini-1", "openai"], "a provider-wide 503 should not wait through each Gemini key slot");
+
+  const rateLimitCalls = [];
+  const rateLimitProviders = [
+    provider("GEMINI_API_KEY_1", "gemini", async () => { rateLimitCalls.push("gemini-1"); throw httpError(429, "quota exceeded"); }),
+    provider("GEMINI_API_KEY_2", "gemini", async () => { rateLimitCalls.push("gemini-2"); return { text: "Gemini answer", provider: "gemini" }; }),
+    provider("OPENAI_API_KEY", "openai", async () => { rateLimitCalls.push("openai"); return { text: "must not call fallback", provider: "openai" }; })
+  ];
+  const rateLimitRouted = createAI({ provider: "gemini", fallbackProviders: ["openai"], providers: rateLimitProviders });
+  const rateLimitResult = await rateLimitRouted.generate("test prompt");
+  assert.equal(rateLimitResult.provider, "gemini");
+  assert.deepEqual(rateLimitCalls, ["gemini-1", "gemini-2"], "a key-specific 429 should rotate to another Gemini key before changing providers");
+
   const credentialCalls = [];
   const credentialProviders = [
     provider("GEMINI_API_KEY_1", "gemini", async () => { credentialCalls.push("gemini-1"); throw httpError(401, "invalid_api_key"); }),

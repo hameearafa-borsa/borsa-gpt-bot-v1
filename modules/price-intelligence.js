@@ -74,9 +74,10 @@ function extractPriceCandidates(text) {
     const kind = classifyPriceKind(line);
     if (kind === "retail") continue;
 
-    const packCount = parsePackCount(line);
-    const extraWeightG = parseExtraWeight(line);
-    const stripped = stripQuantityTokens(line);
+    const parsedLine = toAsciiDigits(line);
+    const packCount = parsePackCount(parsedLine);
+    const extraWeightG = parseExtraWeight(parsedLine);
+    const stripped = stripQuantityTokens(parsedLine);
     const numbers = numericPriceTokens(stripped);
     if (!numbers.length) continue;
 

@@ -92,5 +92,33 @@ const registry = require("../data/product-registry.json");
   assert.ok(pearl.savedRows[0].row.confidence < 0.8);
   assert.equal(pearlQueries.length, 2);
 
-  console.log("price monitor eligibility, extraction, persistence, and silent-mode tests: OK");
+  // Re-processing the same Telegram message row must not create a second observation.
+  let duplicateChecks = 0;
+  let duplicateInserts = 0;
+  const duplicatePool = {
+    async query(sql) {
+      if (sql.includes("SELECT 1 FROM price_observations")) {
+        duplicateChecks += 1;
+        return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      }
+      if (sql.includes("INSERT INTO price_observations")) {
+        duplicateInserts += 1;
+        return { rows: [{ id: 93 }], rowCount: 1 };
+      }
+      throw new Error("unexpected duplicate query");
+    }
+  };
+  const duplicate = await observe({
+    pool: duplicatePool,
+    message: {
+      chatId: -100123, messageId: 459, userId: 789,
+      text: "بيرل 9 ك: 505.31 | جملة 487.40 | مستهلك 525"
+    },
+    registry
+  });
+  assert.equal(duplicate.saved, 0);
+  assert.equal(duplicateChecks, 1);
+  assert.equal(duplicateInserts, 0);
+
+  console.log("price monitor eligibility, extraction, persistence, duplicate protection, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

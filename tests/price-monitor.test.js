@@ -120,5 +120,16 @@ const registry = require("../data/product-registry.json");
   assert.equal(duplicateChecks, 1);
   assert.equal(duplicateInserts, 0);
 
-  console.log("price monitor eligibility, extraction, persistence, duplicate protection, and silent-mode tests: OK");
+  // Explicit consumer/retail prices are ignored by the wholesale observation flow.
+  let retailQueries = 0;
+  const retail = await observe({
+    pool: { async query() { retailQueries += 1; throw new Error("retail row should not be persisted"); } },
+    message: { chatId: -100123, messageId: 460, text: "منظف معروف 30 جنيه مستهلك" },
+    registry
+  });
+  assert.equal(retail.saved, 0);
+  assert.equal(retail.accepted.length, 0);
+  assert.equal(retailQueries, 0);
+
+  console.log("price monitor eligibility, extraction, persistence, duplicate protection, retail exclusion, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

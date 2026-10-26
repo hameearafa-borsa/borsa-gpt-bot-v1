@@ -29,11 +29,11 @@ assert.equal(catalogs[0].region, "محافظة القاهرة");
 assert.equal(catalogs[0].url, "https://snapflyer.io/eg/downtown/offers/kazyon/1376");
 assert.ok(catalogs[0].fingerprint);
 const firstEdition = extractCatalogs(
-  '<a href="/eg/downtown/offers/kazyon/1376"><span>Kazyon flyer 1 Nov - 7 Nov</span></a>',
+  '<a title="1 Nov - 7 Nov" href="/eg/downtown/offers/kazyon/1376"><span>Kazyon weekly flyer</span></a>',
   "kazyon"
 );
 const secondEdition = extractCatalogs(
-  '<a href="/eg/downtown/offers/kazyon/1376"><span>Kazyon flyer 8 Nov - 14 Nov</span></a>',
+  '<a title="8 Nov - 14 Nov" href="/eg/downtown/offers/kazyon/1376"><span>Kazyon weekly flyer</span></a>',
   "kazyon"
 );
 assert.equal(firstEdition[0].url, secondEdition[0].url);

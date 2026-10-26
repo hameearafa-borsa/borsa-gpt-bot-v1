@@ -33,6 +33,7 @@ const legacyAdmin = require("./modules/legacy-admin");
 const adminPanel = require("./modules/admin-panel");
 const { fetchSearch } = require("./modules/deal-sources");
 const { startCatalogNewsletterScheduler } = require("./modules/catalog-newsletter-scheduler");
+const { ensureEconomicNewsletterSchema, startEconomicNewsletterScheduler } = require("./modules/economic-newsletter");
 
 const APP_VERSION = require("./package.json").version;
 const BOT_CREDIT = "مدعوم بتقنيات ChatGPT";
@@ -64,6 +65,7 @@ let stopScheduledMessages = () => {};
 let stopDeals = () => {};
 let stopCatalogs = () => {};
 let stopWeather = () => {};
+let stopEconomicNewsletter = () => {};
 let shutdownPromise = null;
 let shutdownRequested = false;
 let startupPhase = true;
@@ -697,6 +699,17 @@ installFatalProcessHandlers({
     }
   });
   console.log("[CATALOG_NEWSLETTER_SCHEDULER] Daily check scheduled for 10:10 Africa/Cairo; targets active approved groups.");
+  await ensureEconomicNewsletterSchema(db.pool);
+  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
+  stopEconomicNewsletter = startEconomicNewsletterScheduler({
+    pool: db.pool,
+    telegram: bot.telegram,
+    onError: async (error, details) => {
+      const report = makeReport({ module: "economic_newsletter", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "economic_bulletin", error, details });
+      await emitReport({ bot, db, report });
+    }
+  });
+  console.log("[ECONOMIC_NEWSLETTER_SCHEDULER] Daily bulletin scheduled for 10:30 Africa/Cairo; targets active approved groups.");
   if (String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() !== "false") {
     await ensureWeatherSchedulerSchema(db.pool);
     if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
@@ -750,6 +763,7 @@ async function shutdown(signal) {
     try { stopDeals(); } catch (error) { console.error("[SHUTDOWN_DEALS_ERROR]", error?.message || error); }
     try { stopCatalogs(); } catch (error) { console.error("[SHUTDOWN_CATALOGS_ERROR]", error?.message || error); }
     try { stopWeather(); } catch (error) { console.error("[SHUTDOWN_WEATHER_ERROR]", error?.message || error); }
+    try { stopEconomicNewsletter(); } catch (error) { console.error("[SHUTDOWN_ECONOMIC_NEWSLETTER_ERROR]", error?.message || error); }
     if (webhookServer?.listening) {
       try { await new Promise((resolve, reject) => webhookServer.close(error => error ? reject(error) : resolve())); }
       catch (error) { console.error("[SHUTDOWN_WEBHOOK_SERVER_ERROR]", error?.message || error); process.exitCode = 1; }

@@ -20,7 +20,7 @@ function makePool({ failPublishedUpdate = false, failObservation = false } = {})
     calls,
     async query(sql, params = []) {
       calls.push({ sql, params });
-      if (sql.startsWith("SELECT channel_kind,status FROM deal_publications")) return { rows: [], rowCount: 0 };
+      if (sql.startsWith("SELECT channel_kind,status")) return { rows: [], rowCount: 0 };
       if (sql.startsWith("SELECT 1 FROM deal_observations")) return { rows: [], rowCount: 0 };
       if (sql.startsWith("INSERT INTO deal_publications")) return { rows: [{ id: 42 }], rowCount: 1 };
       if (sql.startsWith("UPDATE deal_publications SET status='published'")) {

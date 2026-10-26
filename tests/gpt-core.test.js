@@ -41,6 +41,14 @@ const core = createGPTCore({
   assert.equal(colloquialPrice.method, "ai");
   assert.equal(calls, 2);
 
+  const spacedPrice = await core.classify("ده ب ١٢٠");
+  assert.equal(spacedPrice.method, "ai");
+  assert.equal(calls, 3);
+
+  const generalMessage = await core.classify("صباح الخير يا جماعة");
+  assert.notEqual(generalMessage.method, "ai");
+  assert.equal(calls, 3);
+
   const failingCore = createGPTCore({
     ai: {
       generate: async () => {

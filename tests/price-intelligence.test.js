@@ -45,5 +45,23 @@ assert.equal(fieldRows[4].confidence, 0.65);
 assert.equal(fieldRows[5].package_sale_price, 915.87);
 assert.equal(fieldRows[5].confidence, 0.65);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
+assert.equal(fieldRows[6].package_sale_price, 42.33);
+
+// Weight and product-use variant are part of product identity, not price noise.
+const variants = extractPriceCandidates(`اريال ٢ ك يدوي ٤٩٠ج ٤ق
+اريال ٢ ك + ٣٠٠ جم هدية ٥٢٠ج ٤ق
+اريال 2.500 اتوماتيك 828ج 4ق
+اريال 2.5ك اتوماتيك 828ج 4ق`);
+assert.equal(variants.length, 4);
+assert.equal(variants[0].weight_g, 2000);
+assert.match(variants[0].product_text, /يدوي/);
+assert.equal(variants[1].weight_g, 2000);
+assert.equal(variants[1].offer_extra_weight_g, 300);
+assert.equal(variants[2].weight_g, 2500);
+assert.match(variants[2].product_text, /اتوماتيك/);
+assert.equal(variants[3].weight_g, 2500);
+assert.match(variants[3].product_text, /اتوماتيك/);
+assert.notEqual(variants[0].product_text, variants[2].product_text);
+
 
 console.log("price intelligence tests: OK");

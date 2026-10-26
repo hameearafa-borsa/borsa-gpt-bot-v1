@@ -19,6 +19,7 @@ const html = `
 <a href="/eg/downtown/offers/bim/1376"><span>BIM weekly offers November 2026</span></a>
 <a href="/eg/downtown/offers/metro-market/1376"><span>Metro Market offers November 2026</span></a>
 <a href="https://evil.example/eg/downtown/offers/kazyon/1377">Bad link should not pass</a>
+<a href="http://[">Malformed URL should not crash parsing</a>
 <a href="/eg/downtown/stores/kazyon">Store link should not pass</a>
 `;
 const catalogs = extractCatalogs(html, "kazyon");

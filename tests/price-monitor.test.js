@@ -56,5 +56,41 @@ const registry = require("../data/product-registry.json");
   assert.equal(noDb.saved, 0);
   assert.equal(noDb.silent, true);
 
+  // A bare 503 must not trigger any database lookup or insert.
+  let bare503Queries = 0;
+  const bare503 = await observe({
+    pool: { async query() { bare503Queries += 1; throw new Error("503 should not reach persistence"); } },
+    message: { chatId: -100123, messageId: 458, text: "503" },
+    registry
+  });
+  assert.equal(bare503.saved, 0);
+  assert.equal(bare503.accepted.length, 0);
+  assert.equal(bare503Queries, 0);
+
+  // Multi-price Pearl rows keep the labelled wholesale price but remain pending.
+  const pearlQueries = [];
+  const pearlPool = {
+    async query(sql, params) {
+      pearlQueries.push({ sql, params });
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 92 }], rowCount: 1 };
+      throw new Error("unexpected Pearl query");
+    }
+  };
+  const pearl = await observe({
+    pool: pearlPool,
+    message: {
+      chatId: -100123, messageId: 459, userId: 789,
+      text: "بيرل 9 ك: 505.31 | جملة 487.40 | مستهلك 525"
+    },
+    registry
+  });
+  assert.equal(pearl.saved, 1);
+  assert.equal(pearl.savedRows[0].row.package_sale_price, 487.4);
+  assert.equal(pearl.savedRows[0].row.price_kind, "wholesale");
+  assert.equal(pearl.savedRows[0].row.decision, "pending");
+  assert.ok(pearl.savedRows[0].row.confidence < 0.8);
+  assert.equal(pearlQueries.length, 2);
+
   console.log("price monitor eligibility, extraction, persistence, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

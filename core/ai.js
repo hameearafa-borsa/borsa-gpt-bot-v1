@@ -149,10 +149,16 @@ function createAI(options = {}) {
   const primary = configured.filter(p => p.provider === primaryProvider);
   const fallbackProviders = [...new Set((options.fallbackProviders || []).map(x => String(x).toLowerCase()))]
     .filter(provider => provider !== primaryProvider);
-  // Explicit fallback providers are opt-in and ordered. Normal AI routing is unchanged.
+  const envFallbackEnabled = process.env.AI_FALLBACK_ENABLED === "true";
+  // Explicit fallback providers remain ordered; environment-enabled fallback
+  // adds all configured providers after the primary provider.
   const selected = forcedProvider
     ? [...primary, ...fallbackProviders.flatMap(provider => configured.filter(p => p.provider === provider))]
-    : (primary.length ? primary : configured);
+    : (primary.length
+        ? (envFallbackEnabled
+            ? [...primary, ...configured.filter(p => p.provider !== primaryProvider)]
+            : primary)
+        : configured);
   async function generate(prompt, options = {}) {
     if (!selected.length) throw new Error("لا يوجد مزود AI مضبوط");
     const allowCrossProvider = fallbackProviders.length > 0 || process.env.AI_FALLBACK_ENABLED === "true";

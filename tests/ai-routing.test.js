@@ -33,7 +33,7 @@ function httpError(status, message = "simulated provider failure") {
   return new Error(`AI HTTP ${status}: ${message}`);
 }
 
-const envNames = ["AI_PROVIDER", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"];
+const envNames = ["AI_PROVIDER", "AI_FALLBACK_ENABLED", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"];
 const savedEnv = Object.fromEntries(envNames.map(name => [name, process.env[name]]));
 try {
   process.env.AI_PROVIDER = "gemini";
@@ -130,6 +130,59 @@ try {
     assert.equal(error.aiProvider, "groq");
     return true;
   });
+
+  // General routing stays on the primary provider when fallback is disabled.
+  process.env.AI_PROVIDER = "openai";
+  delete process.env.AI_FALLBACK_ENABLED;
+  const disabledCalls = [];
+  const disabled = createAI({ providers: [
+    provider("OPENAI_API_KEY", "openai", async () => {
+      disabledCalls.push("openai"); throw httpError(503);
+    }),
+    provider("GEMINI_API_KEY_1", "gemini", async () => {
+      disabledCalls.push("gemini"); return { text: "unexpected", provider: "gemini" };
+    })
+  ] });
+  await assert.rejects(disabled.generate("test prompt"));
+  assert.deepEqual(disabledCalls, ["openai"]);
+
+  // Enabling fallback adds configured providers and skips sibling keys on 503.
+  process.env.AI_FALLBACK_ENABLED = "true";
+  const fallbackCalls = [];
+  const enabled = createAI({ providers: [
+    provider("OPENAI_API_KEY", "openai", async () => {
+      fallbackCalls.push("openai-1"); throw httpError(503);
+    }),
+    provider("OPENAI_API_KEY_2", "openai", async () => {
+      fallbackCalls.push("openai-2"); return { text: "must skip", provider: "openai" };
+    }),
+    provider("GEMINI_API_KEY_1", "gemini", async () => {
+      fallbackCalls.push("gemini"); return { text: "fallback answer", provider: "gemini" };
+    }),
+    provider("GROQ_API_KEY", "groq", async () => {
+      fallbackCalls.push("groq"); return { text: "unused", provider: "groq" };
+    })
+  ] });
+  const fallbackResult = await enabled.generate("test prompt");
+  assert.equal(fallbackResult.provider, "gemini");
+  assert.deepEqual(fallbackCalls, ["openai-1", "gemini"]);
+
+  // A 401 tries the next key of the same provider before changing providers.
+  const generalCredentialCalls = [];
+  const credential = createAI({ providers: [
+    provider("OPENAI_API_KEY", "openai", async () => {
+      generalCredentialCalls.push("openai-1"); throw httpError(401, "invalid_api_key");
+    }),
+    provider("OPENAI_API_KEY_2", "openai", async () => {
+      generalCredentialCalls.push("openai-2"); return { text: "recovered", provider: "openai" };
+    }),
+    provider("GEMINI_API_KEY_1", "gemini", async () => {
+      generalCredentialCalls.push("gemini"); return { text: "unexpected", provider: "gemini" };
+    })
+  ] });
+  const generalCredentialResult = await credential.generate("test prompt");
+  assert.equal(generalCredentialResult.provider, "openai");
+  assert.deepEqual(generalCredentialCalls, ["openai-1", "openai-2"]);
 
   console.log("AI provider routing and chemical fallback unit tests: OK");
 })().catch(error => {

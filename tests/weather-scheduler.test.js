@@ -53,5 +53,49 @@ function fakeForecast(url) {
   assert.equal(result.sent, 2);
   assert.deepEqual(sent.map(x => x.chatId), ["-100123","-100456"]);
   assert.ok(sent.every(x => x.message === "complete weather bulletin"));
-  console.log("weather schedule and all-or-nothing bulletin tests: OK");
+
+  // A Telegram error can be ambiguous: it may occur after the message was accepted.
+  // The durable reservation must prevent a second send during the same grace window.
+  const reservations = new Map();
+  const ambiguousCalls = [];
+  let nextReservationId = 1;
+  const ambiguousDb = { async query(sql, params = []) {
+    ambiguousCalls.push({ sql, params });
+    if (sql.includes("SELECT chat_id FROM authorized_chats")) return { rows: [{ chat_id: "-100789" }], rowCount: 1 };
+    if (sql.startsWith("INSERT INTO weather_publications")) {
+      const key = params.join("|");
+      if (reservations.has(key)) return { rows: [], rowCount: 0 };
+      const row = { id: nextReservationId++, status: "prepared" };
+      reservations.set(key, row);
+      return { rows: [{ id: row.id }], rowCount: 1 };
+    }
+    if (sql.startsWith("UPDATE weather_publications SET status='failed'")) {
+      const row = [...reservations.values()].find(item => item.id === params[0]);
+      if (row) row.status = "failed";
+      return { rows: [], rowCount: row ? 1 : 0 };
+    }
+    if (sql.startsWith("UPDATE weather_publications SET status='published'")) {
+      const row = [...reservations.values()].find(item => item.id === params[0]);
+      if (row) row.status = "published";
+      return { rows: [], rowCount: row ? 1 : 0 };
+    }
+    return { rows: [], rowCount: 1 };
+  }};
+  let ambiguousSendCount = 0;
+  const ambiguousTelegram = { async sendMessage() {
+    ambiguousSendCount++;
+    throw new Error("connection closed after request; delivery unknown");
+  }};
+  const ambiguousOptions = {
+    pool: ambiguousDb, telegram: ambiguousTelegram, now: utcForCairo("2026-10-24T11:01"),
+    getReport: async () => ({ message: "complete weather bulletin" })
+  };
+  const ambiguousFirst = await publishWeatherSlot(ambiguousOptions);
+  const ambiguousSecond = await publishWeatherSlot(ambiguousOptions);
+  assert.equal(ambiguousFirst.failed, 1);
+  assert.equal(ambiguousSecond.alreadyHandled, 1);
+  assert.equal(ambiguousSendCount, 1, "ambiguous send failures must not be automatically retried");
+  assert.equal(ambiguousCalls.some(call => call.sql.startsWith("UPDATE weather_publications SET status='prepared'")), false);
+
+  console.log("weather schedule, complete bulletin, and ambiguous-send deduplication tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

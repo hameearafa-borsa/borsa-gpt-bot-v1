@@ -22,6 +22,8 @@ assert.equal(chemistry.isChemicalQuestion("المنظفات أسعارها زا�
 assert.equal(chemistry.isChemicalQuestion("/chemical"), false);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة شعبية اقتصادية/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة أعلى جودة/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /unknown-mixture/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /bleach-acid-warning/);
 assert.ok(chemistry.safetyGate("هل أخلط الكلور مع حمض الفلاش؟"));
 assert.ok(chemistry.safetyGate("خلط الكلور مع الأمونيا"));
 assert.ok(chemistry.safetyGate("هل ينفع أخلط كلوركس مع روح الملح؟"));

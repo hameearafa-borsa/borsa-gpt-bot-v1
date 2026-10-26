@@ -86,7 +86,7 @@ function extractPriceCandidates(text) {
     if (normalizedProduct.length < 2 || /^\d/.test(normalizedProduct)) continue;
     if (/^(?:جنيه|ج|egp|ق|قطعه|قطعة)$/.test(normalizedProduct)) continue;
 
-    const quantity = line.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
+    const quantity = parsedLine.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const q = quantity ? parseQuantity(quantity[0]) : null;
     const priceKind = kind === "wholesale" ? "wholesale" : "wholesale_candidate";
 

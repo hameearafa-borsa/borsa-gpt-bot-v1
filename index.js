@@ -6,7 +6,6 @@ const { createWebhookServer, getWebhookConfig } = require("./core/webhook");
 const { createAI } = require("./core/ai");
 const db = require("./core/database");
 const { runMigrations } = require("./core/migrations");
-const { createGPTCore } = require("./core/gpt-core");
 const { loadRegistry } = require("./core/product-registry");
 const { claimMessage, isBotMessage, isLogChat } = require("./core/message-gate");
 const { cacheMessage, getMessageByRef } = require("./core/message-cache");
@@ -59,7 +58,6 @@ try {
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
 const chemicalAI = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] });
-const core = createGPTCore({ ai, registry, diagnostics: log });
 let botUserId = null;
 let stopScheduledMessages = () => {};
 let stopDeals = () => {};

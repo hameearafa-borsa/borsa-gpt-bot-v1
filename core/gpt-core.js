@@ -7,7 +7,18 @@ function isPotentialBotTask(input) {
   return /(سعر|اسعار|بكام|بكم|جنيه|ج\s|(?:^|\s)ب\s*\d|العبوه|عبوه|علبه|كرتونه|مسحوق|منظف|منظفات|اريال|تايد|بريكس|اوكسي|بيرل|ليدر|قائمه|كتالوج|عروض|خصم|امازون|نون|جوميا|تاجر|محل|عنوان|تليفون|هاتف|واتساب|واتس)/i.test(s);
 }
 
-function deterministicType(input) {
+function matchesRegistryBrand(text, registry) {
+  const s = normalizeArabic(text);
+  return (registry?.brands || []).some(brand => {
+    const aliases = brand.aliases || [brand.name_ar];
+    return aliases.some(alias => {
+      const normalizedAlias = normalizeArabic(alias);
+      return normalizedAlias && s.includes(normalizedAlias);
+    });
+  });
+}
+
+function deterministicType(input, registry) {
   const s = normalizeArabic(input);
   // Common short greetings and social acknowledgements do not need an AI call.
   // Keep this deliberately narrow so useful questions are not silently ignored.
@@ -17,13 +28,14 @@ function deterministicType(input) {
   if (/(تاجر|محل|عنوان|تليفون|هاتف|واتساب|واتس)/i.test(s) && !/ج\s|جنيه/.test(s)) return "merchant";
   if (/(خصم|عرض|سعر خاص|amazon|امازون|نون|jumia|جوميا)/i.test(s)) return "deals";
   if (/(مسحوق|جيل|اريال|أريال|تايد|بريكس|اوكسي|أوكسي|بيرل|ليدر|سعر|جنيه|ج\s)/i.test(s)) return "price_observation";
+  if (matchesRegistryBrand(s, registry) && (/\d/.test(s) || /(سعر|اسعار|بكام|بكم|جنيه|ج\s|بـ)/i.test(s))) return "price_observation";
   return isPotentialBotTask(s) ? null : "other";
 }
 
 function createGPTCore({ ai, registry, diagnostics = log }) {
   if (!ai || typeof ai.generate !== "function") throw new Error("GPT Core يحتاج ai.generate");
   async function classify(input, context = {}) {
-    const deterministic = deterministicType(input);
+    const deterministic = deterministicType(input, registry);
     if (deterministic) return { type: deterministic, confidence: 0.9, method: "rules" };
     const started = Date.now();
     const prompt = ["أنت GPT Core لبوت بورصة المنظفات.", "أعد كلمة واحدة فقط: price_observation | price_list | merchant | chemical | moderation | deals | other.", "لا تنفذ قاعدة بيانات أو ترسل رسائل.", `النص: ${String(input || "").slice(0, 6000)}`].join("\n");

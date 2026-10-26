@@ -4,9 +4,9 @@ const crypto = require("node:crypto");
 
 const CATALOG_REGION = "محافظة القاهرة";
 const CATALOG_STORES = Object.freeze({
-  kazyon: { name: "كازيون", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/kazyon" },
-  bim: { name: "BIM", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/bim" },
-  metro_market: { name: "مترو ماركت", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/metro-market?lang=en" }
+  kazyon: { name: "كازيون", catalogSlug: "kazyon", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/kazyon" },
+  bim: { name: "BIM", catalogSlug: "bim", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/bim" },
+  metro_market: { name: "مترو ماركت", catalogSlug: "metro-market", region: CATALOG_REGION, url: "https://snapflyer.io/eg/downtown/stores/metro-market?lang=en" }
 });
 
 const RELEVANT_CATEGORIES = Object.freeze([
@@ -41,6 +41,16 @@ function safeCatalogUrl(raw) {
   }
 }
 
+function catalogUrlBelongsToStore(raw, storeKey) {
+  const store = CATALOG_STORES[storeKey];
+  const safeUrl = safeCatalogUrl(raw);
+  if (!store || !safeUrl) return false;
+  const segments = new URL(safeUrl).pathname.split("/").filter(Boolean);
+  const offersIndex = segments.findIndex(segment => segment.toLowerCase() === "offers");
+  return offersIndex >= 0 &&
+    segments[offersIndex + 1]?.toLowerCase() === store.catalogSlug;
+}
+
 /**
  * Extracts store flyer links from a SnapFlyer store listing page.
  * It deliberately records flyer title/date metadata only; product selection
@@ -53,7 +63,7 @@ function extractCatalogs(html, storeKey) {
   const anchors = [...html.matchAll(/<a\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi)];
   for (const match of anchors) {
     const href = safeCatalogUrl(new URL(match[2], store.url).href);
-    if (!href || !/\/offers\//i.test(new URL(href).pathname)) continue;
+    if (!href || !catalogUrlBelongsToStore(href, storeKey)) continue;
     const title = normalizeText(match[4]);
     if (!title || title.length < 5) continue;
     const context = normalizeText(match[1] + " " + match[3] + " " + match[4]);
@@ -169,6 +179,7 @@ module.exports = {
   normalizeText,
   stableHash,
   safeCatalogUrl,
+  catalogUrlBelongsToStore,
   extractCatalogs,
   isRelevantOffer,
   changedCatalogs,

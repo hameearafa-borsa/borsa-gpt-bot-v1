@@ -58,6 +58,14 @@ function makePipelinePool() {
       if (sql.startsWith("SELECT id FROM catalog_newsletter_snapshots WHERE store_key")) {
         return { rows: [...rows.values()].some(r => r.store_key === params[0]) ? [{ id: 1 }] : [] };
       }
+      if (sql.startsWith("INSERT INTO catalog_newsletter_deliveries")) {
+        const [snapshot_id, chat_id] = params;
+        const existing = [...rows.values()].find(r => r.snapshot_id === snapshot_id && r.chat_id === chat_id && r.delivery === true);
+        if (existing) return { rowCount: 0, rows: [] };
+        const row = { id: nextId++, snapshot_id, chat_id, status: "prepared", delivery: true };
+        rows.set("delivery-" + row.id, row);
+        return { rowCount: 1, rows: [{ id: row.id }] };
+      }
       if (sql.startsWith("INSERT") && sql.includes("RETURNING id")) {
         const [store_key, catalog_url, fingerprint, title, region, displayed_date_range] = params;
         const exists = [...rows.values()].some(r => r.store_key === store_key && r.catalog_url === catalog_url && r.fingerprint === fingerprint);
@@ -75,14 +83,6 @@ function makePipelinePool() {
       if (sql.startsWith("UPDATE") && sql.includes("last_seen_at")) return { rowCount: 1, rows: [] };
       if (sql.startsWith("SELECT id,store_key")) {
         return { rows: [...rows.values()].filter(r => r.status === "pending").slice(0, params[0]) };
-      }
-      if (sql.startsWith("INSERT INTO catalog_newsletter_deliveries")) {
-        const [snapshot_id, chat_id] = params;
-        const existing = [...rows.values()].find(r => r.snapshot_id === snapshot_id && r.chat_id === chat_id && r.delivery === true);
-        if (existing) return { rowCount: 0, rows: [] };
-        const row = { id: nextId++, snapshot_id, chat_id, status: "prepared", delivery: true };
-        rows.set("delivery-" + row.id, row);
-        return { rowCount: 1, rows: [{ id: row.id }] };
       }
       if (sql.startsWith("UPDATE catalog_newsletter_deliveries")) {
         const row = [...rows.values()].find(r => r.id === params[0] && r.delivery === true);

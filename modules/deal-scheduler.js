@@ -104,7 +104,7 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   const key = batchKey(now);
   const existing = await pool.query("SELECT channel_kind,status FROM deal_publications WHERE batch_key=$1", [key]);
   if (existing.rows.some(r => r.channel_kind === kind && r.status === "published")) return { skipped: true, reason: "already_published", batchKey: key, kind };
-  const gathered = await fetcher();
+  const gathered = await fetcher({ edition: kind });
   if (!gathered.deals?.length) {
     await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [] });
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [] };

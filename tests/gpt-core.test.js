@@ -1,6 +1,8 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { createGPTCore } = require("../core/gpt-core");
+const { loadRegistry } = require("../core/product-registry");
+const registry = loadRegistry();
 
 let calls = 0;
 
@@ -11,7 +13,7 @@ const core = createGPTCore({
       return { text: "chemical" };
     }
   },
-  registry: {},
+  registry,
   diagnostics: () => {}
 });
 
@@ -47,6 +49,21 @@ const core = createGPTCore({
 
   const generalMessage = await core.classify("صباح الخير يا جماعة");
   assert.notEqual(generalMessage.method, "ai");
+  assert.equal(calls, 3);
+
+  const bonuxPrice = await core.classify("بونكس 2 كجم 120");
+  assert.equal(bonuxPrice.type, "price_observation");
+  assert.equal(bonuxPrice.method, "rules");
+  assert.equal(calls, 3);
+
+  const jawyPrice = await core.classify("جوي 1 لتر 40");
+  assert.equal(jawyPrice.type, "price_observation");
+  assert.equal(jawyPrice.method, "rules");
+  assert.equal(calls, 3);
+
+  const plainBrandMention = await core.classify("جوي موجود؟");
+  assert.equal(plainBrandMention.type, "other");
+  assert.equal(plainBrandMention.method, "rules");
   assert.equal(calls, 3);
 
   const failingCore = createGPTCore({

@@ -98,7 +98,9 @@ function extractPriceCandidates(text) {
       volume_ml: q?.milliliters ?? null,
       offer_extra_weight_g: extraWeightG,
       pack_count: packCount,
-      confidence: kind === "wholesale" ? 0.92 : 0.55,
+      // Multiple distinct amounts on one row can mean carton/piece/retail columns or a bad source list.
+      // Preserve the explicitly labelled wholesale value, but leave the row pending for review.
+      confidence: kind === "wholesale" ? (new Set(numbers).size > 1 ? 0.65 : 0.92) : 0.55,
     });
   }
   return out;

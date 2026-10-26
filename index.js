@@ -358,7 +358,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
   if (action === "health") {
     let dbState = "غير متاح";
     try { await db.query("SELECT 1"); dbState = "متصل"; } catch (e) { dbState = `فشل (${String(e.code || e.message).slice(0,80)})`; }
-    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || []).join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nSCRAPER_API_KEY_2: ${process.env.SCRAPER_API_KEY_2 ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nDEALS_CHAT_ID: ${process.env.DEALS_CHAT_ID ? "مضبوط" : "غير مضبوط"}\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
+    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || []).join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nSCRAPER_API_KEY_2: ${process.env.SCRAPER_API_KEY_2 ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nوجهة النشرات: المجموعات المعتمدة النشطة من قاعدة البيانات\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
     await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() }); return;
   }
   if (action === "scraper_test") {
@@ -391,7 +391,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
     prices: "💰 رصد الأسعار\nالرصد التلقائي يعمل بصمت داخل المجموعة المصرح بها. أرسل سعرًا واضحًا في المجموعة، ولن تظهر رسالة لكل عملية رصد.",
     lists: "📋 قوائم الشركات\nاستخدم /قائمة ثم ألصق نص القائمة. لا ترسل رابطًا إلا إذا كانت الرسالة الأصلية قد مرّت على البوت وتم تخزين مرجعها. الصفوف غير الواضحة تُحال للمراجعة بدل التخمين.",
     merchants: "🏪 بيانات التجار\nتُحفظ البيانات فقط عند توافر مؤشرات موثوقة، ولا يطلب البوت من الأعضاء نشر بيانات شخصية بلا داعٍ.",
-    deals: `🛍️ العروض\nحالة المفتاح: ${process.env.SCRAPER_API_KEY ? "موجود، استخدم زر اختبار المصدر" : "SCRAPER_API_KEY غير مضبوط"}\nحالة النشر: ${process.env.DEALS_CHAT_ID ? "وجهة النشر مضبوطة" : "DEALS_CHAT_ID غير مضبوط"}\nلا تُنشر عروض مخترعة عند فشل المصدر.`,
+    deals: `🛍️ العروض\nحالة المفتاح: ${process.env.SCRAPER_API_KEY ? "موجود، استخدم زر اختبار المصدر" : "SCRAPER_API_KEY غير مضبوط"}\nوجهات النشر: المجموعات المعتمدة النشطة في قاعدة البيانات؛ لا يلزم ضبط DEALS_CHAT_ID\nلا تُنشر عروض مخترعة عند فشل المصدر.`,
     protection: "🛡️ الحماية والإنذارات\nالأوامر الإدارية /antispam و/warn و/warnings و/clearwarn متاحة للمصرح لهم فقط. الحذف التلقائي يظل معطلاً ما لم يُفعّل صراحةً في البيئة. إجراء الإعدادات لكل مجموعة سيبقى مرتبطًا بمعرّف المجموعة وليس الخاص.",
     inactive: "👥 الأعضاء الخاملون\nاستخدم /inactive 30 داخل المجموعة المصرح بها. التقرير يعتمد على نشاط الرسائل التي رصدها البوت منذ بدء التتبع، وليس تعدادًا كاملًا للأعضاء."
   };
@@ -687,8 +687,7 @@ installFatalProcessHandlers({
     const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
     await emitReport({ bot, db, report });
   } });
-  // Catalog notices target every currently approved group. DEALS_CHAT_ID is
-  // retained only for legacy deal publication while that scheduler is migrated.
+  // Catalog notices target every active, approved group from authorized_chats.
   stopCatalogs = startCatalogNewsletterScheduler({
     pool: db.pool,
     telegram: bot.telegram,

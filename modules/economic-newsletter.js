@@ -67,7 +67,7 @@ function htmlToText(html) {
     .replace(/\s+/g, " ").trim();
 }
 
-function numberAfterLabel(text, labels, maxDistance = 180) {
+function numberAfterLabel(text, labels, maxDistance = 16) {
   const haystack = text.toLowerCase();
   for (const label of labels) {
     const needle = label.toLowerCase();

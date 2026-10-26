@@ -62,7 +62,13 @@ function extractCatalogs(html, storeKey) {
   const results = [];
   const anchors = [...html.matchAll(/<a\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi)];
   for (const match of anchors) {
-    const href = safeCatalogUrl(new URL(match[2], store.url).href);
+    let resolvedUrl;
+    try {
+      resolvedUrl = new URL(match[2], store.url).href;
+    } catch {
+      continue;
+    }
+    const href = safeCatalogUrl(resolvedUrl);
     if (!href || !catalogUrlBelongsToStore(href, storeKey)) continue;
     const title = normalizeText(match[4]);
     if (!title || title.length < 5) continue;

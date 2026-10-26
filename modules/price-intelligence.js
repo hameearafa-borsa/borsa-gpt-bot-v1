@@ -88,6 +88,9 @@ function extractPriceCandidates(text) {
 
     const quantity = parsedLine.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const q = quantity ? parseQuantity(quantity[0]) : null;
+    // In this catalog format, "2.500 اتوماتيك" denotes a 2.5 kg pack even without a unit suffix.
+    const decimalAutomaticWeight = parsedLine.match(/(?:^|\\s)(\\d+[.,]\\d{1,3})\\s*(?:كجم|ك)?\\s*(?:اتوماتيك|اوتوماتيك)/i);
+    const decimalAutomaticGrams = decimalAutomaticWeight ? Math.round(Number(decimalAutomaticWeight[1].replace(",", ".")) * 1000) : null;
     const priceKind = kind === "wholesale" ? "wholesale" : "wholesale_candidate";
 
     out.push({
@@ -95,7 +98,7 @@ function extractPriceCandidates(text) {
       product_text: productText,
       package_sale_price: selectSalePrice(stripped, numbers),
       price_kind: priceKind,
-      weight_g: q?.grams ?? null,
+      weight_g: q?.grams ?? decimalAutomaticGrams,
       volume_ml: q?.milliliters ?? null,
       offer_extra_weight_g: extraWeightG,
       pack_count: packCount,

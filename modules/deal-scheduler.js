@@ -51,7 +51,10 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
         const location = response.headers?.get?.("location") || response.headers?.location;
         if (!location) return { ok: false, reason: "redirect_without_location" };
         if (redirects === maxRedirects) return { ok: false, reason: "too_many_redirects" };
-        const next = safeUrl(new URL(location, url).href);
+        let resolvedLocation;
+        try { resolvedLocation = new URL(location, url).href; }
+        catch { return { ok: false, reason: "redirect_host_not_allowed" }; }
+        const next = safeUrl(resolvedLocation);
         if (!next) return { ok: false, reason: "redirect_host_not_allowed" };
         url = next;
         continue;

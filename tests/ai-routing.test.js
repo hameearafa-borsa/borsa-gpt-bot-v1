@@ -7,6 +7,8 @@ const index = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
 const { createAI, providersFromEnv } = require("../core/ai");
 
 assert.ok(aiSource.includes("gemini-3.5-flash-lite"));
+assert.ok(aiSource.includes("process.env.GEMINI_TIMEOUT_MS || 45000"), "Gemini keeps a longer default timeout for complex, accurate answers");
+assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts must be honored");
 assert.ok(aiSource.includes("x-goog-api-key"));
 const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");

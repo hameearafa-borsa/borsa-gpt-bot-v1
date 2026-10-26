@@ -41,7 +41,9 @@ assert.equal(fieldRows[3].package_sale_price, 490);
 assert.equal(fieldRows[3].pack_count, 4);
 assert.equal(fieldRows[3].weight_g, 2000);
 assert.equal(fieldRows[4].package_sale_price, 487.4);
+assert.equal(fieldRows[4].confidence, 0.65);
 assert.equal(fieldRows[5].package_sale_price, 915.87);
+assert.equal(fieldRows[5].confidence, 0.65);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
 
 console.log("price intelligence tests: OK");

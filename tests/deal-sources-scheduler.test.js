@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
-const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt } = require("../modules/deal-scheduler");
+const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff } = require("../modules/deal-scheduler");
 const { formatNewsletterMessage } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
@@ -19,6 +19,13 @@ assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "message_too
   "unpublishable formatting results should be throttled");
 assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "already_published" }), false);
 assert.equal(shouldBackoffAfterDealAttempt({ published: [{ chatId: -100123 }] }), false);
+assert.equal(shouldResetDealBackoff("amazon", "other_sites"), true,
+  "a failed Amazon attempt must not suppress the 6 PM other-store edition");
+assert.equal(shouldResetDealBackoff("other_sites", "amazon"), true,
+  "a failed 6 PM attempt must not suppress the next Amazon edition");
+assert.equal(shouldResetDealBackoff("amazon", "amazon"), false);
+assert.equal(shouldResetDealBackoff("amazon", null), false,
+  "outside the newsletter windows there is no active edition to reset to");
 const html = `<article class="prd"><a href="/paper-product"><h3 class="name">مناديل فاين ورقية</h3></a><div class="prc">25.00 ج</div><div class="old">35.00 ج</div></article>`;
 const cards = extractCards(html,"jumia");
 assert.equal(cards.length,1);

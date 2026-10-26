@@ -137,11 +137,18 @@ async function mapWithConcurrency(items, limit, worker) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
   return results;
 }
-async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], fetchImpl } = {}) {
+async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], edition = "all", fetchImpl } = {}) {
   const tasks = [];
-  for (const q of amazonQueries) tasks.push({ source: "amazon", query: q });
-  for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push({ source, query: q });
-  tasks.push({ source: "carrefour", query: "" });
+  // Each newsletter queries only the stores it can publish. This avoids
+  // paying for Amazon results during the other-store edition and vice versa.
+  if (edition === "all" || edition === "amazon") {
+    for (const q of amazonQueries) tasks.push({ source: "amazon", query: q });
+  }
+  if (edition === "all" || edition === "other_sites") {
+    for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push({ source, query: q });
+    tasks.push({ source: "carrefour", query: "" });
+  }
+  if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
   const deals = [], errors = [];
   const seen = new Set();

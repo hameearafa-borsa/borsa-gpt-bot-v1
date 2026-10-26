@@ -6,7 +6,7 @@ const aiSource = fs.readFileSync(path.join(__dirname, "../core/ai.js"), "utf8");
 const index = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
 const { createAI, providersFromEnv } = require("../core/ai");
 
-assert.ok(aiSource.includes("gemini-3.5-flash-lite"));
+assert.ok(aiSource.includes("gemini-3.8-flash"));
 assert.ok(aiSource.includes("process.env.GEMINI_TIMEOUT_MS || 45000"), "Gemini keeps a longer default timeout for complex, accurate answers");
 assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts must be honored");
 assert.ok(aiSource.includes("x-goog-api-key"));
@@ -15,7 +15,7 @@ assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist
 assert.ok(!openAISection.includes("temperature:"), "Responses request must not send unsupported temperature field");
 const geminiSection = aiSource.slice(aiSource.indexOf("function geminiProvider"), aiSource.indexOf("function providersFromEnv"));
 assert.ok(geminiSection.length > 0, "Gemini provider implementation should exist");
-assert.ok(!geminiSection.includes("temperature"), "Gemini 3.5 Flash-Lite request must omit deprecated temperature sampling parameter");
+assert.ok(!geminiSection.includes("temperature"), "Gemini 3.8 Flash request must omit temperature sampling parameter");
 assert.ok(!geminiSection.includes("generationConfig"), "Gemini request should omit deprecated sampling configuration");
 assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
 assert.ok(aiSource.includes("function isCredentialError"));

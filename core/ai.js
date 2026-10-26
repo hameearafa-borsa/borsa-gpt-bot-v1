@@ -132,6 +132,15 @@ function isRetryable(error) {
   return status === 408 || status === 409 || status === 429 || status >= 500 || /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(message);
 }
 
+// Timeouts and provider/server failures are usually shared by every key for the
+// same model endpoint. Keep the full timeout for answer quality, but do not spend
+// it repeatedly on sibling keys when a different provider can recover the request.
+function isProviderWideFailure(error) {
+  const message = String(error?.message || "");
+  const status = providerStatus(error);
+  return status === 408 || status >= 500 || /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(message);
+}
+
 function createAI(options = {}) {
   // Optional provider injection supports deterministic unit tests; production defaults to environment configuration.
   const configured = Array.isArray(options.providers) ? options.providers : providersFromEnv();
@@ -172,7 +181,7 @@ function createAI(options = {}) {
         console.warn(`[AI_FAIL] provider=${p.provider} key_slot=${p.name} retryable=${retryable} credential_error=${credentialError} error=${redactString(e?.message || "provider_error")}`);
         // Invalid credentials may be isolated to one key slot. Do not retry permanent
         // model/request errors across every key of the same provider.
-        if (!retryable && !credentialError) {
+        if (isProviderWideFailure(e) || (!retryable && !credentialError)) {
           if (!allowCrossProvider) throw e;
           skipProvider = p.provider;
         }

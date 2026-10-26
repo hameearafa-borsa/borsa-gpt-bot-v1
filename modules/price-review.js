@@ -45,10 +45,13 @@ async function resolveReview({ db, id, action, reviewerId }) {
         [identityKey(row), row.product_text, row.weight_g, row.volume_ml, row.pack_count, row.brand_key, reviewerId]
       );
     }
-    await client.query(
-      "UPDATE price_review_queue SET status=$1, reviewed_by=$2, reviewed_at=NOW() WHERE observation_id=$3 AND status='pending'",
+    const queued = await client.query(
+      "UPDATE price_review_queue SET status=$1, reviewed_by=$2, reviewed_at=NOW() WHERE observation_id=$3 AND status='pending' RETURNING id",
       [decision, reviewerId, id]
     );
+    // If the queue row is missing or already resolved, throw so the transaction
+    // rolls back the observation decision (and any new-product identity insert).
+    if (!queued.rowCount) throw new Error("price_review_queue_missing_or_resolved");
     return { ok: true, decision, row };
   });
 }
@@ -63,10 +66,11 @@ async function saveEditedReview({ db, id, reviewerId, productText, price, weight
       [productText, price, weightG, volumeMl, packCount, reviewerId, id]
     );
     if (!result.rowCount) return { ok: false, reason: "already_resolved" };
-    await client.query(
-      "UPDATE price_review_queue SET status='accepted', reviewed_by=$1, reviewed_at=NOW() WHERE observation_id=$2 AND status='pending'",
+    const queued = await client.query(
+      "UPDATE price_review_queue SET status='accepted', reviewed_by=$1, reviewed_at=NOW() WHERE observation_id=$2 AND status='pending' RETURNING id",
       [reviewerId, id]
     );
+    if (!queued.rowCount) throw new Error("price_review_queue_missing_or_resolved");
     return { ok: true };
   });
 }

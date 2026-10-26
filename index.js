@@ -615,15 +615,6 @@ bot.on("text", async ctx => {
 
   if (cmd) return; // commands are intentionally invisible/unusable to unauthorized users
 
-  // In approved groups, automatically answer likely chemistry questions once per incoming message.
-  if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
-    const answer = await chemical.answer(chemicalAI, text, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: text, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
-    const links = buildChemicalLinks(text);
-    const body = `🧪 المساعد الكيميائي\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
-    await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
-    return;
-  }
-
   if (!priceMonitor.isEligibleMessage({ chatType: m.chatType, text, isLogChannel: false, isCommand: false, ownMessage: isBotMessage(ctx, botUserId) })) return;
 
   let merchantId = null;
@@ -664,6 +655,17 @@ bot.on("text", async ctx => {
       details: { chatId: m.chatId, messageId: m.messageId, error: redactString(error?.message || "price observation failed") }
     });
   }
+
+  // In approved groups, automatically answer likely chemistry questions once per incoming message.
+  if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
+    const answer = await chemical.answer(chemicalAI, text, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: text, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
+    const links = buildChemicalLinks(text);
+    const body = `🧪 المساعد الكيميائي\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
+    return;
+  }
+
+
 });
 
 bot.catch(async (err, ctx) => {

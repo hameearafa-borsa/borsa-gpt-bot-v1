@@ -76,6 +76,22 @@ function makePipelinePool() {
       if (sql.startsWith("SELECT id,store_key")) {
         return { rows: [...rows.values()].filter(r => r.status === "pending").slice(0, params[0]) };
       }
+      if (sql.startsWith("INSERT INTO catalog_newsletter_deliveries")) {
+        const [snapshot_id, chat_id] = params;
+        const existing = [...rows.values()].find(r => r.snapshot_id === snapshot_id && r.chat_id === chat_id && r.delivery === true);
+        if (existing) return { rowCount: 0, rows: [] };
+        const row = { id: nextId++, snapshot_id, chat_id, status: "prepared", delivery: true };
+        rows.set("delivery-" + row.id, row);
+        return { rowCount: 1, rows: [{ id: row.id }] };
+      }
+      if (sql.startsWith("UPDATE catalog_newsletter_deliveries")) {
+        const row = [...rows.values()].find(r => r.id === params[0] && r.delivery === true);
+        if (row && row.status === "prepared") { row.status = params[1]; row.message_id = params[2]; }
+        return { rowCount: row ? 1 : 0, rows: [] };
+      }
+      if (sql.startsWith("SELECT status FROM catalog_newsletter_deliveries")) {
+        return { rows: [...rows.values()].filter(r => r.delivery === true && r.snapshot_id === params[0]).map(r => ({ status: r.status })) };
+      }
       if (sql.startsWith("UPDATE") && sql.includes("RETURNING id")) {
         const row = rows.get(params[0]);
         if (!row || row.status !== "pending") return { rowCount: 0, rows: [] };

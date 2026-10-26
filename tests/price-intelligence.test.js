@@ -18,6 +18,11 @@ assert.equal(offer.offer_extra_weight_g, 500);
 assert.equal(commercialMetrics(offer).package_sale_price, 110);
 assert.equal(commercialMetrics(offer).effective_weight_g, 2500);
 
+const arabicOffer = extractPriceCandidates("مسحوق X ٢ك + ٥٠٠ جم ١١٠ج")[0];
+assert.equal(arabicOffer.weight_g, 2000);
+assert.equal(arabicOffer.offer_extra_weight_g, 500);
+assert.equal(arabicOffer.package_sale_price, 110);
+
  
 // Real-world list variants: Arabic digits, decimal commas, per-piece prices,
 // and multi-column rows with a clearly labelled wholesale value.
@@ -34,6 +39,7 @@ assert.equal(fieldRows[1].package_sale_price, 18.75);
 assert.equal(fieldRows[2].package_sale_price, 2.4909);
 assert.equal(fieldRows[3].package_sale_price, 490);
 assert.equal(fieldRows[3].pack_count, 4);
+assert.equal(fieldRows[3].weight_g, 2000);
 assert.equal(fieldRows[4].package_sale_price, 487.4);
 assert.equal(fieldRows[5].package_sale_price, 915.87);
 assert.equal(fieldRows[6].package_sale_price, 42.33);

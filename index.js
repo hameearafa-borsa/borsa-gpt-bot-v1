@@ -644,11 +644,27 @@ bot.on("text", async ctx => {
     } catch (e) { await sendLog({ module: "merchant", stage: "save", severity: "error", status: "failed", details: { error: e.message } }); }
   }
 
-  const classification = await core.classify(text, { chatId: m.chatId, messageId: m.messageId });
-  if (classification.type !== "price_observation" && classification.type !== "price_list") return;
-  const result = await priceMonitor.observe({ pool: db.pool, message: m, merchantId, registry });
-  if (result.saved > 0) {
-    await sendLog({ module: "price-monitor", stage: "saved", status: "ok", details: { saved: result.saved, merchantId, messageId: m.messageId } });
+  // Silent price observation runs independently of AI intent classification.
+  // A classification miss must never prevent a plausible price from being recorded.
+  try {
+    const result = await priceMonitor.observe({ pool: db.pool, message: m, merchantId, registry });
+    if (result.saved > 0) {
+      const pending = result.savedRows.filter(item => item.row.decision === "pending").length;
+      await sendLog({
+        module: "price-monitor",
+        stage: "saved",
+        status: "ok",
+        details: { saved: result.saved, pending, candidates: result.accepted.length, merchantId, messageId: m.messageId }
+      });
+    }
+  } catch (error) {
+    await sendLog({
+      module: "price-monitor",
+      stage: "save_observation",
+      severity: "error",
+      status: "failed",
+      details: { chatId: m.chatId, messageId: m.messageId, error: redactString(error?.message || "price observation failed") }
+    });
   }
 });
 

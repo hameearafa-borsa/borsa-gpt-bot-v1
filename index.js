@@ -300,6 +300,9 @@ bot.on("text", async ctx => {
   }
   if (m.chatType !== "private" && !(await isAuthorizedChat(m.chatId))) return;
 
+  // Long pasted catalogs are handled explicitly with /قائمة; keep them out of per-message AI and review alerts.
+  if (!cmd && priceMonitor.isBulkPriceList(text || m.caption || "")) return;
+
   // Ordinary members may use automatic services, but slash commands are controller-only.
   const isChemicalCommand = ["مساعد", "كيمياء", "المساعد_الكيميائي", "chemical", "chem"].includes(cmd);
   if (cmd === "start" || cmd === "help") {

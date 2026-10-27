@@ -6,14 +6,20 @@ const { identityKey } = require("./price-review");
 
 function isOwnMessage({ botUserId, fromId }) { return botUserId != null && String(botUserId) === String(fromId); }
 function isBulkPriceList(text) {
-  const lines = String(text || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
-  if (lines.length < 8) return false;
+  const source = String(text || "").trim();
+  if (!source) return false;
+  const lines = source.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
   const pricedRows = lines.filter(line =>
     /(?:\d+[.,]?\d*)\s*(?:جنيه|ج|EGP)\s*$/iu.test(line) ||
     /(?:جمله|جملة|مستهلك|قطاعي)\s*[:：]?\s*\d+[.,]?\d*/iu.test(line)
   ).length;
-  // Multi-row catalog messages belong to /قائمة processing, not the one-product-at-a-time monitor.
-  return pricedRows >= 5;
+  if (lines.length >= 8 && pricedRows >= 5) return true;
+
+  // Telegram messages may contain a whole catalog pasted as one long paragraph.
+  // Detect repeated explicit currency amounts before the single-product monitor sees it.
+  const currencyPrices = [...source.matchAll(/(?:^|[\s:|])\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)(?=$|[\s|])/giu)].length;
+  const hasCatalogContext = /(?:أسعار|اسعار)\s*(?:شركة|شركه)|(?:قائمة|قائمه)\s*أسعار|(?:جملة|جمله)\s+.{0,40}(?:منتجات|أصناف|اصناف)/iu.test(source);
+  return source.length >= 500 && currencyPrices >= 8 && (hasCatalogContext || currencyPrices >= 12);
 }
 
 function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage }) {

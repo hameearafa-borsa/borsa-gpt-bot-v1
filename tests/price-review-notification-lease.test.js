@@ -11,6 +11,7 @@ assert.match(migration, /ADD COLUMN IF NOT EXISTS notification_claimed_at TIMEST
 assert.match(recovery, /FOR UPDATE SKIP LOCKED/i);
 assert.match(recovery, /notification_claimed_at < NOW\(\) - \(\$3 \* INTERVAL '1 second'\)/i);
 assert.match(recovery, /notification_claim_token = \$4/i);
+assert.match(recovery, /SET notification_claimed_at = NOW\(\)[\s\S]*?notification_claim_token = \$2/i);
 assert.match(recovery, /AND notification_claim_token = \$3/i);
 assert.match(index, /notification_claim_token=\$1, notification_claimed_at=NOW\(\)/i);
 assert.match(index, /notification_claimed_at < NOW\(\) - INTERVAL '120 seconds'/i);

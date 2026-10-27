@@ -70,5 +70,28 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   assert.deepEqual(sendFailStats, { found: 1, sent: 0, failed: 1 });
   assert.equal(sendErrorReported, true);
 
+  // A crash after saving a pending observation but before queue insertion is repaired at startup.
+  const rebuiltCalls = [];
+  const rebuiltSends = [];
+  const rebuilt = await recoverPendingNotifications({
+    db: { async query(sql, params) {
+      rebuiltCalls.push({ sql, params });
+      if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 1 };
+      if (sql.includes("SELECT q.observation_id")) return { rows: [rows[0]], rowCount: 1 };
+      if (sql.includes("UPDATE price_review_queue")) return { rows: [{ observation_id: params[1] }], rowCount: 1 };
+      throw new Error("unexpected rebuild query");
+    } },
+    telegram: { async sendMessage(chatId, message, options) {
+      rebuiltSends.push({ chatId, message, options });
+      return { message_id: 1001 };
+    } },
+    defaultLogChatId: -10055
+  });
+  assert.deepEqual(rebuilt, { found: 1, sent: 1, failed: 0 });
+  assert.match(rebuiltCalls[0].sql, /LEFT JOIN price_review_queue q ON q\.observation_id = po\.id/);
+  assert.match(rebuiltCalls[0].sql, /ON CONFLICT \(observation_id\) DO NOTHING/);
+  assert.equal(rebuiltCalls[0].params[0], -10055);
+  assert.equal(rebuiltSends.length, 1);
+
   console.log("price review pending-notification recovery and failure-path tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -26,11 +26,11 @@ assert.doesNotMatch(memberHandler[0], /authorizeChat\(/, "adding the bot must ne
 assert.doesNotMatch(memberHandler[0], /status='approved'/, "adding the bot must never mark a pending group approved");
 assert.match(source, /Number\(m\.userId\) !== MASTER_ID/, "approval command must remain restricted to the fixed master");
 assert.match(source, /await approvePendingGroup\(\{[\s\S]*?approvedBy: m\.userId/, "approval flow must invoke transactional helper");
-const groupMenuStart = source.lastIndexOf('await bot.telegram.setMyCommands([');
-const menuBlock = source.slice(groupMenuStart).match(/await bot\.telegram\.setMyCommands\(\[([\s\S]*?)\], \{ scope: \{ type: "all_group_chats" \} \}\)/);
-assert.ok(menuBlock, "service command menu must be declared");
-assert.match(menuBlock[1], /command: "chemical"/);
-assert.match(menuBlock[1], /command: "weather"/);
-assert.doesNotMatch(menuBlock[1], /approvechat|claim|settings|antispam|schedule|warn|inactive/);
+const groupMenuBlock = source.match(/\["groups", \[([\s\S]*?)\], \{ type: "all_group_chats" \}\]/);
+assert.ok(groupMenuBlock, "service command menu must be declared for group chats");
+assert.match(groupMenuBlock[1], /command: "chemical"/);
+assert.match(groupMenuBlock[1], /command: "weather"/);
+assert.match(groupMenuBlock[1], /command: "pricelist"/);
+assert.doesNotMatch(groupMenuBlock[1], /approvechat|claim|settings|antispam|schedule|warn|inactive/);
 assert.match(source, /cmd === "قائمة" \|\| cmd === "pricelist"/);
 console.log("GROUP ACCESS CONTROL + SERVICE MENU STATIC TESTS: OK");

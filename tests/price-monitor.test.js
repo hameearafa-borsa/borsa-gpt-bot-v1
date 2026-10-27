@@ -17,6 +17,20 @@ const registry = require("../data/product-registry.json");
   assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
     "bulk price lists must not generate dozens of individual review messages");
   assert.equal(isBulkPriceList(base.text), false, "a single product price remains eligible");
+  const arielPromoList = `اريال ٢ك يدوي ٤٩٠ج ٤ق
+اريال ١ك يدوي ٣٩٦ج ٦ق
+اريال ١.٥ك يدوي ٣٨٠ج ٤ق
+اريال ٢.٥ك اتوماتيك ٨٢٨ج ٤ق
+اريال ٤ك اتوماتيك ٧٨٦ج ٣ق
+اريال ٩ك ١٠١٠ج ٢ق
+بونكس ٩ك ٨٠٠ج ٢ق
+تايد ٢،٥ك ٦٧٢ج ٤ق
+تايد ٩ك ٤٩٠ج ٢ق
+في برضو ب٥ج ب١٠ج ب٢٥ج`;
+  assert.equal(isBulkPriceList(arielPromoList), true,
+    "a multiline detergent list with price followed by pack count must be excluded from individual price monitoring");
+  assert.equal(isEligibleMessage({ ...base, text: arielPromoList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "an entire promotional list must not produce per-row observations, including its incomplete final commentary line");
   const oneLineUnilever = unileverList.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
   assert.equal(isBulkPriceList(oneLineUnilever), true,
     "a full catalog pasted as one long Telegram paragraph must not trigger per-product monitoring");

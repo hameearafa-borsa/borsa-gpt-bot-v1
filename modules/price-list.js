@@ -24,7 +24,7 @@ function buildListPrompt(text) {
     "كلمة شكارة هي نوع العبوة وليست اسم منتج. لا تعتبر الأرقام وحدها اسم منتج.",
     "إذا كان اسم الشركة/العلامة غير موجود في السطر، استخدم company + section + weight كتعريف مؤقت، واجعل القرار review إذا لم تكن الهوية واضحة.",
     "إذا كان السطر غير واضح، decision=skipped. ممنوع اختراع بيانات.",
-    String(text || "").slice(0, 18000)
+    removeNonPriceComments(text).slice(0, 18000)
   ].join("\n");
 }
 function parseAIJson(text) {
@@ -94,12 +94,26 @@ function detectUnitPriceType(line) {
   if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|قطعة|بالقطعه|للقطعه)/iu.test(s) || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
   return null;
 }
+function isNonPriceCommentLine(line) {
+  const raw = String(line || "").trim();
+  if (!raw) return false;
+  // Conversation-style notes are not price observations. Do not treat amounts
+  // mentioned in prose (e.g. "برضو فيه ب 10 و برضو في ب 25") as prices.
+  // Explicit currency labels keep the line eligible for normal validation.
+  if (/(?:جنيه|(?:^|\\s)ج(?:\\s|$)|EGP|جنيه\\s+مصري)/iu.test(raw)) return false;
+  const s = normalizeArabic(raw).trim();
+  return /^(?:برضو|برضه|برده|كمان|وكمان|وفيه|فيه|موجود|متوفر|متاح|لسه|باقي|على فكره|للعلم|معلش)(?:\\s|$)/u.test(s);
+}
+function removeNonPriceComments(text) {
+  return String(text || "").split(/\\r?\\n/).filter(line => !isNonPriceCommentLine(line)).join("\\n");
+}
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const metadata = parseListMetadata(text);
   let company = metadata.company, section = null, sectionUnitPriceType = null;
   const out = [];
   for (const line of lines) {
+    if (isNonPriceCommentLine(line)) continue;
     if (/^[-_=.*.]{3,}$/.test(line) || /^\/(?:قائمة|pricelist)(?:\s|$)/iu.test(line)) continue;
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
     const normalized = normalizeArabic(line);

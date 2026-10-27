@@ -51,6 +51,17 @@ assert.equal(fieldRows[5].confidence, 0.65);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
 assert.equal(fieldRows[6].product_text, "سيجنال", "standalone ق is a per-piece marker, not part of the product name");
 assert.deepEqual(extractPriceCandidates("شهر أكتوبر 2026"), [], "catalog month headers must not become price candidates");
+const { deterministicList, buildListPrompt } = require("../modules/price-list");
+const conversationalComment = "برضو فيه ب 10 و برضو في ب 25";
+assert.deepEqual(deterministicList(conversationalComment), [], "conversation-only comments must be silently ignored");
+const mixedCommentList = deterministicList(`أسعار شركة أريال:
+أريال ٢ك يدوي ٤٩٠ج ٤ق
+${conversationalComment}`);
+assert.equal(mixedCommentList.length, 1, "a comment under a valid list must not become a price row");
+assert.equal(mixedCommentList[0].package_sale_price, 490);
+assert.ok(!buildListPrompt(`أريال ٢ك يدوي ٤٩٠ج ٤ق
+${conversationalComment}`).includes(conversationalComment), "commentary must be removed before optional AI extraction");
+
 
 // A bare number such as 503 is not a product or a price observation by itself.
 assert.deepEqual(extractPriceCandidates("503"), []);

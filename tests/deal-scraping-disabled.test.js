@@ -20,4 +20,4 @@ assert.doesNotMatch(envExample, /^ENABLE_SCRAPER_TEST=/m,
 assert.match(runAll, /deal-scraping-disabled\.test\.js/,
   "safety regression test must run in the normal suite");
 
-console.log("deal scraping opt-in safety tests: OK");
+console.log("deal newsletter default-enabled tests: OK");

@@ -39,6 +39,15 @@ async function recoverPendingNotifications({ db, telegram, defaultLogChatId = nu
   for (const row of result.rows) {
     let sentMessage = null;
     try {
+      // A batch may take longer than one lease to process. Renew this row's
+      // lease immediately before sending, but only while our claim token still owns it.
+      const renewed = await db.query(
+        `UPDATE price_review_queue SET notification_claimed_at = NOW()
+         WHERE observation_id = $1 AND status = 'pending' AND log_message_id IS NULL
+           AND notification_claim_token = $2
+         RETURNING observation_id`,
+        [row.observation_id, token]);
+      if (!renewed.rowCount) throw new Error("price_review_notification_claim_lost_before_send");
       if (row.target_log_chat_id == null || row.target_log_chat_id === "") throw new Error("price_review_log_chat_missing");
       sentMessage = await telegram.sendMessage(row.target_log_chat_id, formatReviewMessage(row.observation_id, row), {
         reply_markup: reviewKeyboard(row.observation_id), disable_web_page_preview: true

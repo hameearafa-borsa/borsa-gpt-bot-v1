@@ -27,6 +27,13 @@ assert.equal(catalogs.length, 1, "only the configured store's catalog should be 
 assert.equal(catalogs[0].store, "kazyon");
 assert.equal(catalogs[0].region, "محافظة القاهرة");
 assert.equal(catalogs[0].url, "https://snapflyer.io/eg/downtown/offers/kazyon/1376");
+const liveStyleCatalog = extractCatalogs(
+  '<a href="/eg/downtown/offers/kazyon/1567"><span>✨ New Kazyon — Win Gold and Cash 7 days left 27 Oct - 2 Nov</span></a>',
+  "kazyon"
+);
+assert.equal(liveStyleCatalog.length, 1, "store listing style should be extracted");
+assert.equal(liveStyleCatalog[0].displayedDateRange, "27 Oct - 2 Nov",
+  "date ranges rendered in flyer link text should be captured, not only title attributes");
 assert.ok(catalogs[0].fingerprint);
 const firstEdition = extractCatalogs(
   '<a title="1 Nov - 7 Nov" href="/eg/downtown/offers/kazyon/1376"><span>Kazyon weekly flyer</span></a>',

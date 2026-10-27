@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { extractPriceCandidates, commercialMetrics } = require("../modules/price-intelligence");
+const { extractPriceCandidates, commercialMetrics, parsePackageType, productIdentityKey, classifyObservationChange } = require("../modules/price-intelligence");
 const { normalizeArabic, parseWeightGrams } = require("../core/normalization");
 
 assert.equal(normalizeArabic("أوكسي ٢ كجم"), "اوكسي 2 كجم");
@@ -123,5 +123,30 @@ assert.equal(pearlListRows[0].consumer_price, 525);
 assert.equal(pearlListRows[0].weight_g, 9000);
 assert.equal(pearlListRows[3].package_sale_price, 618.35);
 assert.equal(pearlListRows[3].consumer_price, 630);
+
+// Historical comparison preserves product identity when only weight/offer changes.
+const historyBase = {
+  brand_key: "pearl",
+  product_text: "بيرل أوتوماتيك 9 ك",
+  product_identity_key: "pearl|بيرل اوتوماتيك|wholesale",
+  price_kind: "wholesale",
+  package_sale_price: 487.40,
+  weight_g: 9000,
+  offer_extra_weight_g: null,
+  volume_ml: null,
+  pack_count: null,
+  package_type: null
+};
+assert.equal(classifyObservationChange(null, historyBase), "new_observation");
+assert.equal(classifyObservationChange(historyBase, { ...historyBase }), "same_observation");
+assert.equal(classifyObservationChange(historyBase, { ...historyBase, package_sale_price: 500 }), "price_change");
+assert.equal(classifyObservationChange(historyBase, { ...historyBase, weight_g: 9500 }), "weight_change");
+assert.equal(classifyObservationChange(historyBase, { ...historyBase, weight_g: 9500, package_sale_price: 500 }), "price_and_weight_change");
+assert.equal(classifyObservationChange(historyBase, { ...historyBase, brand_key: "other", product_identity_key: "other|بيرل اوتوماتيك|wholesale" }), "new_observation");
+assert.equal(classifyObservationChange(historyBase, { ...historyBase, price_kind: "retail", product_identity_key: "pearl|بيرل اوتوماتيك|retail" }), "new_observation");
+assert.equal(parsePackageType("شكارة 10 ك"), "sack");
+assert.equal(parsePackageType("كيس 50 جم"), "sachet");
+assert.equal(parsePackageType("9 ك"), null);
+assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 5 ك" }), productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 9 ك" }), "weight should not change stable product identity");
 
 console.log("price intelligence tests: OK");

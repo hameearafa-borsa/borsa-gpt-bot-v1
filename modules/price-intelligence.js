@@ -145,11 +145,47 @@ function extractPriceCandidates(text) {
       volume_ml: q?.milliliters ?? null,
       offer_extra_weight_g: extraWeightG,
       pack_count: packCount,
+      package_type: parsePackageType(line),
       confidence: explicitWholesale ? (new Set(numbers).size > 1 ? 0.65 : 0.92) : (consumerIndex >= 0 ? 0.65 : 0.55),
     });
   }
   return out;
 }
+function parsePackageType(text) {
+  const s = normalizeArabic(text);
+  if (/(?:شكاره|شوال)/u.test(s)) return "sack";
+  if (/(?:كيس|ساشيه)/u.test(s)) return "sachet";
+  return null;
+}
+
+function productIdentityKey(row) {
+  const stableName = normalizeArabic(stripQuantityTokens(row?.product_text || ""));
+  return [String(row?.brand_key || ""), stableName, String(row?.price_kind || "")].join("|");
+}
+
+function classifyObservationChange(previous, current) {
+  if (!previous) return "new_observation";
+  const previousIdentity = previous.product_identity_key || productIdentityKey(previous);
+  const currentIdentity = current.product_identity_key || productIdentityKey(current);
+  if (previousIdentity !== currentIdentity) return "new_observation";
+
+  const sameNumber = (a, b) => {
+    const av = a == null || a === "" ? null : Number(a);
+    const bv = b == null || b === "" ? null : Number(b);
+    if (av == null || bv == null) return av === bv;
+    return Number.isFinite(av) && Number.isFinite(bv) && Math.abs(av - bv) < 0.0005;
+  };
+  const dimensions = ["weight_g", "volume_ml", "offer_extra_weight_g", "pack_count"];
+  const weightChanged = dimensions.some(key => !sameNumber(previous[key], current[key])) ||
+    String(previous.package_type || "") !== String(current.package_type || "");
+  const priceChanged = !sameNumber(previous.package_sale_price, current.package_sale_price);
+
+  if (weightChanged && priceChanged) return "price_and_weight_change";
+  if (weightChanged) return "weight_change";
+  if (priceChanged) return "price_change";
+  return "same_observation";
+}
+
 function commercialMetrics(row) {
   const weight = Number(row.weight_g) || 0;
   const extra = Number(row.offer_extra_weight_g) || 0;
@@ -172,4 +208,4 @@ function fingerprint(row) {
   ].join("|")).digest("hex");
 }
 
-module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, extractPriceCandidates, commercialMetrics, fingerprint };
+module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, commercialMetrics, fingerprint };

@@ -56,6 +56,12 @@ const countdownVariantNextDay = extractCatalogs(
 );
 assert.equal(countdownVariant[0].fingerprint, countdownVariantNextDay[0].fingerprint,
   "a changing days-left countdown must not create a duplicate catalog edition");
+const meaningfulTitleChange = extractCatalogs(
+  '<a href="/eg/downtown/offers/kazyon/1567"><span>✨ New Kazyon — Summer cleaning offers 27 Oct - 2 Nov</span></a>',
+  "kazyon"
+);
+assert.notEqual(countdownVariant[0].fingerprint, meaningfulTitleChange[0].fingerprint,
+  "meaningful title changes must still be detected when a catalog URL is reused");
 assert.equal(extractCatalogs(html, "unknown").length, 0);
 assert.equal(isRelevantOffer({ title: "Clorox laundry bleach", category: "groceries" }), true);
 assert.equal(isRelevantOffer({ title: "Women's cotton dress", category: "fashion" }), false);

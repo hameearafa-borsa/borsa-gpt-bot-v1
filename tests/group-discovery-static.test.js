@@ -28,9 +28,10 @@ assert.match(source, /Number\(m\.userId\) !== MASTER_ID/, "approval command must
 assert.match(source, /await approvePendingGroup\(\{[\s\S]*?approvedBy: m\.userId/, "approval flow must invoke transactional helper");
 const groupMenuBlock = source.match(/\["groups", \[([\s\S]*?)\], \{ type: "all_group_chats" \}\]/);
 assert.ok(groupMenuBlock, "service command menu must be declared for group chats");
+assert.match(groupMenuBlock[1], /command: "settings"/, "group owners must have /settings in the Telegram command menu");
 assert.match(groupMenuBlock[1], /command: "chemical"/);
 assert.match(groupMenuBlock[1], /command: "weather"/);
 assert.match(groupMenuBlock[1], /command: "pricelist"/);
-assert.doesNotMatch(groupMenuBlock[1], /approvechat|claim|settings|antispam|schedule|warn|inactive/);
+assert.doesNotMatch(groupMenuBlock[1], /approvechat|claim|antispam|schedule|warn|inactive/);
 assert.match(source, /cmd === "قائمة" \|\| cmd === "pricelist"/);
 console.log("GROUP ACCESS CONTROL + SERVICE MENU STATIC TESTS: OK");

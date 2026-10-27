@@ -38,6 +38,6 @@ assert.equal(afterCairoMidnight.count, 1, "daily quota resets at Cairo midnight"
 console.log("Cairo-local media quota day tests: OK");
 
 const runtimeSource = require("node:fs").readFileSync(require.resolve("../index.js"), "utf8");
-assert.doesNotMatch(runtimeSource, /PROTECTION_ENFORCE|moderation_settings|moderation_events|recordActivity|recentLogAlerts/,
-  "legacy moderation/protection utilities must not be wired into the Borsa runtime");
+assert.doesNotMatch(runtimeSource, /PROTECTION_ENFORCE|moderation_settings|moderation_events|recordActivity|inspectMessage\(|inspectRate\(|inspectMediaQuota\(/,
+  "legacy moderation/protection enforcement must not be wired into the Borsa runtime");
 console.log("legacy protection utilities are isolated from the Borsa runtime: OK");

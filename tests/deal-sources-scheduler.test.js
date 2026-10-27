@@ -182,6 +182,32 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(requestCount, 10, "all source queries should still be attempted");
  assert.ok(peakRequests <= 2, "ScraperAPI requests must be bounded to two concurrent requests");
  assert.equal(collected.sourceCount, 10);
+ const amazonTargets = [];
+ const amazonOnly = await collectDealCandidates({
+   edition: "amazon",
+   fetchImpl: async url => {
+     amazonTargets.push(new URL(String(url)).searchParams.get("url"));
+     return { ok: true, status: 200, text: async () => "<html></html>" };
+   }
+ });
+ assert.equal(amazonOnly.sourceCount, 3, "Amazon edition should make only three Amazon searches");
+ assert.equal(amazonTargets.length, 3);
+ assert.ok(amazonTargets.every(url => new URL(url).hostname.includes("amazon")),
+   "Amazon edition must not spend scraper requests on other stores");
+
+ const otherTargets = [];
+ const otherOnly = await collectDealCandidates({
+   edition: "other_sites",
+   fetchImpl: async url => {
+     otherTargets.push(new URL(String(url)).searchParams.get("url"));
+     return { ok: true, status: 200, text: async () => "<html></html>" };
+   }
+ });
+ assert.equal(otherOnly.sourceCount, 7, "other-store edition should make seven non-Amazon searches");
+ assert.equal(otherTargets.length, 7);
+ assert.ok(otherTargets.every(url => !new URL(url).hostname.includes("amazon")),
+   "other-store edition must not spend scraper requests on Amazon");
+
  if (oldKey1 === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = oldKey1;
  if (oldKey2 === undefined) delete process.env.SCRAPER_API_KEY_2; else process.env.SCRAPER_API_KEY_2 = oldKey2;
  console.log("deal sources + safe URL verification + Cairo scheduler + scraper key rotation/concurrency tests: OK");

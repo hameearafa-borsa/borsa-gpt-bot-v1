@@ -9,8 +9,10 @@ function isBulkPriceList(text) {
   const source = String(text || "").trim();
   if (!source) return false;
   const lines = source.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  // Count prices anywhere in a row: common Telegram formats put pack counts
+  // after the price (e.g. "٤٩٠ج ٤ق"), so an end-anchored match misses them.
   const pricedRows = lines.filter(line =>
-    /(?:\d+[.,]?\d*)\s*(?:جنيه|ج|EGP)\s*$/iu.test(line) ||
+    /\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)(?=\s|$)/iu.test(line) ||
     /(?:جمله|جملة|مستهلك|قطاعي)\s*[:：]?\s*\d+[.,]?\d*/iu.test(line)
   ).length;
   if (lines.length >= 8 && pricedRows >= 5) return true;

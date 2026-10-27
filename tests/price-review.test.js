@@ -21,6 +21,7 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   assert.equal(calls.length, 3);
   assert.ok(calls[1].sql.includes("reviewed_price_products"));
   assert.ok(calls[2].sql.includes("price_review_queue"));
+  assert.match(calls[2].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);
   const editedCalls = [];
   const editedDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
     editedCalls.push({ sql, params }); return { rowCount: 1, rows: [{ id: 42 }] };
@@ -29,6 +30,7 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   assert.equal(edited.ok, true);
   assert.match(editedCalls[0].sql, /decision='accepted'/);
   assert.match(editedCalls[1].sql, /status='accepted'/);
+  assert.match(editedCalls[1].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);
 
   // A missing queue row must fail the transaction rather than leave the
   // observation accepted while its review request is still unresolved.

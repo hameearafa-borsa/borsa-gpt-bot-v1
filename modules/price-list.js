@@ -63,6 +63,8 @@ function parseListMetadata(text) {
     if (companyMatch) company = companyMatch[1].trim().replace(/[:：]+$/, "");
     const monthMatch = line.match(/^(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+(20\d{2})$/iu);
     if (monthMatch) month = `${monthMatch[1]} ${monthMatch[2]}`;
+    const titleMonthMatch = line.match(/^(?:أسعار|اسعار)\s+.+?[–—-]\s*(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)(?:\s+(20\d{2}))?$/iu);
+    if (titleMonthMatch) month = titleMonthMatch[2] ? \`${titleMonthMatch[1]} ${titleMonthMatch[2]}\` : titleMonthMatch[1];
     if (/الأسعار?\s*(?:هي\s*)?جملة|اسعار\s*جمله/iu.test(line)) priceType = "أسعار جملة";
     else if (/(?:قطاعي|مستهلك|تجزئة)/iu.test(line)) priceType = "أسعار قطاعي";
   }

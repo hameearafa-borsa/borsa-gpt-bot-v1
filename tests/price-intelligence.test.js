@@ -51,7 +51,7 @@ assert.equal(fieldRows[5].confidence, 0.65);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
 assert.equal(fieldRows[6].product_text, "سيجنال", "standalone ق is a per-piece marker, not part of the product name");
 assert.deepEqual(extractPriceCandidates("شهر أكتوبر 2026"), [], "catalog month headers must not become price candidates");
-const { deterministicList, buildListPrompt } = require("../modules/price-list");
+const { deterministicList, buildListPrompt, parseListMetadata } = require("../modules/price-list");
 const conversationalComment = "برضو فيه ب 10 و برضو في ب 25";
 assert.deepEqual(deterministicList(conversationalComment), [], "conversation-only comments must be silently ignored");
 assert.deepEqual(deterministicList("برضو فيه ب 10 جنيه و برضو في ب 25 جنيه"), [], "currency words do not turn commentary into price rows");
@@ -102,6 +102,7 @@ const pearlOctober = `أسعار بيرل – أكتوبر
 • 120 جم: 8.46 | جملة 135.49 | مستهلك 10
 • 50 جم: 3.96 | جملة 47.52 | مستهلك 5
 • 30 جم: 3.79 | جملة 75.95 | مستهلك 5`;
+assert.equal(parseListMetadata(pearlOctober).month, "أكتوبر", "month in a company-list title should be retained even without an explicit year");
 const pearlRows = extractPriceCandidates(pearlOctober);
 assert.equal(pearlRows.length, 13, "Pearl October list should yield 13 sale-price observations");
 assert.deepEqual(pearlRows.map(row => row.package_sale_price), [487.40, 915.87, 716.63, 618.35, 432.84, 516.90, 395.85, 265.15, 176.29, 144.06, 135.49, 47.52, 75.95]);

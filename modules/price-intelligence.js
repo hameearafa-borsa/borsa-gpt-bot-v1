@@ -166,7 +166,7 @@ function extractPriceCandidates(text) {
       offer_extra_weight_g: extraWeightG,
       pack_count: packCount,
       package_type: parsePackageType(line),
-      confidence: explicitWholesale && salePrice !== explicitWholesalePrice ? 0.82 : explicitWholesale ? 0.92 : (consumerIndex >= 0 ? 0.65 : 0.55),
+      confidence: explicitWholesale && salePrice !== explicitWholesalePrice ? 0.72 : explicitWholesale ? 0.92 : (consumerIndex >= 0 ? 0.65 : 0.55),
       needs_review: explicitWholesale && salePrice !== explicitWholesalePrice,
       price_selection_reason: explicitWholesale && salePrice !== explicitWholesalePrice
         ? "first_package_price_preserved; labelled_wholesale_amount_kept_separately"

@@ -138,6 +138,7 @@ async function configureCommandMenus() {
       { command: "help", description: "مساعدة البوت" }
     ], { type: "all_private_chats" }],
     ["groups", [
+      { command: "settings", description: "إعدادات البوت وحالة المجموعة" },
       { command: "chemical", description: "المساعد الكيميائي" },
       { command: "weather", description: "الطقس" },
       { command: "pricelist", description: "قائمة أسعار الشركات" }

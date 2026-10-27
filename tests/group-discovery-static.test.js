@@ -30,6 +30,6 @@ const menuBlock = source.match(/await bot\.telegram\.setMyCommands\(\[([\s\S]*?)
 assert.ok(menuBlock, "service command menu must be declared");
 assert.match(menuBlock[1], /command: "chemical"/);
 assert.match(menuBlock[1], /command: "weather"/);
-assert.doesNotMatch(menuBlock[1], /approvechat|claim|settings|antispam|schedule|warn|pricelist|inactive/);
+assert.doesNotMatch(menuBlock[1], /approvechat|claim|settings|antispam|schedule|warn|inactive/);
 assert.match(source, /cmd === "قائمة" \|\| cmd === "pricelist"/);
 console.log("GROUP ACCESS CONTROL + SERVICE MENU STATIC TESTS: OK");

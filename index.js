@@ -128,7 +128,8 @@ async function configureCommandMenus() {
   await bot.telegram.setMyCommands([], { scope: { type: "default" } });
   await bot.telegram.setMyCommands([
     { command: "chemical", description: "المساعد الكيميائي" },
-    { command: "weather", description: "الطقس" }
+    { command: "weather", description: "الطقس" },
+    { command: "pricelist", description: "قائمة أسعار الشركات" }
   ], { scope: { type: "all_group_chats" } });
 }
 

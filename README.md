@@ -37,11 +37,13 @@
 ## RC1 legacy-service additions
 See `LEGACY-MIGRATION-MAP.md` and `RC1-ADDITIVE-PATCH-NOTES.md` for the full migration status. This patch is additive: the original legacy source snapshots are retained in `legacy/reference/` and are not loaded by the runtime.
 
-Optional environment values:
-- `SCRAPER_API_KEY`: required for live deal scraping via ScraperAPI.
-- `DEALS_CHAT_ID`: publication destination for the scheduled deal newsletters. If unset, the deal scheduler remains disabled.
+إعدادات تشغيل اختيارية:
+- `SCRAPER_API_KEY` و`SCRAPER_API_KEY_2`: يلزمان فقط عند تفعيل المسار المدفوع لجلب العروض.
+- `DEALS_SCHEDULER_ENABLED=false`: يبقى جلب العروض المدفوع متوقفًا افتراضيًا؛ لا تفعّله إلا بعد مراجعة التكلفة والمصادر.
+- `WEATHER_SCHEDULER_ENABLED=true`: ينشر نشرتي الطقس عند 11:00 و20:00 بتوقيت القاهرة إلى المجموعات النشطة المعتمدة. اضبطه على `false` لإيقاف النشر المجدول.
+- `DEALS_CHAT_ID`: متغير قديم لفحص ما قبل النشر فقط؛ وجهات النشر المجدولة تُقرأ من `authorized_chats` النشطة.
 
-The fresh RC1 `package-lock.json` could not be generated in the lab because npm registry access timed out. Do not use `legacy/reference/package-lock.json` as the RC1 lockfile; it belongs to the legacy dependency graph. See `RC1-ADDITIVE-PATCH-NOTES.md`.
+نجاح `npm ci` وفحوص GitHub Actions يثبت قابلية تثبيت التبعيات في بيئة CI، لكنه لا يثبت وحده نجاح الاتصال الحي بـTelegram أو مفاتيح API أو قاعدة الإنتاج.
 
 ## فصل الإدارة والإشراف عن Borsa GPT
 
@@ -61,11 +63,10 @@ The fresh RC1 `package-lock.json` could not be generated in the lab because npm 
 
 
 ## إصلاحات RC1+ في هذا الأرشيف
-- أُضيف `/claim` داخل المجموعة غير المسجلة، ويقبل الربط فقط إذا طابق المستخدم منشئ المجموعة الذي تعيده Telegram.
-- أُضيفت قراءة طقس فعلية من Open-Meteo (بحث جغرافي ثم الطقس الحالي) مع فشل آمن دون اختلاق درجة الحرارة.
-- أُضيف `OPENAI_API_KEY_3` إلى ترتيب مفاتيح OpenAI.
-- أمر `/schedule` يفسر الوقت المحلي في توقيت القاهرة في الوقت الحالي؛ يجب مراجعة تحويل التوقيت عند تغيّر التوقيت الصيفي قبل الاعتماد السنوي.
-- أُضيف اختبار وحدات لقراءة الطقس باستجابات HTTP محاكية.
+- يظل `/claim` و`/approvechat` مخصصين لاعتماد الوصول إلى المجموعة، لا لإدارة الأعضاء أو الإشراف عليهم.
+- قراءة الطقس تستخدم Open-Meteo مع فشل آمن دون اختلاق درجات الحرارة، والنشر المجدول مضبوط على توقيت القاهرة.
+- يدعم توجيه الذكاء الاصطناعي مفاتيح OpenAI وGemini وGroq المتعددة، ولا يتضمن مزود xAI.
+- أوامر الإدارة اليدوية القديمة مثل `/schedule` ليست ضمن قائمة خدمات Borsa GPT النشطة.
 
 ## Read-only live release preflight
 

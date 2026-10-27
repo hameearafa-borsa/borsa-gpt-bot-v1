@@ -25,13 +25,13 @@
 نجحت الاختبارات المحلية الموجودة في الحزمة. **لم يتم اختبار مفاتيح API الحقيقية أو Telegram الحقيقي أو اتصال قاعدة الإنتاج**؛ لذلك لا ندّعي أن التشغيل الإنتاجي قد تم التحقق منه. تم تحديث `package-lock.json` محليًا باستخدام npm، لكن يجب التحقق من `npm ci` على Node.js 24.x قبل اعتبار الحزمة قابلة للبناء النهائي.
 
 ## قبل الإنتاج — بوابات إلزامية
-1. إكمال/اعتماد ترحيل ميزات الحماية والإدارة والجدولة والعروض من المصدر القديم؛ التفاصيل في `LEGACY-MIGRATION-MAP.md`.
+1. تثبيت نطاق الإصدار: إدارة الأعضاء والحماية والإشراف مسؤولية Group Help Bot وليست ضمن وظائف Borsa GPT النشطة. راجع `LEGACY-MIGRATION-MAP.md`؛ لا تعِد تفعيل أوامر الإدارة القديمة ضمن هذا البوت.
 2. ملف القفل الحالي يتضمن `sharp 0.35.5` وحزمة WASM. على Termux/Android ARM64: نفّذ `npm ci` ثم `npm install --cpu=wasm32 sharp` لأن `npm ci` وحده قد يتجاوز حزمة WASM الاختيارية، ثم شغّل `npm run check && npm test`.
 3. أخذ نسخة احتياطية من PostgreSQL، ثم فحص المخطط الحالي ومقارنته بملفات migrations؛ لا تشغّل migrations على قاعدة الإنتاج قبل المراجعة.
 4. اختبار OpenAI Responses API فعليًا من Termux بمفتاح مخزّن محليًا، دون طباعته أو إرساله.
-5. اختبار Telegram في مجموعة اختبار: `/claim` يجب أن ينفذه منشئ المجموعة الأصلي، ثم اختبار لوحة الخاص والاستعادة والتراجع.
+5. اختبار Telegram في مجموعة اختبار: التحقق من أن `/claim` و`/approvechat` يخصان اعتماد المجموعة فقط، وأن المجموعة غير المعتمدة لا تستخدم خدمات البوت. لا توجد لوحة إدارة خاصة ضمن نطاق التشغيل الحالي.
 6. اختبار الطقس الحي عبر Open-Meteo؛ الاختبار المحلي لا يستخدم الشبكة.
-7. اختبار أوامر الحماية والإنذارات والرسائل المجدولة على مجموعة اختبار، مع التحقق من توقيت Africa/Cairo.
+7. اختبار خدمات البوت والرسائل المجدولة على مجموعة اختبار، مع التحقق من توقيت Africa/Cairo. اختبارات الحماية والإشراف تخص Group Help Bot.
 8. بعد اجتياز ما سبق فقط: تحديث GitHub وربط خدمة Railway الحالية دون إنشاء خدمة أو قاعدة ثانية.
 
 ## RC1 legacy-service additions
@@ -44,19 +44,22 @@ Optional environment values:
 
 The fresh RC1 `package-lock.json` could not be generated in the lab because npm registry access timed out. Do not use `legacy/reference/package-lock.json` as the RC1 lockfile; it belongs to the legacy dependency graph. See `RC1-ADDITIVE-PATCH-NOTES.md`.
 
-## Legacy moderation/activity commands added in RC1 patch
-- `/warn USER_ID reason` records a warning for an authorized group manager.
-- `/warnings USER_ID` lists active warnings.
-- `/clearwarn USER_ID` clears active warnings.
-- `/inactive [days]` reports previously observed members whose last observed message is older than the threshold. It is not a full member census because Telegram bots cannot enumerate all ordinary group members through the Bot API.
-- Activity tracking and warning counts are persisted in PostgreSQL. Reaching three warnings produces a review notice; the bot does not automatically mute on that count in this patch.
+## فصل الإدارة والإشراف عن Borsa GPT
 
-## Private controller panel additive update
-- Open `/panel` in a private chat as the master or verified group creator.
-- Inline actions re-check controller authorization on every callback; do not rely on hidden buttons alone.
-- Global and group command menus are cleared; the command list is scoped to the master and verified group-owner private chats.
-- The panel includes a live ScraperAPI source test. It reports configured/not configured and request outcome without revealing the API key.
-- RC1 still requires a freshly generated root `package-lock.json` and `npm ci` verification. The archived legacy lockfile is reference-only and must not be used as the RC1 lock.
+- يتولى **Group Help Bot** إدارة الأعضاء والإشراف والحماية ومكافحة الإزعاج والإنذارات.
+- لا يسجل Borsa GPT أوامر الإدارة القديمة مثل `/warn` و`/warnings` و`/clearwarn` و`/inactive` و`/antispam` و`/settings` و`/schedule` كخدمات تشغيلية.
+- قد تبقى ملفات أو migrations تاريخية في المستودع لأغراض التوافق والاختبارات؛ وجودها وحده لا يعني أن البوت يشغّلها.
+- يظل اعتماد المجموعة عبر `/claim` و`/approvechat` منفصلًا عن الإشراف: فهو حاجز وصول يحدد المجموعات المسموح لبوت البورصة بخدمتها، وليس أداة لإدارة أعضاء المجموعة.
+- مراجعة الأسعار في قناة السجل و`/priceedit` وظيفة تجارية داخلية مقيدة بالصلاحيات، وليست بديلًا عن Group Help Bot.
+
+
+## سطح التشغيل الحالي والصلاحيات
+
+- قائمة أوامر المجموعة مخصصة لخدمات البورصة: `/chemical` و`/weather` و`/pricelist`.
+- لا توجد لوحة تحكم إدارية `/panel` ضمن مسارات التشغيل النشطة.
+- لا يفعّل وجود البوت في مجموعة تلقائيًا حق الوصول؛ يجب أن تكون المجموعة معتمدة في `authorized_chats`.
+- أوامر اعتماد المجموعة لا تمنح صلاحيات إشراف على الأعضاء، ولا ينبغي إضافة أوامر Group Help إلى هذا البوت.
+
 
 ## إصلاحات RC1+ في هذا الأرشيف
 - أُضيف `/claim` داخل المجموعة غير المسجلة، ويقبل الربط فقط إذا طابق المستخدم منشئ المجموعة الذي تعيده Telegram.

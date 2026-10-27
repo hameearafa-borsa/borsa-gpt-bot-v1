@@ -129,7 +129,7 @@ function extractPriceCandidates(text) {
     // Generic package words describe packaging, not the product identity.
     // For weight-only catalog rows (e.g. "شكارة 10 ك") preserve company/section/weight context.
     const normalizedCandidateName = normalizeArabic(candidateName);
-    const meaningfulCandidateName = normalizedCandidateName.replace(/[\s|:：•.,،;؛\\-_=+*]/gu, "");
+    const meaningfulCandidateName = normalizedCandidateName.replace(/[^\p{L}\p{N}]/gu, "");
     const genericPackageOnly = /^(?:شكاره|شوال|كيس|ساشيه)$/iu.test(normalizedCandidateName);
     const productText = meaningfulCandidateName.length >= 2 && !genericPackageOnly
       ? candidateName

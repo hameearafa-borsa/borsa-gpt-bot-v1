@@ -11,7 +11,14 @@ function isListLike(text) {
   const s = toAsciiDigits(String(text || ""));
   const lines = s.split(/\r?\n/).filter(Boolean).length;
   const priceHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\s*(?:ج|جنيه|EGP)(?=\s|\||$)/gi) || []).length;
-  return lines >= 5 && (priceHits >= 3 || (s.match(/\|/g) || []).length >= 3);
+  const pipeCount = (s.match(/\|/g) || []).length;
+  const numericHits = (s.match(/[0-9]+(?:[.,][0-9]+)?/g) || []).length;
+  const quantityHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)\b/giu) || []).length;
+  // Some Telegram clients paste a whole catalog as one long line. Accept only
+  // strong multi-row evidence here; ordinary conversational price mentions stay excluded.
+  const singleLineCatalog = lines === 1 && numericHits >= 12 &&
+    (priceHits >= 8 || pipeCount >= 8 || quantityHits >= 8);
+  return singleLineCatalog || (lines >= 5 && (priceHits >= 3 || pipeCount >= 3));
 }
 function buildListPrompt(text) {
   return [

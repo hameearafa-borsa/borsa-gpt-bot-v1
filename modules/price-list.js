@@ -100,12 +100,12 @@ function isNonPriceCommentLine(line) {
   // Conversation-style notes are not price observations. Do not treat amounts
   // mentioned in prose (e.g. "برضو فيه ب 10 و برضو في ب 25") as prices.
   // Explicit currency labels keep the line eligible for normal validation.
-  if (/(?:جنيه|(?:^|\\s)ج(?:\\s|$)|EGP|جنيه\\s+مصري)/iu.test(raw)) return false;
+  if (/(?:جنيه|(?:^|\s)ج(?:\s|$)|EGP|جنيه\s+مصري)/iu.test(raw)) return false;
   const s = normalizeArabic(raw).trim();
-  return /^(?:برضو|برضه|برده|كمان|وكمان|وفيه|فيه|موجود|متوفر|متاح|لسه|باقي|على فكره|للعلم|معلش)(?:\\s|$)/u.test(s);
+  return /^(?:برضو|برضه|برده|كمان|وكمان|وفيه|فيه|موجود|متوفر|متاح|لسه|باقي|على فكره|للعلم|معلش)(?:\s|$)/u.test(s);
 }
 function removeNonPriceComments(text) {
-  return String(text || "").split(/\\r?\\n/).filter(line => !isNonPriceCommentLine(line)).join("\\n");
+  return String(text || "").split(/\r?\n/).filter(line => !isNonPriceCommentLine(line)).join("\n");
 }
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);

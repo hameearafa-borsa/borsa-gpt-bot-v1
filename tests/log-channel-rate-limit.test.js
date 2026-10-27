@@ -1,6 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { send, retryAfterMs, isTelegramRateLimit } = require("../core/log-channel");
+const { send } = require("../core/log-channel");
+const { retryAfterMs, isTelegramRateLimit, isTelegramRateLimitedNow } = require("../core/telegram-rate-limit");
 
 async function main() {
   assert.equal(retryAfterMs({ message: "429: Too Many Requests: retry after 7" }), 7000);

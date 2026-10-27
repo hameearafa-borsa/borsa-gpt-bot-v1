@@ -332,7 +332,7 @@ bot.on("text", async ctx => {
     const providers = ai.providers.length ? ai.providers.join("، ") : "لا يوجد مزود ذكاء اصطناعي مضبوط";
     const scopeText = m.chatType === "private"
       ? "النطاق: إعدادات البوت العامة"
-      : `المجموعة: ${m.chatId}\\nحالة اعتماد البوت: ${approved ? "معتمدة" : "غير معتمدة"}`;
+      : `المجموعة: ${m.chatId}\nحالة اعتماد البوت: ${approved ? "معتمدة" : "غير معتمدة"}`;
     await ctx.reply(
       `⚙️ إعدادات Borsa GPT Bot\n\n${scopeText}\nمحركات الذكاء المضبوطة: ${providers}\n\nالأوامر المتاحة: /chemical — /weather — /pricelist\n\nملاحظة: إعدادات الخدمات مشتركة حاليًا بين المجموعات؛ هذه الشاشة تعرض الحالة والصلاحيات ولا تغيّر مفاتيح API أو إعدادات الإنتاج.`
     );

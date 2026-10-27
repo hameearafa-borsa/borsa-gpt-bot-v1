@@ -16,7 +16,7 @@ function isListLike(text) {
 function buildListPrompt(text) {
   return [
     "استخرج قائمة أسعار تجارية للمنظفات ومنتجات الورق والعناية الشخصية.",
-    "أعد JSON فقط بالشكل: {\"company\":null,\"items\":[{\"product\":null,\"variant\":null,\"weight_g\":null,\"volume_ml\":null,\"pack_count\":null,\"package_sale_price\":null,\"unit_price_type\":\"بالقطعة|بالكرتونة|null\",\"wholesale_carton_price\":null,\"consumer_price\":null,\"list_price\":null,\"decision\":\"accepted|review|skipped\"}]}.,
+    "أعد JSON فقط بالشكل: {\"company\":null,\"items\":[{\"raw_line\":null,\"product\":null,\"variant\":null,\"weight_g\":null,\"volume_ml\":null,\"pack_count\":null,\"package_sale_price\":null,\"unit_price_type\":\"بالقطعة|بالكرتونة|null\",\"wholesale_carton_price\":null,\"consumer_price\":null,\"list_price\":null,\"decision\":\"accepted|review|skipped\"}]}.,
     "السعر الأول بعد الوزن هو سعر العبوة إذا كان واضحًا. قيمة جملة المنفصلة تحفظ في wholesale_carton_price ولا تستبدل سعر العبوة. قيمة مستهلك تحفظ في consumer_price.",
     "عنوان الأسعار بالقطعة يجعل كل الأسطر التالية بالقطعة حتى يظهر عنوان الأسعار بالكرتونة؛ وعنوان الكرتونة يظل ساريًا حتى يتغير. احفظ ذلك في unit_price_type ولا تخمنه إذا غاب السياق.",
     "لا تستنتج عدد قطع الكرتونة من قسمة الأسعار؛ سجّل pack_count فقط إذا ذُكر صراحة مثل 4ق.",
@@ -170,6 +170,10 @@ async function extractList(ai, text) {
     const parsed = parseAIJson(result.text);
     // Guard AI output against missing identity and non-positive prices; preserve skipped rows for audit.
     parsed.items = parsed.items.map(item => {
+      const rawLine = String(item.raw_line || "").trim();
+      const localMatch = rawLine ? localItems.find(row => row.raw_line === rawLine) : null;
+      // Deterministic section context is authoritative over an AI guess.
+      if (localMatch?.unit_price_type) item = { ...item, unit_price_type: localMatch.unit_price_type, raw_line: rawLine };
       const price = Number(item.package_sale_price);
       const product = String(item.product || "").trim();
       if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };

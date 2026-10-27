@@ -103,7 +103,7 @@ function extractPriceCandidates(text) {
     const preRetailNumbers = numericPriceTokens(stripQuantityTokens(beforeRetail));
     // Skip retail-only observations, but keep a valid base/package price that precedes
     // a separate consumer-price column (e.g. "شكارة 10 ك: 618.35 | مستهلك 630").
-    if (kind === "retail" && preRetailNumbers.length === 0) continue;
+    if (kind === "retail" && (preRetailNumbers.length === 0 || numbers.length <= preRetailNumbers.length)) continue;
 
     const packCount = parsePackCount(parsedLine);
     const extraWeightG = parseExtraWeight(parsedLine);

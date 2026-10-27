@@ -12,6 +12,22 @@ async function recoverPendingNotifications({
   if (!db || typeof db.query !== "function") throw new TypeError("db.query is required");
   if (!telegram || typeof telegram.sendMessage !== "function") throw new TypeError("telegram.sendMessage is required");
   const batchSize = Math.max(1, Math.min(500, Number.isInteger(limit) ? limit : 100));
+  // Repair the crash window where an observation was persisted but its queue row was not.
+  // Only pending observations are eligible; ON CONFLICT keeps this safe to repeat.
+  try {
+    await db.query(
+      `INSERT INTO price_review_queue (observation_id, source_chat_id, log_chat_id)
+       SELECT po.id, po.source_chat_id, $1
+         FROM price_observations po
+         LEFT JOIN price_review_queue q ON q.observation_id = po.id
+        WHERE po.decision = 'pending' AND q.observation_id IS NULL
+       ON CONFLICT (observation_id) DO NOTHING`,
+      [defaultLogChatId]
+    );
+  } catch (error) {
+    try { await onError(error, { stage: "rebuild_missing_queue", observationId: null, logChatId: defaultLogChatId }); } catch {}
+  }
+
   const result = await db.query(
     `SELECT q.observation_id, COALESCE(q.log_chat_id, $1) AS target_log_chat_id,
             po.product_text, po.weight_g, po.volume_ml, po.pack_count, po.brand_key,

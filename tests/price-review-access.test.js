@@ -8,6 +8,6 @@ assert.ok(
   source.includes('if (cmd === "priceedit" && m.chatType === "private") {\n    if (!isMaster(m.userId)'),
   "private /priceedit must require a configured bot owner"
 );
-const reviewGuard = 'if (!isLogChat(ctx.chat?.id) || !isMaster(ctx.from?.id)) {';
+const reviewGuard = 'if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !isMaster(ctx.from?.id)) {';
 assert.equal(source.split(reviewGuard).length - 1, 2, "both review callbacks must require a configured bot owner");
 console.log("price review authorization is restricted to configured bot owners: OK");

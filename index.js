@@ -228,7 +228,7 @@ bot.on("text", async ctx => {
         if (target?.log_chat_id && target?.log_message_id) {
           try {
             await ctx.telegram.editMessageText(target.log_chat_id, target.log_message_id, undefined,
-              `✏️ تم تعديل واعتماد سجل السعر #${id}\\nالصنف: ${productText}\\nالسعر: ${price.toFixed(2)} ج.م\\nنوع السعر: جملة\\nالمراجع: ${m.userId}`,
+              `✏️ تم تعديل واعتماد سجل السعر #${id}\nالصنف: ${productText}\nالسعر: ${price.toFixed(2)} ج.م\nنوع السعر: جملة\nالمراجع: ${m.userId}`,
               { reply_markup: { inline_keyboard: [] } });
             buttonsRemoved = true;
           } catch (editError) {

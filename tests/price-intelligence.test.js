@@ -115,6 +115,8 @@ assert.doesNotMatch(pearlRows[3].product_text, /^شكاره$/u, "generic sack wo
 assert.equal(pearlRows[3].package_type, "sack");
 assert.equal(pearlRows[0].company, "بيرل");
 assert.equal(pearlRows[0].section, "أوتوماتيك");
+assert.match(pearlRows[0].product_text, /بيرل/u, "a numeric price must not become the product name");
+assert.doesNotMatch(pearlRows[0].product_text, /505[.]31/u, "the unlabeled numeric amount belongs to price review, not product identity");
 assert.equal(pearlRows[0].consumer_price, 525);
 assert.equal(pearlRows[3].consumer_price, 630);
 assert.ok(pearlRows.every(row => row.package_sale_price !== row.consumer_price), "consumer column must not replace the observed sale price");

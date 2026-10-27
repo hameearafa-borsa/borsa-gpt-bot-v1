@@ -1,6 +1,8 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { isOwnMessage, isEligibleMessage, observe } = require("../modules/price-monitor");
+const fs = require("node:fs");
+const path = require("node:path");
+const { isOwnMessage, isEligibleMessage, isBulkPriceList, observe } = require("../modules/price-monitor");
 const registry = require("../data/product-registry.json");
 
 (async () => {
@@ -10,6 +12,11 @@ const registry = require("../data/product-registry.json");
   assert.equal(isEligibleMessage({ ...base, isLogChannel: true, isCommand: false, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: true, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: false, ownMessage: true }), false);
+  const unileverList = fs.readFileSync(path.join(__dirname, "fixtures-unilever-oct-2026.txt"), "utf8");
+  assert.equal(isBulkPriceList(unileverList), true, "a long Unilever price list is a catalog, not one ordinary price observation");
+  assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "bulk price lists must not generate dozens of individual review messages");
+  assert.equal(isBulkPriceList(base.text), false, "a single product price remains eligible");
   assert.equal(isOwnMessage({ botUserId: 123, fromId: "123" }), true);
   assert.equal(isOwnMessage({ botUserId: 123, fromId: 456 }), false);
 

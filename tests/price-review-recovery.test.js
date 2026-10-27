@@ -14,8 +14,8 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   const db = { async query(sql, params) {
     queries.push({ sql, params });
     if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
-    if (sql.includes("SELECT q.observation_id")) return { rows, rowCount: rows.length };
-    if (sql.includes("UPDATE price_review_queue")) return { rows: [{ observation_id: params[1] }], rowCount: 1 };
+    if (sql.includes("WITH candidates AS")) return { rows, rowCount: rows.length };
+    if (sql.includes("UPDATE price_review_queue SET log_message_id")) return { rows: [{ observation_id: params[1] }], rowCount: 1 };
     throw new Error("unexpected query");
   } };
   const telegram = {
@@ -31,7 +31,7 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   assert.equal(sent[0].options.reply_markup.inline_keyboard.flat().length, 4);
   assert.match(sent[0].message, /مراجعة سعر معلّق #51/);
   assert.match(queries[0].sql, /po\.decision = 'pending' AND q\.observation_id IS NULL/);
-  assert.match(queries[1].sql, /status = 'pending' AND q\.log_message_id IS NULL/);
+  assert.match(queries[1].sql, /FOR UPDATE SKIP LOCKED/);
   assert.equal(queries[2].params[0], 901);
   assert.equal(errors.length, 0);
   assert.equal(deleted.length, 0);
@@ -39,8 +39,8 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   let failureDeleteCount = 0;
   const failingDb = { async query(sql) {
     if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
-    if (sql.includes("SELECT q.observation_id")) return { rows: [rows[0]], rowCount: 1 };
-    if (sql.includes("UPDATE price_review_queue")) throw new Error("database write failed");
+    if (sql.includes("WITH candidates AS")) return { rows: [rows[0]], rowCount: 1 };
+    if (sql.includes("UPDATE price_review_queue SET log_message_id")) throw new Error("database write failed");
     throw new Error("unexpected query");
   } };
   const failingStats = await recoverPendingNotifications({
@@ -61,7 +61,7 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   const sendFailStats = await recoverPendingNotifications({
     db: { async query(sql) {
       if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
-      if (sql.includes("SELECT q.observation_id")) return { rows: [rows[0]], rowCount: 1 };
+      if (sql.includes("WITH candidates AS")) return { rows: [rows[0]], rowCount: 1 };
       throw new Error("unexpected query");
     } },
     telegram: { async sendMessage() { throw new Error("telegram unavailable"); } },
@@ -77,8 +77,8 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
     db: { async query(sql, params) {
       rebuiltCalls.push({ sql, params });
       if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 1 };
-      if (sql.includes("SELECT q.observation_id")) return { rows: [rows[0]], rowCount: 1 };
-      if (sql.includes("UPDATE price_review_queue")) return { rows: [{ observation_id: params[1] }], rowCount: 1 };
+      if (sql.includes("WITH candidates AS")) return { rows: [rows[0]], rowCount: 1 };
+      if (sql.includes("UPDATE price_review_queue SET log_message_id")) return { rows: [{ observation_id: params[1] }], rowCount: 1 };
       throw new Error("unexpected rebuild query");
     } },
     telegram: { async sendMessage(chatId, message, options) {

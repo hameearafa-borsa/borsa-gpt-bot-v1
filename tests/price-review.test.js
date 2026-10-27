@@ -30,7 +30,7 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   const ignoredDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
     ignoredCalls.push({ sql, params });
     if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ ...row, id: 45 }] };
-    return { rowCount: 1, rows: [];
+    return { rowCount: 1, rows: [] };
   } }); } };
   const ignored = await resolveReview({ db: ignoredDb, id: 45, action: "ignore", reviewerId: 7 });
   assert.equal(ignored.ok, true);

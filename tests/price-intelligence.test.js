@@ -116,6 +116,7 @@ assert.equal(pearlRows[3].consumer_price, 630);
 assert.ok(pearlRows.every(row => row.package_sale_price !== row.consumer_price), "consumer column must not replace the observed sale price");
 const pearlListRows = deterministicList(pearlOctober);
 assert.equal(pearlListRows.length, 13, "Pearl company-list parser should preserve all 13 rows");
+assert.equal(pearlListRows[9].category, "العبوات الصغيرة", "small-pack section heading must not overwrite the company context");
 assert.equal(pearlListRows.filter(row => row.decision === "accepted").length, 13, "Pearl rows with company, section and weight context should be accepted");
 assert.equal(pearlListRows[0].wholesale_carton_price, 487.40);
 assert.equal(pearlListRows[0].consumer_price, 525);

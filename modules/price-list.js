@@ -148,7 +148,7 @@ function deterministicList(text) {
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(productPrefix);
-    const isNumericOnly = !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));
+    const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));
     const product = metadata.company
       ? productPrefix
       : [company, section, productPrefix, weightLabel].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();

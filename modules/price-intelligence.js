@@ -144,7 +144,7 @@ function extractPriceCandidates(text) {
       weight_g: q?.grams ?? decimalAutomaticGrams,
       volume_ml: q?.milliliters ?? null,
       offer_extra_weight_g: extraWeightG,
-      pack_count,
+      pack_count: packCount,
       confidence: explicitWholesale ? (new Set(numbers).size > 1 ? 0.65 : 0.92) : (consumerIndex >= 0 ? 0.65 : 0.55),
     });
   }

@@ -13,5 +13,5 @@ const body = source.slice(start, end);
 assert.match(body, /command: "chemical"/);
 assert.match(body, /command: "weather"/);
 assert.match(body, /command: "pricelist"/);
-assert.doesNotMatch(body, /panel|approvechat|claim|settings|antispam|schedule|warn|pricelist|inactive/);
+assert.doesNotMatch(body, /panel|approvechat|claim|settings|antispam|schedule|warn|inactive/);
 console.log("service-only Telegram command menu test: OK");

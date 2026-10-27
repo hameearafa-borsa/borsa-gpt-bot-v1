@@ -1,0 +1,18 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const root = path.join(__dirname, "..");
+const migration = fs.readFileSync(path.join(root, "migrations", "015_price_review_notification_leases.sql"), "utf8");
+const recovery = fs.readFileSync(path.join(root, "modules", "price-review-recovery.js"), "utf8");
+const index = fs.readFileSync(path.join(root, "index.js"), "utf8");
+assert.match(migration, /ADD COLUMN IF NOT EXISTS notification_claim_token TEXT/i);
+assert.match(migration, /ADD COLUMN IF NOT EXISTS notification_claimed_at TIMESTAMPTZ/i);
+assert.match(recovery, /FOR UPDATE SKIP LOCKED/i);
+assert.match(recovery, /notification_claimed_at < NOW\(\) - \(\$3 \* INTERVAL '1 second'\)/i);
+assert.match(recovery, /notification_claim_token = \$4/i);
+assert.match(recovery, /AND notification_claim_token = \$3/i);
+assert.match(index, /notification_claim_token=\$1, notification_claimed_at=NOW\(\)/i);
+assert.match(index, /notification_claimed_at < NOW\(\) - INTERVAL '120 seconds'/i);
+assert.match(index, /AND notification_claim_token=\$3/i);
+console.log("price review notification lease and concurrency regression tests: OK");

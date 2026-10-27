@@ -14,7 +14,7 @@ const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
 const { formatTelegramStartupError } = require("./core/telegram-startup-error");
 const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
-const { MASTER_ID, canManage, isMaster, authorizedUserIds } = require("./core/permissions");
+const { MASTER_ID, isMaster } = require("./core/permissions");
 const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { renderPriceListImages } = require("./modules/price-list-image");
@@ -24,15 +24,15 @@ const priceReviewRecovery = require("./modules/price-review-recovery");
 const { saveMerchant } = require("./modules/merchant-intelligence");
 const chemical = require("./modules/chemical-assistant");
 const deals = require("./modules/deals");
-const protection = require("./modules/protection");
-const scheduler = require("./modules/scheduler");
-const { parseLocalDateTime } = require("./core/cairo-time");
+
+
+
 const weather = require("./modules/weather");
 const { ensureWeatherSchedulerSchema, startWeatherScheduler } = require("./modules/weather-scheduler");
 const { startDealScheduler } = require("./modules/deal-scheduler");
-const legacyAdmin = require("./modules/legacy-admin");
-const adminPanel = require("./modules/admin-panel");
-const { fetchSearch } = require("./modules/deal-sources");
+
+
+
 const { startCatalogNewsletterScheduler } = require("./modules/catalog-newsletter-scheduler");
 const { ensureEconomicNewsletterSchema, startEconomicNewsletterScheduler } = require("./modules/economic-newsletter");
 
@@ -61,7 +61,6 @@ const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
 const chemicalAI = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] });
 let botUserId = null;
-let stopScheduledMessages = () => {};
 let stopDeals = () => {};
 let stopCatalogs = () => {};
 let stopWeather = () => {};
@@ -118,133 +117,19 @@ async function sendLog(event) {
   return true;
 }
 
-async function authorizeChat(chatId, chatType, ownerUserId, authorizedBy = ownerUserId) {
-  if (!db.pool) return false;
-  await db.query(`INSERT INTO authorized_chats(chat_id,chat_type,owner_user_id,authorized_by)
-    VALUES($1,$2,$3,$4) ON CONFLICT(chat_id) DO UPDATE SET owner_user_id=EXCLUDED.owner_user_id, authorized_by=EXCLUDED.authorized_by, active=TRUE`,
-    [chatId, chatType, ownerUserId ?? null, authorizedBy ?? null]);
-  return true;
-}
-
 async function isAuthorizedChat(chatId) {
   if (!db.pool) return false;
   const r = await db.query(`SELECT active FROM authorized_chats WHERE chat_id=$1`, [chatId]);
   return Boolean(r.rows[0]?.active);
 }
 
-async function isPrivateController(userId) {
-  if (isMaster(userId)) return true;
-  if (!db.pool || !userId) return false;
-  const r = await db.query(`SELECT 1 FROM authorized_chats WHERE active=TRUE AND chat_type IN ('group','supergroup') AND owner_user_id=$1 LIMIT 1`, [userId]);
-  return Boolean(r.rowCount);
-}
-
-async function canControl(ctx, m = messageData(ctx)) {
-  if (isMaster(m.userId)) return true;
-  if (m.chatType === "private") return isPrivateController(m.userId);
-  return canManage(ctx.telegram, m.chatId, m.userId);
-}
-
-async function showPrivatePanel(ctx, edit = false) {
-  if (ctx.chat?.type !== "private" || !(await isPrivateController(ctx.from?.id))) {
-    if (ctx.callbackQuery && ctx.answerCbQuery) await ctx.answerCbQuery("هذه اللوحة خاصة بالمالك فقط.", { show_alert: true }).catch(() => {});
-    return false;
-  }
-  const text = adminPanel.panelText(APP_VERSION, ai.providers || []);
-  const extra = { reply_markup: adminPanel.privatePanelKeyboard(), disable_web_page_preview: true };
-  if (ctx.callbackQuery && ctx.answerCbQuery) await ctx.answerCbQuery().catch(() => {});
-  if (edit && ctx.editMessageText) {
-    try { await ctx.editMessageText(text, extra); return true; } catch {}
-  }
-  await ctx.reply(text, extra);
-  return true;
-}
-
 async function configureCommandMenus() {
-  const privateAdminCommands = [
-    { command: "panel", description: "لوحة التحكم الخاصة" },
-    { command: "approvechat", description: "اعتماد مجموعة (مالك البوت فقط)" }
-  ];
-  const groupOwnerCommands = [
-    { command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة" },
-    { command: "claim", description: "طلب اعتماد المجموعة" },
-    { command: "settings", description: "إعدادات المجموعة" },
-    { command: "antispam", description: "إعدادات مانع الإزعاج" },
-    { command: "schedule", description: "جدولة رسالة" },
-    { command: "warn", description: "تسجيل إنذار" },
-    { command: "warnings", description: "عرض الإنذارات" },
-    { command: "clearwarn", description: "إغلاق الإنذارات" },
-    { command: "inactive", description: "تقرير الأعضاء الخاملين" }
-  ];
-  const groupCommands = [
-    { command: "chemical", description: "المساعد الكيميائي" }
-  ];
-
-  // Keep management commands out of the shared group menu. Telegram supports
-  // per-member command scopes, so only each group's creator and configured bot
-  // owners receive the management menu inside that group.
+  // Borsa GPT exposes service commands only; group administration belongs to Group Help Bot.
   await bot.telegram.setMyCommands([], { scope: { type: "default" } });
-  await bot.telegram.setMyCommands(groupCommands, { scope: { type: "all_group_chats" } });
-
-  const botOwnerIds = new Set([...authorizedUserIds()].map(String));
-  const privateOwnerIds = new Set(botOwnerIds);
-  const groupOwners = [];
-  try {
-    const activeGroups = await db.query(`SELECT chat_id, owner_user_id FROM authorized_chats
-      WHERE active=TRUE AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL`);
-    const pendingGroups = await db.query(`SELECT chat_id, owner_user_id FROM pending_group_approvals
-      WHERE status='pending' AND chat_type IN ('group','supergroup') AND owner_user_id IS NOT NULL`);
-    for (const row of activeGroups.rows) {
-      const chatId = Number(row.chat_id);
-      const ownerId = String(row.owner_user_id);
-      if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(Number(ownerId))) continue;
-      groupOwners.push({ chatId, ownerId });
-      privateOwnerIds.add(ownerId);
-    }
-    for (const row of pendingGroups.rows) {
-      const chatId = Number(row.chat_id);
-      const ownerId = String(row.owner_user_id);
-      if (!Number.isSafeInteger(chatId) || !Number.isSafeInteger(Number(ownerId))) continue;
-      groupOwners.push({ chatId, ownerId });
-    }
-    for (const { chatId, ownerId } of groupOwners) {
-      try {
-        await bot.telegram.setMyCommands(groupOwnerCommands, {
-          scope: { type: "chat_member", chat_id: chatId, user_id: Number(ownerId) }
-        });
-      } catch (error) {
-        await sendLog({ module: "security", stage: "command_menu_group_owner_scope", severity: "warn", status: "failed", details: { chatId, ownerId: Number(ownerId), code: error.code || null, message: error.message } });
-      }
-      for (const id of botOwnerIds) {
-        const userId = Number(id);
-        if (!Number.isSafeInteger(userId) || id === ownerId) continue;
-        try {
-          await bot.telegram.setMyCommands(groupOwnerCommands, {
-            scope: { type: "chat_member", chat_id: chatId, user_id: userId }
-          });
-        } catch (error) {
-          await sendLog({ module: "security", stage: "command_menu_bot_owner_group_scope", severity: "warn", status: "failed", details: { chatId, ownerId: userId, code: error.code || null, message: error.message } });
-        }
-      }
-    }
-  } catch (error) {
-    await sendLog({ module: "security", stage: "command_menu_owner_lookup", severity: "warn", status: "partial", details: { code: error.code || null } });
-  }
-
-  // Private controller commands are scoped to known bot owners and verified
-  // group creators. Authorization is still enforced by each command handler.
-  for (const id of privateOwnerIds) {
-    const userId = Number(id);
-    if (!Number.isSafeInteger(userId)) continue;
-    const commands = botOwnerIds.has(id)
-      ? [...privateAdminCommands, ...groupOwnerCommands.filter(command => command.command !== "claim")]
-      : [{ command: "panel", description: "لوحة التحكم الخاصة" }, ...groupOwnerCommands.filter(command => command.command !== "claim")];
-    try {
-      await bot.telegram.setMyCommands(commands, { scope: { type: "chat", chat_id: userId } });
-    } catch (error) {
-      await sendLog({ module: "security", stage: "command_menu_private_scope", severity: "warn", status: "failed", details: { ownerId: userId, code: error.code || null, message: error.message } });
-    }
-  }
+  await bot.telegram.setMyCommands([
+    { command: "chemical", description: "المساعد الكيميائي" },
+    { command: "weather", description: "الطقس" }
+  ], { scope: { type: "all_group_chats" } });
 }
 
 async function ensureDb() {
@@ -258,58 +143,6 @@ bot.use(async (ctx, next) => {
   const isMessageUpdate = Boolean(ctx.message || ctx.editedMessage || ctx.channelPost);
   if (isMessageUpdate && m.messageId) await cacheMessage(db.pool, m).catch(e => console.warn("[CACHE_FAIL]", redactString(e?.message || "cache_error")));
   if (isMessageUpdate && m.messageId && !(await claimMessage(db.pool, { chatId: m.chatId, messageId: m.messageId, updateType: ctx.updateType }))) return;
-  if (["group", "supergroup"].includes(m.chatType) && m.userId && !isBotMessage(ctx, botUserId)) {
-    legacyAdmin.recordActivity(db.pool, { chatId: m.chatId, userId: m.userId, username: ctx.from?.username, displayName: [ctx.from?.first_name,ctx.from?.last_name].filter(Boolean).join(" ") }).catch(e => console.warn("[ACTIVITY_TRACK_FAIL]", redactString(e?.message || "activity_track_error")));
-  }
-  // Legacy protection is additive and audit-first. Destructive enforcement is opt-in.
-  if (["group", "supergroup"].includes(m.chatType) && (m.text || m.caption) && !/^\s*\//.test(m.text || "") && !isBotMessage(ctx, botUserId)) {
-    try {
-      let opts = { anti_spam_enabled: true, block_excessive_links: true, max_links: 5, max_message_length: 5000, block_untrusted_forwards: false };
-      const setting = await db.query("SELECT * FROM moderation_settings WHERE chat_id=$1", [m.chatId]).catch(() => ({ rows: [] }));
-      if (setting.rows[0]) opts = { ...opts, ...setting.rows[0] };
-      if (opts.anti_spam_enabled) {
-        const rateInput = { chatId: m.chatId, userId: m.userId, messageId: m.messageId, limit: Number(process.env.PROTECTION_RATE_LIMIT || 5), windowMs: Number(process.env.PROTECTION_RATE_WINDOW_MS || 60_000) };
-        const rate = db.pool && m.messageId != null
-          ? await protection.recordRate(db.pool, rateInput)
-          : protection.inspectRate(rateInput);
-        if (rate.limited) {
-          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, "flagged", "rate_limit", JSON.stringify({ count: rate.count, limit: rate.limit, windowMs: rate.windowMs })]).catch(() => {});
-          await sendLog({ module: "protection", stage: "rate_limit_detected", severity: "warn", status: "audit_only", details: { chatId: m.chatId, messageId: m.messageId, userId: m.userId, count: rate.count, limit: rate.limit, windowMs: rate.windowMs } });
-        }
-        const mediaMessage = ctx.message || ctx.editedMessage || ctx.channelPost;
-        const messageType = mediaMessage?.photo ? "photo" : mediaMessage?.video ? "video" : mediaMessage?.document ? "document" : "text";
-        const mediaQuotaInput = {
-          chatId: m.chatId, userId: m.userId, messageType,
-          messageId: m.messageId,
-          now: Date.now(),
-          photoLimit: Number(process.env.PROTECTION_DAILY_PHOTO_LIMIT || 3),
-          videoLimit: Number(process.env.PROTECTION_DAILY_VIDEO_LIMIT || 1),
-          mediaGroupId: mediaMessage?.media_group_id || null
-        };
-        // Use PostgreSQL counters when available so restarts and multiple replicas
-        // share the same audit count. The process-local fallback remains audit-only.
-        const mediaQuota = db.pool
-          ? await protection.recordMediaQuota(db.pool, mediaQuotaInput)
-          : protection.inspectMediaQuota(mediaQuotaInput);
-        if (mediaQuota.exceeded) {
-          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, "flagged", "daily_media_quota", JSON.stringify({ type: messageType, count: mediaQuota.count, limit: mediaQuota.limit, day: mediaQuota.day, mediaGroupId: mediaQuota.mediaGroupId })]).catch(() => {});
-          await sendLog({ module: "protection", stage: "media_quota_detected", severity: "warn", status: "audit_only", details: { chatId: m.chatId, messageId: m.messageId, userId: m.userId, type: messageType, count: mediaQuota.count, limit: mediaQuota.limit, day: mediaQuota.day, mediaGroupId: mediaQuota.mediaGroupId } });
-        }
-        const result = protection.inspectMessage({ text: m.text, caption: m.caption, messageType, isForward: Boolean(mediaMessage?.forward_origin || mediaMessage?.forward_from || mediaMessage?.forward_from_chat), trustedForward: false }, { maxLinks: opts.block_excessive_links ? opts.max_links : 999, maxLength: opts.max_message_length, blockUntrustedForwards: opts.block_untrusted_forwards });
-        if (!result.allowed) {
-          await db.query("INSERT INTO moderation_events(chat_id,message_id,user_id,action,reason,details) VALUES($1,$2,$3,$4,$5,$6)", [m.chatId, m.messageId || null, m.userId || null, process.env.PROTECTION_ENFORCE === "true" ? "delete_attempt" : "flagged", result.reasons.join(","), JSON.stringify({ length: result.length, linkCount: result.linkCount })]).catch(() => {});
-          await sendLog({ module: "protection", stage: "message_flagged", severity: "warn", status: process.env.PROTECTION_ENFORCE === "true" ? "delete_attempted" : "audit_only", details: { chatId: m.chatId, messageId: m.messageId, userId: m.userId, reasons: result.reasons } });
-          if (process.env.PROTECTION_ENFORCE === "true" && m.messageId) {
-            try { await ctx.telegram.deleteMessage(m.chatId, m.messageId); } catch (e) { await sendLog({ module: "protection", stage: "delete_message", severity: "error", status: "failed", details: { code: e.code, message: e.message } }); }
-            return;
-          }
-        }
-      }
-    } catch (error) {
-      const report = makeReport({ module: "protection", stage: "middleware", severity: "ERROR", action: "inspect_message", error, input: m.text, chatId: m.chatId, messageId: m.messageId });
-      await emitReport({ bot, db, report });
-    }
-  }
   return next();
 });
 
@@ -347,100 +180,6 @@ bot.on("my_chat_member", async ctx => {
       [chat.id, chat.type, actor ?? null, creatorId]);
   }
   await sendLog({ module: "security", stage: "group_approval_required", severity: "warn", status: "pending", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
-});
-
-bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protection|inactive|health|scraper_test|diagnostics)$/, async ctx => {
-  if (ctx.chat?.type !== "private" || !(await isPrivateController(ctx.from?.id))) {
-    await ctx.answerCbQuery("غير مصرح. اللوحة الخاصة للمالك فقط.", { show_alert: true }).catch(() => {});
-    return;
-  }
-  const action = ctx.match[1];
-  if (action === "home") { await showPrivatePanel(ctx, true); return; }
-  await ctx.answerCbQuery().catch(() => {});
-  if (action === "health") {
-    let dbState = "غير متاح";
-    try { await db.query("SELECT 1"); dbState = "متصل"; } catch (e) { dbState = `فشل (${String(e.code || e.message).slice(0,80)})`; }
-    const body = `🩺 تشخيص النظام\nالإصدار: ${APP_VERSION}\nقاعدة البيانات: ${dbState}\nGPT providers: ${(ai.providers || []).join("، ") || "لا يوجد"}\nSCRAPER_API_KEY: ${process.env.SCRAPER_API_KEY ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nSCRAPER_API_KEY_2: ${process.env.SCRAPER_API_KEY_2 ? "موجود (القيمة مخفية)" : "غير مضبوط"}\nوجهة النشرات: المجموعات المعتمدة النشطة من قاعدة البيانات\n\nهذا فحص إعدادات واتصال قاعدة البيانات، وليس إثباتًا لنجاح كل متجر أو API.`;
-    await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() }); return;
-  }
-  if (action === "prices") {
-    let counts = [];
-    let pending = [];
-    let countsAvailable = true;
-    try {
-      const result = await db.query("SELECT decision, COUNT(*)::int AS n FROM price_observations GROUP BY decision");
-      counts = result.rows;
-    } catch {
-      countsAvailable = false;
-    }
-    try {
-      const result = await db.query(
-        "SELECT product_text, package_sale_price, price_kind, confidence, raw_text, observed_at FROM price_observations WHERE decision='pending' ORDER BY observed_at DESC LIMIT 5"
-      );
-      pending = result.rows;
-    } catch {
-      countsAvailable = false;
-    }
-    const countText = countsAvailable
-      ? ["accepted", "pending"].map(kind => {
-          const row = counts.find(item => item.decision === kind);
-          return `${kind === "accepted" ? "مرصودة بثقة عالية" : "تحتاج مراجعة"}: ${row?.n ?? 0}`;
-        }).join("\n")
-      : "تعذر قراءة ملخص الرصد من قاعدة البيانات؛ لم يتم تغيير أي سجل.";
-    const pendingText = pending.length
-      ? pending.map((row, i) => {
-          const name = String(row.product_text || row.raw_text || "صنف غير محدد").replace(/\s+/g, " ").slice(0, 90);
-          const price = Number(row.package_sale_price);
-          const confidence = row.confidence == null ? "غير محددة" : `${Math.round(Number(row.confidence) * 100)}٪`;
-          const date = row.observed_at ? new Date(row.observed_at).toLocaleString("ar-EG") : "وقت غير محدد";
-          return `${i + 1}. ${name} — ${Number.isFinite(price) ? price.toFixed(2) + " ج.م" : "سعر غير واضح"}\n   النوع: ${row.price_kind || "غير محدد"} — الثقة: ${confidence} — ${date}`;
-        }).join("\n")
-      : "لا توجد سجلات معلقة حديثة، أو تعذر تحميلها.";
-    await ctx.editMessageText(
-      `💰 رصد الأسعار — مراجعة داخلية\n\n${countText}\n\nآخر الأسعار التي تحتاج مراجعة:\n${pendingText}\n\nهذه شاشة متابعة فقط؛ لا تعتمد الأسعار أو تعدّلها تلقائيًا. السعر الملتبس يظل قيد المراجعة.`,
-      { reply_markup: adminPanel.actionKeyboard() }
-    );
-    return;
-  }
-  if (action === "scraper_test") {
-    if (process.env.ENABLE_SCRAPER_TEST !== "true") {
-      await ctx.editMessageText("⏸️ اختبار الجلب متوقف افتراضيًا لتجنب استهلاك رصيد ScraperAPI. لا يُرسل أي طلب خارجي.", { reply_markup: adminPanel.actionKeyboard() });
-      return;
-    }
-    const result = await fetchSearch("amazon", "مسحوق غسيل", { timeoutMs: 70000 });
-    const body = result.ok
-      ? `🌐 اختبار ScraperAPI\nالحالة: اتصال HTTP ناجح\nالمصدر: Amazon.eg\nالعناصر المستخرجة: ${result.deals.length}\n\nتنبيه: الاتصال ناجح، لكن صفر عناصر قد يعني تغيّر صفحة المتجر أو حجب المحتوى.`
-      : `🌐 اختبار ScraperAPI\nالحالة: فشل\nالسبب: ${result.reason || "unknown"}\n\nلم تُعرض قيمة المفتاح في التقرير.`;
-    await sendLog({ module: "deals", stage: "manual_source_test", severity: result.ok ? "info" : "warn", status: result.ok ? "ok" : "failed", details: { source: "amazon", reason: result.reason || null, extracted: result.deals?.length || 0 } });
-    await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() }); return;
-  }
-  if (action === "diagnostics") {
-    const r = await db.query("SELECT ts,module,stage,severity,status,details FROM diagnostic_events ORDER BY ts DESC LIMIT 8").catch(() => ({ rows: [] }));
-    const body = r.rows.length ? r.rows.map((x,i)=>`${i+1}. ${new Date(x.ts).toLocaleString("ar-EG")} — ${x.severity}/${x.module}/${x.stage} — ${x.status}`).join("\n") : "لا توجد تقارير محفوظة أو تعذر قراءة جدول التشخيص.";
-    await ctx.editMessageText(`📄 آخر تقارير الأخطاء\n${body}\n\nللحصول على التقرير الكامل، راجع قناة السجلات باستخدام Report ID.`, { reply_markup: adminPanel.actionKeyboard() }); return;
-  }
-  if (action === "reports") {
-    const checks = [
-      ["رصد الأسعار", "SELECT COUNT(*)::int AS n FROM price_observations"],
-      ["قوائم الشركات", "SELECT COUNT(*)::int AS n FROM price_list_runs"],
-      ["العروض المنشورة", "SELECT COUNT(*)::int AS n FROM deal_publications WHERE status='published'"],
-      ["الإنذارات النشطة", "SELECT COUNT(*)::int AS n FROM member_warnings WHERE active=TRUE"],
-      ["تقارير التشخيص", "SELECT COUNT(*)::int AS n FROM diagnostic_events"]
-    ];
-    const lines=[];
-    for (const [label,sql] of checks) { try { const q=await db.query(sql); lines.push(`${label}: ${q.rows[0]?.n ?? 0}`); } catch { lines.push(`${label}: الجدول/الاستعلام غير متاح في هذا المخطط`); } }
-    await ctx.editMessageText(`📊 ملخص التقارير\n${lines.join("\n")}\n\nالأعداد وصفية حسب السجلات الموجودة ولا تعني أن جميع مصادر البيانات الحية تعمل.`, { reply_markup: adminPanel.actionKeyboard() }); return;
-  }
-  const guides = {
-    chemical: "🧪 المساعد الكيميائي\nأرسل سؤالك هنا في الخاص، أو اكتب /مساعد متبوعًا بالسؤال. سيولّد البوت إجابة وروابط بحث آمنة؛ التركيبات الخطرة تخضع لبوابة السلامة.",
-    prices: "💰 رصد الأسعار\nالرصد التلقائي يعمل بصمت داخل المجموعة المصرح بها. أرسل سعرًا واضحًا في المجموعة، ولن تظهر رسالة لكل عملية رصد.",
-    lists: "📋 قوائم الشركات\nاستخدم /قائمة ثم ألصق نص القائمة. لا ترسل رابطًا إلا إذا كانت الرسالة الأصلية قد مرّت على البوت وتم تخزين مرجعها. الصفوف غير الواضحة تُحال للمراجعة بدل التخمين.",
-    merchants: "🏪 بيانات التجار\nتُحفظ البيانات فقط عند توافر مؤشرات موثوقة، ولا يطلب البوت من الأعضاء نشر بيانات شخصية بلا داعٍ.",
-    deals: `🛍️ العروض\nحالة المفتاح: ${process.env.SCRAPER_API_KEY ? "موجود، استخدم زر اختبار المصدر" : "SCRAPER_API_KEY غير مضبوط"}\nوجهات النشر: المجموعات المعتمدة النشطة في قاعدة البيانات؛ لا يلزم ضبط DEALS_CHAT_ID\nلا تُنشر عروض مخترعة عند فشل المصدر.`,
-    protection: "🛡️ الحماية والإنذارات\nالأوامر الإدارية /antispam و/warn و/warnings و/clearwarn متاحة للمصرح لهم فقط. الحذف التلقائي يظل معطلاً ما لم يُفعّل صراحةً في البيئة. إجراء الإعدادات لكل مجموعة سيبقى مرتبطًا بمعرّف المجموعة وليس الخاص.",
-    inactive: "👥 الأعضاء الخاملون\nاستخدم /inactive 30 داخل المجموعة المصرح بها. التقرير يعتمد على نشاط الرسائل التي رصدها البوت منذ بدء التتبع، وليس تعدادًا كاملًا للأعضاء."
-  };
-  await ctx.editMessageText(guides[action] || "الخدمة غير متاحة حاليًا.", { reply_markup: adminPanel.actionKeyboard() });
 });
 
 bot.on("text", async ctx => {
@@ -562,15 +301,12 @@ bot.on("text", async ctx => {
 
   // Ordinary members may use automatic services, but slash commands are controller-only.
   const isChemicalCommand = ["مساعد", "كيمياء", "المساعد_الكيميائي", "chemical", "chem"].includes(cmd);
-  if (cmd && !isChemicalCommand && !(await canControl(ctx, m))) return;
-
-  if ((cmd === "panel" || cmd === "start" || cmd === "settings") && m.chatType === "private") {
-    await showPrivatePanel(ctx, false);
+  if (cmd === "start" || cmd === "help") {
+    await ctx.reply("مرحبًا بك في بوت بورصة المنظفات. الخدمات المتاحة: /chemical للمساعد الكيميائي و/weather للطقس، أو استخدم أمر قائمة الأسعار داخل المجموعة المعتمدة.");
     return;
   }
 
   if (cmd === "قائمة" || cmd === "pricelist") {
-    if (!(await canControl(ctx, m))) return;
     let sourceText = args;
     const link = parseMessageLink(args);
     if (link) {
@@ -633,69 +369,10 @@ bot.on("text", async ctx => {
     return;
   }
 
-  if (cmd === "settings" || cmd === "admin") {
-    if (!(await canControl(ctx, m))) return;
-    const chatId = m.chatId;
-    const settings = await db.query("SELECT * FROM moderation_settings WHERE chat_id=$1", [chatId]).catch(() => ({ rows: [] }));
-    const mod = settings.rows[0] || { anti_spam_enabled: true, block_excessive_links: true, max_links: 5, block_untrusted_forwards: false };
-    const jobs = await scheduler.listScheduledMessages(db.pool, chatId).catch(() => []);
-    await ctx.reply(`🛡️ لوحة الإدارة — ${APP_VERSION}\n\nحماية الرسائل: ${mod.anti_spam_enabled ? "مفعّلة (رصد آمن)" : "متوقفة"}\nحذف تلقائي: ${process.env.PROTECTION_ENFORCE === "true" ? "مفعّل" : "غير مفعّل — مراجعة فقط"}\nالرسائل المجدولة: ${jobs.length}\n\nالأوامر: /antispam on أو /antispam off\n/schedule YYYY-MM-DDTHH:mm نص الرسالة\n/weather اسم المدينة\n\n${BOT_CREDIT}`);
-    return;
-  }
-
-  if (cmd === "antispam") {
-    if (!(await canControl(ctx, m))) return;
-    const mode = args.toLowerCase();
-    if (!["on", "off"].includes(mode)) { await ctx.reply("استخدم /antispam on أو /antispam off"); return; }
-    await db.query(`INSERT INTO moderation_settings(chat_id,anti_spam_enabled,updated_by) VALUES($1,$2,$3) ON CONFLICT(chat_id) DO UPDATE SET anti_spam_enabled=EXCLUDED.anti_spam_enabled,updated_by=EXCLUDED.updated_by,updated_at=NOW()`, [m.chatId, mode === "on", m.userId]);
-    await ctx.reply(`تم ${mode === "on" ? "تفعيل" : "إيقاف"} رصد الرسائل المزعجة. وضع الحذف التلقائي ${process.env.PROTECTION_ENFORCE === "true" ? "مفعّل" : "غير مفعّل"}.`);
-    return;
-  }
-
-  if (cmd === "schedule") {
-    if (!(await canControl(ctx, m))) return;
-    const match = args.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2})(?:\s+)([\s\S]+)$/);
-    if (!match) { await ctx.reply("الصيغة: /schedule 2026-10-13T17:00 نص الرسالة\nالموعد يُفسَّر بتوقيت القاهرة Africa/Cairo."); return; }
-    try {
-      const local = match[1];
-      const runAt = parseLocalDateTime(local, "Africa/Cairo");
-      const job = await scheduler.createScheduledMessage(db.pool, { chat_id: m.chatId, run_at: runAt, timezone: "Africa/Cairo", message_text: match[2], created_by: m.userId });
-      await ctx.reply(`✅ تمت إضافة الرسالة المجدولة رقم ${job.id}.`);
-    } catch (error) { await ctx.reply(`تعذر إنشاء الجدولة: ${error.message}`); }
-    return;
-  }
-
   if (cmd === "weather" || cmd === "الطقس") {
     const city = args || "القاهرة";
     const result = await weather.getWeatherSummary(ai, city);
     await ctx.reply(`${result.message}${result.ok ? "" : `\n🔎 بحث الطقس: ${result.searchUrl}`}`, { disable_web_page_preview: true });
-    return;
-  }
-
-  if (["warn", "warnings", "clearwarn", "inactive"].includes(cmd)) {
-    if (!(await canControl(ctx, m))) return;
-    if (cmd === "inactive") {
-      const days = Number(args) || 30;
-      const rows = await legacyAdmin.listInactive(db.pool, m.chatId, days, 20);
-      const body = rows.length ? rows.map((r,i)=>`${i+1}. ${r.display_name || r.username || r.user_id} — ${r.inactive_days} يوم — ${r.message_count} رسالة`).join("\n") : "لا توجد بيانات أعضاء مسجلة خاملة لهذه المدة. التقرير يعتمد على الأعضاء الذين رصد البوت نشاطهم منذ تفعيل التتبع، وليس تعدادًا كاملًا لأعضاء تيليجرام.";
-      await ctx.reply(`📊 تقرير النشاط (أكثر من ${Math.max(1,Math.min(365,days))} يوم):\n${body}`);
-      return;
-    }
-    const match = args.match(/^(\d+)(?:\s+([\s\S]+))?$/);
-    if (!match) { await ctx.reply(`الصيغة: /${cmd} USER_ID${cmd === "warn" ? " سبب الإنذار" : ""}`); return; }
-    const targetUserId = Number(match[1]);
-    if (cmd === "warn") {
-      const result = await legacyAdmin.addWarning(db.pool, { chatId: m.chatId, userId: targetUserId, issuedBy: m.userId, reason: match[2] || "مخالفة قواعد المجموعة" });
-      await sendLog({ module: "moderation", stage: "warning_issued", severity: result.count >= 3 ? "warn" : "info", status: "ok", details: { chatId: m.chatId, userId: targetUserId, warningId: result.id, activeWarnings: result.count } });
-      await ctx.reply(`⚠️ تم تسجيل الإنذار رقم ${result.id} للعضو ${targetUserId}.\nالإنذارات النشطة: ${result.count}\n${result.count >= 3 ? "وصل العضو إلى 3 إنذارات؛ راجع الحالة قبل أي إجراء تقييدي." : ""}`);
-    } else if (cmd === "warnings") {
-      const rows = await legacyAdmin.listWarnings(db.pool, m.chatId, targetUserId);
-      await ctx.reply(rows.length ? `⚠️ إنذارات العضو ${targetUserId}:\n${rows.map(r=>`#${r.id} — ${r.reason} — ${new Date(r.created_at).toLocaleString("ar-EG")}`).join("\n")}` : `لا توجد إنذارات نشطة للعضو ${targetUserId}.`);
-    } else {
-      const count = await legacyAdmin.clearWarnings(db.pool, { chatId: m.chatId, userId: targetUserId, clearedBy: m.userId });
-      await ctx.reply(`تم إغلاق ${count} إنذارًا للعضو ${targetUserId}.`);
-      await sendLog({ module: "moderation", stage: "warnings_cleared", status: "ok", details: { chatId: m.chatId, userId: targetUserId, count, actor: m.userId } });
-    }
     return;
   }
 
@@ -881,12 +558,6 @@ installFatalProcessHandlers({
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
   console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
-  await scheduler.ensureSchedulerSchema(db.pool);
-  if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
-  stopScheduledMessages = scheduler.startScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, job) => {
-    const report = makeReport({ module: "scheduler", stage: "dispatch_due", severity: "ERROR", action: "scheduled_message", error, details: { jobId: job?.id, chatId: job?.chat_id }, chatId: job?.chat_id });
-    await emitReport({ bot, db, report });
-  } });
   // Paid deal scraping stays off unless explicitly enabled, to protect ScraperAPI credits.
   // Once enabled, destinations are resolved from currently approved groups.
   if (process.env.DEALS_SCHEDULER_ENABLED === "true") {
@@ -968,7 +639,6 @@ async function shutdown(signal) {
   if (shutdownPromise) return shutdownPromise;
   shutdownPromise = (async () => {
     console.log(`[SHUTDOWN] ${signal}: stopping schedulers and closing connections`);
-    try { stopScheduledMessages(); } catch (error) { console.error("[SHUTDOWN_SCHEDULER_ERROR]", error?.message || error); }
     try { stopDeals(); } catch (error) { console.error("[SHUTDOWN_DEALS_ERROR]", error?.message || error); }
     try { stopCatalogs(); } catch (error) { console.error("[SHUTDOWN_CATALOGS_ERROR]", error?.message || error); }
     try { stopWeather(); } catch (error) { console.error("[SHUTDOWN_WEATHER_ERROR]", error?.message || error); }

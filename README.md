@@ -40,7 +40,6 @@ See `LEGACY-MIGRATION-MAP.md` and `RC1-ADDITIVE-PATCH-NOTES.md` for the full mig
 Optional environment values:
 - `SCRAPER_API_KEY`: required for live deal scraping via ScraperAPI.
 - `DEALS_CHAT_ID`: publication destination for the scheduled deal newsletters. If unset, the deal scheduler remains disabled.
-- `PROTECTION_ENFORCE=false`: recommended default; protection records suspicious messages without deleting them. Only set to `true` after reviewing the diagnostics and confirming the bot has delete permissions.
 
 The fresh RC1 `package-lock.json` could not be generated in the lab because npm registry access timed out. Do not use `legacy/reference/package-lock.json` as the RC1 lockfile; it belongs to the legacy dependency graph. See `RC1-ADDITIVE-PATCH-NOTES.md`.
 

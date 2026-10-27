@@ -13,6 +13,7 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   const errors = [];
   const db = { async query(sql, params) {
     queries.push({ sql, params });
+    if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT q.observation_id")) return { rows, rowCount: rows.length };
     if (sql.includes("UPDATE price_review_queue")) return { rows: [{ observation_id: params[1] }], rowCount: 1 };
     throw new Error("unexpected query");
@@ -29,13 +30,15 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   assert.equal(sent.length, 2);
   assert.equal(sent[0].options.reply_markup.inline_keyboard.flat().length, 4);
   assert.match(sent[0].message, /مراجعة سعر معلّق #51/);
-  assert.match(queries[0].sql, /status = 'pending' AND q\.log_message_id IS NULL/);
-  assert.equal(queries[1].params[0], 901);
+  assert.match(queries[0].sql, /po\.decision = 'pending' AND q\.observation_id IS NULL/);
+  assert.match(queries[1].sql, /status = 'pending' AND q\.log_message_id IS NULL/);
+  assert.equal(queries[2].params[0], 901);
   assert.equal(errors.length, 0);
   assert.equal(deleted.length, 0);
 
   let failureDeleteCount = 0;
   const failingDb = { async query(sql) {
+    if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT q.observation_id")) return { rows: [rows[0]], rowCount: 1 };
     if (sql.includes("UPDATE price_review_queue")) throw new Error("database write failed");
     throw new Error("unexpected query");
@@ -56,7 +59,11 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
 
   let sendErrorReported = false;
   const sendFailStats = await recoverPendingNotifications({
-    db: { async query(sql) { if (sql.includes("SELECT q.observation_id")) return { rows: [rows[0]], rowCount: 1 }; throw new Error("unexpected query"); } },
+    db: { async query(sql) {
+      if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT q.observation_id")) return { rows: [rows[0]], rowCount: 1 };
+      throw new Error("unexpected query");
+    } },
     telegram: { async sendMessage() { throw new Error("telegram unavailable"); } },
     onError: async error => { sendErrorReported = error.message === "telegram unavailable"; }
   });

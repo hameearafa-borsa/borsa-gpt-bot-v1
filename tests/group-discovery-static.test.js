@@ -25,10 +25,11 @@ assert.match(memberHandler[0], /status='pending'/);
 assert.doesNotMatch(memberHandler[0], /authorizeChat\(/, "adding the bot must never authorize a new group automatically");
 assert.doesNotMatch(memberHandler[0], /status='approved'/, "adding the bot must never mark a pending group approved");
 assert.match(source, /Number\(m\.userId\) !== MASTER_ID/, "approval command must remain restricted to the fixed master");
-assert.match(source, /await approvePendingGroup\(\{[\s\S]*?approvedBy: m\.userId/ , "explicit approval flow must invoke the transactional approval helper");
-console.log("GROUP DISCOVERY STATIC TESTS: OK");
-
-const menuBlock = source.match(/const groupCommands = \[([\s\S]*?)\];/);
-assert.ok(menuBlock, "group command menu must be declared");
-assert.doesNotMatch(menuBlock[1], /command: "[^a-z0-9_]/, "Telegram command names must use Bot API-supported ASCII lowercase names");
+assert.match(source, /await approvePendingGroup\(\{[\s\S]*?approvedBy: m\.userId/, "approval flow must invoke transactional helper");
+const menuBlock = source.match(/await bot\.telegram\.setMyCommands\(\[([\s\S]*?)\], \{ scope: \{ type: "all_group_chats" \} \}\)/);
+assert.ok(menuBlock, "service command menu must be declared");
+assert.match(menuBlock[1], /command: "chemical"/);
+assert.match(menuBlock[1], /command: "weather"/);
+assert.doesNotMatch(menuBlock[1], /approvechat|claim|settings|antispam|schedule|warn|pricelist|inactive/);
 assert.match(source, /cmd === "قائمة" \|\| cmd === "pricelist"/);
+console.log("GROUP ACCESS CONTROL + SERVICE MENU STATIC TESTS: OK");

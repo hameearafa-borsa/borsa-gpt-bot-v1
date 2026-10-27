@@ -13,7 +13,7 @@ function isListLike(text) {
   const priceHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\s*(?:ج|جنيه|EGP)(?=\s|\||$)/gi) || []).length;
   const pipeCount = (s.match(/\|/g) || []).length;
   const numericHits = (s.match(/[0-9]+(?:[.,][0-9]+)?/g) || []).length;
-  const quantityHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)\b/giu) || []).length;
+  const quantityHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\\s*(?:كيلو|كجم|جرام|جم|liter|kg|ml|g|لتر|مل|ك|ل)(?=\\s|[|•,;:]|$)/giu) || []).length;
   // Some Telegram clients paste a whole catalog as one long line. Accept only
   // strong multi-row evidence here; ordinary conversational price mentions stay excluded.
   const singleLineCatalog = lines === 1 && numericHits >= 12 &&

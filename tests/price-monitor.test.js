@@ -45,7 +45,7 @@ const registry = require("../data/product-registry.json");
   assert.ok(savedQueries[2].sql.includes("INSERT INTO price_observations"));
   assert.ok(savedQueries[2].sql.includes("product_text"));
   assert.ok(savedQueries[2].sql.includes("offer_extra_weight_g"));
-  assert.equal(savedQueries[1].params[13], "accepted");
+  assert.equal(savedQueries[2].params[13], "accepted");
 
   // Historical accepted observations are compared before insertion, without posting a chat message.
   let historyInsertParams = null;

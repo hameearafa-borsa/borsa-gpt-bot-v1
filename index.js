@@ -219,18 +219,24 @@ bot.on("text", async ctx => {
     try {
       const result = await priceReview.saveEditedReview({ db, id, reviewerId: m.userId, productText, price, weightG, volumeMl, packCount });
       if (!result.ok) { await ctx.reply("لم يتم التعديل: السجل غير موجود أو تمت مراجعته مسبقًا."); return; }
-      const queue = await db.query("SELECT log_chat_id, log_message_id FROM price_review_queue WHERE observation_id=$1", [id]);
-      const target = queue.rows[0];
+      // The database transaction has committed. Failures while refreshing the Telegram
+      // log message must not be reported as if saving the price itself had failed.
       let buttonsRemoved = false;
-      if (target?.log_chat_id && target?.log_message_id) {
-        try {
-          await ctx.telegram.editMessageText(target.log_chat_id, target.log_message_id, undefined,
-            `✏️ تم تعديل واعتماد سجل السعر #${id}\nالصنف: ${productText}\nالسعر: ${price.toFixed(2)} ج.م\nنوع السعر: جملة\nالمراجع: ${m.userId}`,
-            { reply_markup: { inline_keyboard: [] } });
-          buttonsRemoved = true;
-        } catch (editError) {
-          await sendLog({ module: "price-monitor", stage: "review_edit_clear_buttons", severity: "warn", status: "failed", details: { observationId: id, error: redactString(editError?.message || "could not clear review buttons") } });
+      try {
+        const queue = await db.query("SELECT log_chat_id, log_message_id FROM price_review_queue WHERE observation_id=$1", [id]);
+        const target = queue.rows[0];
+        if (target?.log_chat_id && target?.log_message_id) {
+          try {
+            await ctx.telegram.editMessageText(target.log_chat_id, target.log_message_id, undefined,
+              `✏️ تم تعديل واعتماد سجل السعر #${id}\\nالصنف: ${productText}\\nالسعر: ${price.toFixed(2)} ج.م\\nنوع السعر: جملة\\nالمراجع: ${m.userId}`,
+              { reply_markup: { inline_keyboard: [] } });
+            buttonsRemoved = true;
+          } catch (editError) {
+            await sendLog({ module: "price-monitor", stage: "review_edit_clear_buttons", severity: "warn", status: "failed", details: { observationId: id, error: redactString(editError?.message || "could not clear review buttons") } }).catch(() => {});
+          }
         }
+      } catch (postSaveError) {
+        await sendLog({ module: "price-monitor", stage: "review_edit_refresh_message", severity: "warn", status: "failed", details: { observationId: id, error: redactString(postSaveError?.message || "could not refresh review message") } }).catch(() => {});
       }
       await ctx.reply(buttonsRemoved
         ? "تم حفظ التعديل واعتماد السعر، وأزيلت أزرار المراجعة من رسالة السجل."

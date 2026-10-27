@@ -722,6 +722,7 @@ bot.on("text", async ctx => {
     if (result.saved > 0) {
       const pendingRows = result.savedRows.filter(item => item.row.decision === "pending");
       for (const item of pendingRows) {
+        let sentReviewMessage = null;
         try {
           const queued = await db.query(
             `INSERT INTO price_review_queue(observation_id, source_chat_id, log_chat_id)
@@ -729,11 +730,22 @@ bot.on("text", async ctx => {
             [item.id, m.chatId || null, LOG_CHAT_ID]
           );
           if (!queued.rowCount) continue;
-          const sent = await bot.telegram.sendMessage(LOG_CHAT_ID, priceReview.formatReviewMessage(item.id, item.row), {
+          sentReviewMessage = await bot.telegram.sendMessage(LOG_CHAT_ID, priceReview.formatReviewMessage(item.id, item.row), {
             reply_markup: priceReview.reviewKeyboard(item.id), disable_web_page_preview: true
           });
-          await db.query("UPDATE price_review_queue SET log_message_id=$1 WHERE observation_id=$2", [sent.message_id, item.id]);
+          const saved = await db.query(
+            `UPDATE price_review_queue SET log_message_id=$1
+              WHERE observation_id=$2 AND status='pending' AND log_message_id IS NULL
+              RETURNING observation_id`,
+            [sentReviewMessage.message_id, item.id]
+          );
+          if (!saved.rowCount) throw new Error("price_review_notification_save_conflict");
         } catch (reviewError) {
+          // Telegram may have accepted the message even if saving its ID failed.
+          // Best-effort deletion prevents a stale actionable message being duplicated by startup recovery.
+          if (sentReviewMessage?.message_id != null) {
+            try { await bot.telegram.deleteMessage(LOG_CHAT_ID, sentReviewMessage.message_id); } catch {}
+          }
           await sendLog({ module: "price-monitor", stage: "review_notification", severity: "warn", status: "failed", details: { observationId: item.id, error: redactString(reviewError?.message || "review notification failed") } });
         }
       }

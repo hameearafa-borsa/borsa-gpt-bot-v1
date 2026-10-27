@@ -15,6 +15,7 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
     queries.push({ sql, params });
     if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
     if (sql.includes("WITH candidates AS")) return { rows, rowCount: rows.length };
+    if (sql.includes("SET notification_claimed_at = NOW()")) return { rows: [{ observation_id: params[0] }], rowCount: 1 };
     if (sql.includes("UPDATE price_review_queue SET log_message_id")) return { rows: [{ observation_id: params[1] }], rowCount: 1 };
     throw new Error("unexpected query");
   } };
@@ -40,6 +41,7 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   const failingDb = { async query(sql) {
     if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
     if (sql.includes("WITH candidates AS")) return { rows: [rows[0]], rowCount: 1 };
+    if (sql.includes("SET notification_claimed_at = NOW()")) return { rows: [{ observation_id: params[0] }], rowCount: 1 };
     if (sql.includes("UPDATE price_review_queue SET log_message_id")) throw new Error("database write failed");
     throw new Error("unexpected query");
   } };
@@ -62,6 +64,7 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
     db: { async query(sql) {
       if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
       if (sql.includes("WITH candidates AS")) return { rows: [rows[0]], rowCount: 1 };
+      if (sql.includes("SET notification_claimed_at = NOW()")) return { rows: [{ observation_id: rows[0].observation_id }], rowCount: 1 };
       throw new Error("unexpected query");
     } },
     telegram: { async sendMessage() { throw new Error("telegram unavailable"); } },
@@ -78,6 +81,7 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
       rebuiltCalls.push({ sql, params });
       if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 1 };
       if (sql.includes("WITH candidates AS")) return { rows: [rows[0]], rowCount: 1 };
+      if (sql.includes("SET notification_claimed_at = NOW()")) return { rows: [{ observation_id: params[0] }], rowCount: 1 };
       if (sql.includes("UPDATE price_review_queue SET log_message_id")) return { rows: [{ observation_id: params[1] }], rowCount: 1 };
       throw new Error("unexpected rebuild query");
     } },
@@ -92,6 +96,24 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   assert.match(rebuiltCalls[0].sql, /ON CONFLICT \(observation_id\) DO NOTHING/);
   assert.equal(rebuiltCalls[0].params[0], -10055);
   assert.equal(rebuiltSends.length, 1);
+
+
+  // If another worker took over an expired claim, do not send a stale notification.
+  let lostClaimSendCount = 0;
+  let lostClaimReported = false;
+  const lostClaimStats = await recoverPendingNotifications({
+    db: { async query(sql) {
+      if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
+      if (sql.includes("WITH candidates AS")) return { rows: [rows[0]], rowCount: 1 };
+      if (sql.includes("SET notification_claimed_at = NOW()")) return { rows: [], rowCount: 0 };
+      throw new Error("unexpected query");
+    } },
+    telegram: { async sendMessage() { lostClaimSendCount += 1; return { message_id: 1234 }; } },
+    onError: async error => { lostClaimReported = error.message === "price_review_notification_claim_lost_before_send"; }
+  });
+  assert.deepEqual(lostClaimStats, { found: 1, sent: 0, failed: 1 });
+  assert.equal(lostClaimSendCount, 0);
+  assert.equal(lostClaimReported, true);
 
   console.log("price review pending-notification recovery and failure-path tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -126,7 +126,10 @@ function extractPriceCandidates(text) {
       .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى)/giu, " ")
       .replace(/\s+/g, " ").trim();
     const weightLabel = quantity?.[0]?.trim() || (decimalAutomaticWeight ? decimalAutomaticWeight[1] : null);
-    const productText = candidateName.length >= 2
+    // Generic package words describe packaging, not the product identity.
+    // For weight-only catalog rows (e.g. "شكارة 10 ك") preserve company/section/weight context.
+    const genericPackageOnly = /^(?:شكاره|شوال|كيس|ساشيه)$/iu.test(normalizeArabic(candidateName));
+    const productText = candidateName.length >= 2 && !genericPackageOnly
       ? candidateName
       : [company, section, weightLabel].filter(Boolean).join(" ").trim();
     const normalizedProduct = normalizeArabic(productText);

@@ -79,21 +79,31 @@ function cleanExplicitProductLine(line) {
     .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
     .replace(/\s+/g, " ").trim().replace(/^[\s•*._-]+/, "");
 }
+function detectUnitPriceHeading(line) {
+  const s = normalizeArabic(line);
+  if (/(?:الاسعار|اسعار|سعر).*(?:بالكرتونه|بالكرتون|للكرتونه|سعر الكرتونه|كرتونه)/u.test(s)) return "بالكرتونة";
+  if (/(?:الاسعار|اسعار|سعر).*(?:بالقطعه|للقطعه|سعر القطعه)/u.test(s)) return "بالقطعة";
+  return null;
+}
 function detectUnitPriceType(line) {
   const s = String(line || "");
-  // Explicit wording wins; standalone Arabic ق is a common shorthand for per-piece pricing.
+  // Explicit row-level carton wording takes precedence over a section heading.
+  if (/(?:بالكرتونة|بالكرتونه|للكرتونة|للكرتونه|سعر\s*الكرتونة|سعر\s*الكرتونه|الكرتونة|الكرتونه)/iu.test(s)) return "بالكرتونة";
+  // Explicit wording or standalone Arabic ق identifies per-piece pricing.
   if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|قطعة|بالقطعه|للقطعه)/iu.test(s) || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
   return null;
 }
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const metadata = parseListMetadata(text);
-  let company = metadata.company, section = null;
+  let company = metadata.company, section = null, sectionUnitPriceType = null;
   const out = [];
   for (const line of lines) {
     if (/^[-_=.*.]{3,}$/.test(line) || /^\/(?:قائمة|pricelist)(?:\s|$)/iu.test(line)) continue;
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
     const normalized = normalizeArabic(line);
+    const unitHeading = detectUnitPriceHeading(line);
+    if (unitHeading && !getPriceTokens(line).length) { sectionUnitPriceType = unitHeading; continue; }
     if (!getPriceTokens(line).length && !line.includes("|")) {
       if (/^(?:الأسعار?|اسعار)\s*(?:هي\s*)?(?:جملة|جمله|قطاعي|مستهلك)$/iu.test(line)) continue;
       if (/[:：]$/.test(line) && line.length <= 70) { section = line.replace(/[:：]+$/, "").trim(); continue; }
@@ -120,7 +130,7 @@ function deterministicList(text) {
     const afterConsumer = consumerIndex >= 0 ? getPriceTokens(line.slice(consumerIndex + line.slice(consumerIndex).match(RETAIL_LABEL)[0].length))[0]?.value ?? null : null;
     const beforeLabel = priceTokens.find(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
     const packagePrice = beforeLabel?.value ?? null;
-    const unitPriceType = detectUnitPriceType(line);
+    const unitPriceType = detectUnitPriceType(line) || sectionUnitPriceType;
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(productPrefix);
@@ -176,4 +186,4 @@ async function extractList(ai, text) {
     return { ...metadata, ...parsed, company: parsed.company || metadata.company || null, method: result.provider || "ai" };
   } catch (error) { return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: error.message }; }
 }
-module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType };
+module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType, detectUnitPriceHeading };

@@ -40,7 +40,7 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   assert.equal(deleted.length, 0);
 
   let failureDeleteCount = 0;
-  const failingDb = { async query(sql) {
+  const failingDb = { async query(sql, params) {
     if (sql.includes("INSERT INTO price_review_queue")) return { rows: [], rowCount: 0 };
     if (sql.includes("WITH candidates AS")) return { rows: [rows[0]], rowCount: 1 };
     if (sql.includes("SET notification_claimed_at = NOW()")) return { rows: [{ observation_id: params[0] }], rowCount: 1 };

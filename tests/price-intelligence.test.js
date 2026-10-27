@@ -54,6 +54,7 @@ assert.deepEqual(extractPriceCandidates("شهر أكتوبر 2026"), [], "catalo
 const { deterministicList, buildListPrompt } = require("../modules/price-list");
 const conversationalComment = "برضو فيه ب 10 و برضو في ب 25";
 assert.deepEqual(deterministicList(conversationalComment), [], "conversation-only comments must be silently ignored");
+assert.deepEqual(deterministicList("برضو فيه ب 10 جنيه و برضو في ب 25 جنيه"), [], "currency words do not turn commentary into price rows");
 const mixedCommentList = deterministicList(`أسعار شركة أريال:
 أريال ٢ك يدوي ٤٩٠ج ٤ق
 ${conversationalComment}`);

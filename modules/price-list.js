@@ -99,8 +99,7 @@ function isNonPriceCommentLine(line) {
   if (!raw) return false;
   // Conversation-style notes are not price observations. Do not treat amounts
   // mentioned in prose (e.g. "برضو فيه ب 10 و برضو في ب 25") as prices.
-  // Explicit currency labels keep the line eligible for normal validation.
-  if (/(?:جنيه|(?:^|\s)ج(?:\s|$)|EGP|جنيه\s+مصري)/iu.test(raw)) return false;
+  // A conversational lead marks the whole line as commentary, even if it mentions currency.
   const s = normalizeArabic(raw).trim();
   return /^(?:برضو|برضه|برده|كمان|وكمان|وفيه|فيه|موجود|متوفر|متاح|لسه|باقي|على فكره|للعلم|معلش)(?:\s|$)/u.test(s);
 }

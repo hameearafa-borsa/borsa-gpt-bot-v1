@@ -9,6 +9,24 @@ const text = `أسعار برسيل\nأوتوماتيك\nبرسيل 2 كيلو 1
   assert.equal(result.method, "deterministic");
   assert.ok(result.items.filter(x => x.decision === "accepted").length >= 3);
 
+  // Unit-price section headings carry forward until another unit heading appears.
+  const { deterministicList, detectUnitPriceHeading } = require("../modules/price-list");
+  assert.equal(detectUnitPriceHeading("الأسعار بالقطعة"), "بالقطعة");
+  assert.equal(detectUnitPriceHeading("الأسعار بالكرتونة"), "بالكرتونة");
+  const sectionUnits = deterministicList(`أسعار شركة يونيليفر
+الأسعار بالقطعة
+سيجنال 120مل 42,33 ج
+كلوز أب 50مل 29,19 ج
+الأسعار بالكرتونة
+كلير 900مل 275 ج
+كلير أكياس 5 مل الكرتونة 346 ج
+الأسعار بالقطعة
+دوف 180مل 75,27 ج`);
+  assert.deepEqual(sectionUnits.map(x => x.unit_price_type), [
+    "بالقطعة", "بالقطعة", "بالكرتونة", "بالكرتونة", "بالقطعة"
+  ], "unit-price type should persist through rows and change only at a new heading");
+  assert.equal(sectionUnits[3].package_sale_price, 346, "carton heading must not cause package size 5 ml to be mistaken for the price");
+
   const fallbackText = `أسعار شركة برسيل
 برسيل 2 كيلو 100 جنيه
 برسيل 3 كيلو 140 جنيه`;

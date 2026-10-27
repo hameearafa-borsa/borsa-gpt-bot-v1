@@ -1,7 +1,10 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { extractList } = require("../modules/price-list");
+const { extractList, isListLike } = require("../modules/price-list");
 const text = `أسعار برسيل\nأوتوماتيك\nبرسيل 2 كيلو 100 جنيه\nبرسيل 3 كيلو 140 جنيه\nبرسيل 5 كيلو 220 جنيه`;
+const singleLineCatalog = "أسعار شركة يونيليفر " + Array.from({ length: 12 }, (_, i) => `صنف ${i + 1} ${100 + i} جم ${20 + i},50 ج`).join(" • ");
+assert.equal(isListLike(singleLineCatalog), true, "single-line pasted catalogs with many priced rows should be accepted");
+assert.equal(isListLike("برضو فيه ب 10 و برضو في ب 25"), false, "conversational price mentions must not be treated as a catalog");
 (async () => {
   let calls = 0;
   const result = await extractList({ generate: async () => { calls++; return { text: "{}" }; } }, text);

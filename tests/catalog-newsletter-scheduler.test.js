@@ -21,6 +21,13 @@ assert.equal(msUntilNextCheck(before), 60 * 1000);
 const after = new Date("2026-10-25T07:11:00.000Z"); // 10:11 Cairo
 assert.equal(msUntilNextCheck(after), 24 * 60 * 60 * 1000 - 60 * 1000);
 
+// Egypt leaves daylight-saving time overnight on 29/30 October 2026.
+// The next local 10:10 is 24h59m later, not 23h59m later.
+const beforeCairoDstEnds = new Date("2026-10-29T07:11:00.000Z"); // 10:11 EEST
+assert.equal(msUntilNextCheck(beforeCairoDstEnds), 24 * 60 * 60 * 1000 + 59 * 60 * 1000);
+const atNextCairoCheck = new Date("2026-10-30T08:10:00.000Z"); // 10:10 EET
+assert.equal(msUntilNextCheck(atNextCairoCheck), 24 * 60 * 60 * 1000);
+
 (async () => {
   await assert.rejects(() => fetchStorePage("https://evil.example/"), /catalog_source_not_allowed/);
   await assert.rejects(() => fetchStorePage("https://snapflyer.io:8443/"), /catalog_source_not_allowed/);

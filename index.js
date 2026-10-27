@@ -15,7 +15,7 @@ const { formatTelegramStartupError } = require("./core/telegram-startup-error");
 const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
 const { markTelegramRateLimited, isTelegramRateLimit, isTelegramRateLimitedNow } = require("./core/telegram-rate-limit");
-const { MASTER_ID, isMaster } = require("./core/permissions");
+const { MASTER_ID, isMaster, canManage } = require("./core/permissions");
 const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { renderPriceListImages } = require("./modules/price-list-image");
@@ -125,8 +125,16 @@ async function isAuthorizedChat(chatId) {
 }
 
 async function configureCommandMenus() {
-  // Borsa GPT exposes service commands only; group administration belongs to Group Help Bot.
+  // Keep group menus service-only to avoid competing with GroupHelpBot.
+  // Private chats get the working settings entry alongside the bot's core services.
   await bot.telegram.setMyCommands([], { scope: { type: "default" } });
+  await bot.telegram.setMyCommands([
+    { command: "settings", description: "إعدادات البوت وحالة الخدمات" },
+    { command: "chemical", description: "المساعد الكيميائي" },
+    { command: "weather", description: "الطقس" },
+    { command: "pricelist", description: "قائمة أسعار الشركات" },
+    { command: "help", description: "مساعدة البوت" }
+  ], { scope: { type: "all_private_chats" } });
   await bot.telegram.setMyCommands([
     { command: "chemical", description: "المساعد الكيميائي" },
     { command: "weather", description: "الطقس" },
@@ -301,6 +309,30 @@ bot.on("text", async ctx => {
     }
     return;
   }
+  if (cmd === "settings" && ["private", "group", "supergroup"].includes(m.chatType)) {
+    let permitted = false;
+    if (m.chatType === "private") {
+      permitted = isMaster(m.userId);
+    } else {
+      permitted = await canManage(ctx.telegram, m.chatId, m.userId);
+    }
+    if (!permitted) {
+      await ctx.reply(m.chatType === "private"
+        ? "إعدادات البوت في الخاص متاحة لمالك البوت فقط. يمكن لمنشئ المجموعة استخدام /settings داخل مجموعته."
+        : "هذا الأمر متاح لمالك البوت أو منشئ هذه المجموعة فقط.");
+      return;
+    }
+    const approved = m.chatType === "private" ? null : await isAuthorizedChat(m.chatId);
+    const providers = ai.providers.length ? ai.providers.join("، ") : "لا يوجد مزود ذكاء اصطناعي مضبوط";
+    const scopeText = m.chatType === "private"
+      ? "النطاق: إعدادات البوت العامة"
+      : `المجموعة: ${m.chatId}\\nحالة اعتماد البوت: ${approved ? "معتمدة" : "غير معتمدة"}`;
+    await ctx.reply(
+      `⚙️ إعدادات Borsa GPT Bot\\n\\n${scopeText}\\nمحركات الذكاء المضبوطة: ${providers}\\n\\nالأوامر المتاحة: /chemical — /weather — /pricelist\\n\\nملاحظة: إعدادات الخدمات مشتركة حاليًا بين المجموعات؛ هذه الشاشة تعرض الحالة والصلاحيات ولا تغيّر مفاتيح API أو إعدادات الإنتاج.`
+    );
+    return;
+  }
+
   if (m.chatType !== "private" && !(await isAuthorizedChat(m.chatId))) return;
 
   // Long pasted catalogs are handled explicitly with /قائمة; keep them out of per-message AI and review alerts.
@@ -480,7 +512,7 @@ bot.on("text", async ctx => {
 
 
 bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
-  if (!isLogChat(ctx.chat?.id) || !isMaster(ctx.from?.id)) {
+  if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !isMaster(ctx.from?.id)) {
     await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
     return;
   }

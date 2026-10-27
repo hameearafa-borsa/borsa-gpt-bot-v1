@@ -248,5 +248,43 @@ function makePipelinePool() {
   assert.equal(retrySent.length, 0, "an ambiguous Telegram send outcome must not be retried automatically");
   assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
     "the snapshot is terminally failed and its delivery record prevents automatic retry");
+  // Partial delivery: one approved group succeeds while another has an ambiguous Telegram error.
+  // The successful group's record must remain published, and neither group is retried automatically.
+  const partialPool = makePipelinePool();
+  await checkCatalogsOnce({ pool: partialPool, telegram, chatId: -100123, fetchPage });
+  await partialPool.query(
+    "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
+    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1390", "fp-partial", "Kazyon flyer January 2027", "محافظة القاهرة", null, "pending"]
+  );
+  const partialSent = [];
+  const partialResult = await checkCatalogsOnce({
+    pool: partialPool,
+    chatIds: [-100123, -100456],
+    fetchPage,
+    telegram: {
+      sendMessage: async (chatId, message) => {
+        if (chatId === -100456) throw new Error("Telegram response lost");
+        partialSent.push({ chatId, message });
+        return { message_id: 991 };
+      }
+    }
+  });
+  assert.equal(partialResult.published, 1, "successful group delivery should be counted");
+  assert.ok(partialResult.failed >= 1, "ambiguous group delivery should be counted as failed");
+  const partialDeliveries = [...partialPool.rows.values()].filter(row => row.delivery && row.snapshot_id ===
+    [...partialPool.rows.values()].find(snapshot => snapshot.fingerprint === "fp-partial")?.id);
+  assert.equal(partialDeliveries.find(row => row.chat_id === -100123)?.status, "published");
+  assert.equal(partialDeliveries.find(row => row.chat_id === -100456)?.status, "failed");
+  assert.equal(partialSent.length, 1);
+  const partialRetrySent = [];
+  await checkCatalogsOnce({
+    pool: partialPool,
+    chatIds: [-100123, -100456],
+    fetchPage,
+    telegram: { sendMessage: async (chatId, message) => partialRetrySent.push({ chatId, message }) }
+  });
+  assert.equal(partialRetrySent.length, 0, "neither successful nor ambiguous group deliveries should be resent automatically");
+  assert.equal(partialSent.length, 1, "the group that already received the notice must not get a duplicate");
+
   console.log("catalog newsletter end-to-end mocked pipeline tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

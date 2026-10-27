@@ -8,7 +8,16 @@ function cairoParts(date = new Date()) {
   return Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type,p.value]));
 }
 function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.year}-${p.month}-${p.day}`; }
-function newsletterKindAt(date = new Date()) { const p = cairoParts(date); const hour = Number(p.hour); if (hour === 17) return "amazon"; if (hour === 18) return "other_sites"; return null; }
+function newsletterKindAt(date = new Date()) {
+  const p = cairoParts(date);
+  const hour = Number(p.hour), minute = Number(p.minute);
+  // Run only in the first five minutes after the scheduled hour. This tolerates
+  // startup/timer jitter but prevents a late boot (e.g. 18:45) from launching
+  // a newsletter at an arbitrary time. The database reservation still prevents duplicates.
+  if (minute >= 0 && minute < 5 && hour === 17) return "amazon";
+  if (minute >= 0 && minute < 5 && hour === 18) return "other_sites";
+  return null;
+}
 function isNewsletterWindow(date = new Date()) { return newsletterKindAt(date) !== null; }
 function selectNewsletterDeals(recent, kind) {
   const isAmazon = d => {
@@ -135,15 +144,15 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   // Collect and verify once per edition, regardless of the number of target groups.
   const gathered = await fetcher({ edition: kind });
   if (!gathered.deals?.length) {
-    await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [] });
-    return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [] };
+    await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
+    return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null };
   }
   const verified = await verify(gathered.deals);
   const recent = await filterRecentDeals(pool, verified, 7);
   if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
   const items = selectNewsletterDeals(recent, kind);
   if (!items.length) {
-    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], batchKind: kind });
+    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
   }
   const title = kind === "amazon"

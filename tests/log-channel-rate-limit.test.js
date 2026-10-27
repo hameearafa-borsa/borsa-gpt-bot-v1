@@ -19,6 +19,7 @@ async function main() {
       throw error;
     } } };
     assert.equal(await send(bot, { module: "test", stage: "first" }), false);
+    assert.equal(isTelegramRateLimitedNow(), true, "shared Telegram cooldown must be active after a 429");
     assert.equal(await send({ telegram: { sendMessage: async () => { calls++; } } }, { module: "test", stage: "during-cooldown" }), false);
     assert.equal(calls, 1, "log channel must not repeatedly hit Telegram while rate-limited");
   } finally {

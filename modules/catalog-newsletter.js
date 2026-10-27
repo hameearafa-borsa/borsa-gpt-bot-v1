@@ -75,7 +75,11 @@ function extractCatalogs(html, storeKey) {
     const context = normalizeText(match[1] + " " + match[3] + " " + match[4]);
     const dateMatch = context.match(/(\d{1,2}\s+[A-Za-z]{3}\s*(?:-|–)\s*\d{1,2}\s+[A-Za-z]{3}|\d{1,2}\s*[-–]\s*\d{1,2}\s+[A-Za-z]{3})/i);
     const displayedDateRange = dateMatch ? dateMatch[1] : null;
-    // Include the validity range so a reused URL/title with changed dates is a new edition.
+    // Ignore only the volatile countdown; keep meaningful title changes in the edition fingerprint.
+    const stableTitle = title
+      .replace(/\b\d+\s+days?\s+left\b/gi, " ")
+      .replace(/\b\d+\s+days?\s+remaining\b/gi, " ")
+      .replace(/\s+/g, " ").trim();
     results.push({
       store: storeKey,
       storeName: store.name,
@@ -83,7 +87,7 @@ function extractCatalogs(html, storeKey) {
       title: title.slice(0, 180),
       url: href,
       displayedDateRange,
-      fingerprint: stableHash(storeKey + "|" + href + "|" + (displayedDateRange || ""))
+      fingerprint: stableHash(storeKey + "|" + href + "|" + stableTitle + "|" + (displayedDateRange || ""))
     });
   }
   const unique = new Map();

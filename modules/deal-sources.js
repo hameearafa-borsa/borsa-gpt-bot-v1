@@ -161,16 +161,36 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   }
   if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
-  const deals = [], errors = [];
+  const deals = [], errors = [], sourceStats = [];
   const seen = new Set();
-  for (const r of results) {
-    if (r.status !== "fulfilled") { errors.push({ reason: "task_rejected" }); continue; }
-    if (!r.value.ok) { errors.push({ source: r.value.source, reason: r.value.reason }); continue; }
+  for (let index = 0; index < results.length; index++) {
+    const r = results[index];
+    const task = tasks[index];
+    if (r.status !== "fulfilled") {
+      errors.push({ source: task.source, reason: "task_rejected" });
+      sourceStats.push({ source: task.source, ok: false, extractedCount: 0, reason: "task_rejected" });
+      continue;
+    }
+    if (!r.value.ok) {
+      errors.push({ source: r.value.source, reason: r.value.reason });
+      sourceStats.push({ source: r.value.source, ok: false, extractedCount: 0, reason: r.value.reason });
+      continue;
+    }
+    const extractedCount = r.value.deals.length;
+    sourceStats.push({
+      source: r.value.source,
+      ok: true,
+      extractedCount,
+      ...(extractedCount === 0 ? { reason: "no_products_extracted" } : {})
+    });
+    // A successful HTTP response with no parsed products is diagnostically
+    // different from a source that failed to load. Record it without logging HTML.
+    if (extractedCount === 0) errors.push({ source: r.value.source, reason: "no_products_extracted" });
     for (const d of r.value.deals) {
       const key = `${d.url}|${d.price}`;
       if (!seen.has(key)) { seen.add(key); deals.push(d); }
     }
   }
-  return { deals, errors, sourceCount: tasks.length };
+  return { deals, errors, sourceStats, sourceCount: tasks.length };
 }
 module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, getScraperKeys, fetchSearch, collectDealCandidates };

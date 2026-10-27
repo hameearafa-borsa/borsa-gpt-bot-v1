@@ -141,7 +141,7 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
         // Mark the reservation terminal so a later poll cannot create a duplicate.
         await finishDelivery(pool, deliveryId, "failed", null, error).catch(() => {});
         result.failed++;
-        await onError(error, { stage: "catalog_publish", store: snapshot.store_key, snapshotId: snapshot.id, chatId: targetChatId });
+        await onError(error, { stage: "catalog_publish", store: snapshot.store_key, snapshotId: snapshot.id, chatId: targetChatId, deliveryOutcome: "ambiguous", manualReviewRequired: true });
       }
     }
     // Preserve legacy snapshot status as a summary only. Per-group delivery records

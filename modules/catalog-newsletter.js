@@ -83,7 +83,7 @@ function extractCatalogs(html, storeKey) {
       title: title.slice(0, 180),
       url: href,
       displayedDateRange,
-      fingerprint: stableHash(storeKey + "|" + href + "|" + title + "|" + (displayedDateRange || ""))
+      fingerprint: stableHash(storeKey + "|" + href + "|" + (displayedDateRange || ""))
     });
   }
   const unique = new Map();

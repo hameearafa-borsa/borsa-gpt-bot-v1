@@ -33,7 +33,9 @@ const { recoverPendingNotifications } = require("../modules/price-review-recover
   assert.match(sent[0].message, /مراجعة سعر معلّق #51/);
   assert.match(queries[0].sql, /po\.decision = 'pending' AND q\.observation_id IS NULL/);
   assert.match(queries[1].sql, /FOR UPDATE SKIP LOCKED/);
-  assert.equal(queries[2].params[0], 901);
+  assert.match(queries[2].sql, /SET notification_claimed_at = NOW\(\)/i);
+  assert.equal(queries[2].params[0], 51);
+  assert.equal(queries[3].params[0], 901);
   assert.equal(errors.length, 0);
   assert.equal(deleted.length, 0);
 

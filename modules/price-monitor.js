@@ -5,8 +5,21 @@ const { resolve } = require("../core/product-registry");
 const { identityKey } = require("./price-review");
 
 function isOwnMessage({ botUserId, fromId }) { return botUserId != null && String(botUserId) === String(fromId); }
+function isBulkPriceList(text) {
+  const lines = String(text || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  if (lines.length < 8) return false;
+  const pricedRows = lines.filter(line =>
+    /(?:\d+[.,]?\d*)\s*(?:جنيه|ج|EGP)\s*$/iu.test(line) ||
+    /(?:جمله|جملة|مستهلك|قطاعي)\s*[:：]?\s*\d+[.,]?\d*/iu.test(line)
+  ).length;
+  // Multi-row catalog messages belong to /قائمة processing, not the one-product-at-a-time monitor.
+  return pricedRows >= 5;
+}
+
 function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage }) {
-  return ["group", "supergroup"].includes(chatType) && !isLogChannel && !isCommand && !ownMessage && Boolean(String(text || "").trim());
+  return ["group", "supergroup"].includes(chatType) &&
+    !isLogChannel && !isCommand && !ownMessage &&
+    Boolean(String(text || "").trim()) && !isBulkPriceList(text);
 }
 
 async function observe({ pool, message, merchantId = null, registry }) {

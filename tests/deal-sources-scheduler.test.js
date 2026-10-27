@@ -133,6 +133,27 @@ for (const edition of [editionAmazon, editionOther]) {
  await fetchSearch("amazon", "test one", { fetchImpl: fakeScraperFetch });
  await fetchSearch("amazon", "test two", { fetchImpl: fakeScraperFetch });
  assert.deepEqual(usedKeys, ["test-account-one", "test-account-two"], "independent scraper keys should rotate between requests");
+ const authRetryKeys = [];
+ const authRetry = await fetchSearch("amazon", "auth retry", {
+   fetchImpl: async url => {
+     authRetryKeys.push(new URL(String(url)).searchParams.get("api_key"));
+     return authRetryKeys.length === 1
+       ? { ok: false, status: 403, text: async () => "" }
+       : { ok: true, status: 200, text: async () => "<html></html>" };
+   }
+ });
+ assert.equal(authRetry.ok, true, "a credential rejection should retry once with the alternate key");
+ assert.equal(authRetryKeys.length, 2, "credential retry must be bounded to one alternate request");
+ assert.notEqual(authRetryKeys[0], authRetryKeys[1], "credential retry must use a different key");
+ const noRetryKeys = [];
+ const rateLimited = await fetchSearch("amazon", "no retry on rate limit", {
+   fetchImpl: async url => {
+     noRetryKeys.push(new URL(String(url)).searchParams.get("api_key"));
+     return { ok: false, status: 429, text: async () => "" };
+   }
+ });
+ assert.equal(rateLimited.ok, false);
+ assert.equal(noRetryKeys.length, 1, "rate limits must not trigger a second potentially wasteful request");
  let activeRequests = 0, peakRequests = 0, requestCount = 0;
  const concurrencyFetch = async () => {
    activeRequests++;

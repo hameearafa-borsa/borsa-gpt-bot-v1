@@ -49,7 +49,8 @@ assert.equal(fieldRows[4].confidence, 0.65);
 assert.equal(fieldRows[5].price_kind, "wholesale");
 assert.equal(fieldRows[5].confidence, 0.65);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
-assert.equal(fieldRows[6].package_sale_price, 42.33);
+assert.equal(fieldRows[6].product_text, "سيجنال", "standalone ق is a per-piece marker, not part of the product name");
+assert.deepEqual(extractPriceCandidates("شهر أكتوبر 2026"), [], "catalog month headers must not become price candidates");
 
 // A bare number such as 503 is not a product or a price observation by itself.
 assert.deepEqual(extractPriceCandidates("503"), []);

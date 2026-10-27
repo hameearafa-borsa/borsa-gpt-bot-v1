@@ -17,7 +17,7 @@ const registry = require("../data/product-registry.json");
   assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
     "bulk price lists must not generate dozens of individual review messages");
   assert.equal(isBulkPriceList(base.text), false, "a single product price remains eligible");
-  const oneLineUnilever = unileverList.replace(/\\r?\\n/g, " ").replace(/\\s+/g, " ").trim();
+  const oneLineUnilever = unileverList.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
   assert.equal(isBulkPriceList(oneLineUnilever), true,
     "a full catalog pasted as one long Telegram paragraph must not trigger per-product monitoring");
   assert.equal(isBulkPriceList("أريال مسحوق 2 كجم ١٥٠ ج"), false,

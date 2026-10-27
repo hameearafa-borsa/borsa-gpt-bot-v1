@@ -27,6 +27,19 @@ const text = `أسعار برسيل\nأوتوماتيك\nبرسيل 2 كيلو 1
   ], "unit-price type should persist through rows and change only at a new heading");
   assert.equal(sectionUnits[3].package_sale_price, 346, "carton heading must not cause package size 5 ml to be mistaken for the price");
 
+  const aiContext = await extractList({
+    generate: async () => ({ text: JSON.stringify({ items: [
+      { raw_line: "سيجنال 120مل 42,33 ج", product: "سيجنال 120مل", package_sale_price: 42.33, unit_price_type: "بالكرتونة", decision: "accepted" },
+      { raw_line: "كلير 900مل 275 ج", product: "كلير 900مل", package_sale_price: 275, unit_price_type: "بالقطعة", decision: "accepted" }
+    ] }) })
+  }, `أسعار شركة يونيليفر
+الأسعار بالقطعة
+سيجنال 120مل 42,33 ج
+الأسعار بالكرتونة
+كلير 900مل 275 ج`);
+  assert.deepEqual(aiContext.items.map(x => x.unit_price_type), ["بالقطعة", "بالكرتونة"],
+    "validated deterministic section context must override contradictory AI unit labels");
+
   const fallbackText = `أسعار شركة برسيل
 برسيل 2 كيلو 100 جنيه
 برسيل 3 كيلو 140 جنيه`;

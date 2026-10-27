@@ -141,7 +141,9 @@ async function ensureDb() {
 
 bot.use(async (ctx, next) => {
   const m = messageData(ctx);
-  if (!m.chatId || isLogChat(m.chatId)) return;
+  // Ignore ordinary log-channel messages, but let callback queries reach their authorized handlers.
+  // Review buttons live in the log channel; returning here silently swallowed every button press.
+  if (!m.chatId || (isLogChat(m.chatId) && !ctx.callbackQuery)) return;
   const isMessageUpdate = Boolean(ctx.message || ctx.editedMessage || ctx.channelPost);
   if (isMessageUpdate && m.messageId) await cacheMessage(db.pool, m).catch(e => console.warn("[CACHE_FAIL]", redactString(e?.message || "cache_error")));
   if (isMessageUpdate && m.messageId && !(await claimMessage(db.pool, { chatId: m.chatId, messageId: m.messageId, updateType: ctx.updateType }))) return;

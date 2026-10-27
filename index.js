@@ -126,20 +126,40 @@ async function isAuthorizedChat(chatId) {
 
 async function configureCommandMenus() {
   // Keep group menus service-only to avoid competing with GroupHelpBot.
-  // Private chats get the working settings entry alongside the bot's core services.
-  await bot.telegram.setMyCommands([], { scope: { type: "default" } });
-  await bot.telegram.setMyCommands([
-    { command: "settings", description: "إعدادات البوت وحالة الخدمات" },
-    { command: "chemical", description: "المساعد الكيميائي" },
-    { command: "weather", description: "الطقس" },
-    { command: "pricelist", description: "قائمة أسعار الشركات" },
-    { command: "help", description: "مساعدة البوت" }
-  ], { scope: { type: "all_private_chats" } });
-  await bot.telegram.setMyCommands([
-    { command: "chemical", description: "المساعد الكيميائي" },
-    { command: "weather", description: "الطقس" },
-    { command: "pricelist", description: "قائمة أسعار الشركات" }
-  ], { scope: { type: "all_group_chats" } });
+  // Attempt each scope independently: one Telegram API failure must not prevent
+  // the remaining command menus from being updated.
+  const menus = [
+    ["default", [], { type: "default" }],
+    ["private", [
+      { command: "settings", description: "إعدادات البوت وحالة الخدمات" },
+      { command: "chemical", description: "المساعد الكيميائي" },
+      { command: "weather", description: "الطقس" },
+      { command: "pricelist", description: "قائمة أسعار الشركات" },
+      { command: "help", description: "مساعدة البوت" }
+    ], { type: "all_private_chats" }],
+    ["groups", [
+      { command: "chemical", description: "المساعد الكيميائي" },
+      { command: "weather", description: "الطقس" },
+      { command: "pricelist", description: "قائمة أسعار الشركات" }
+    ], { type: "all_group_chats" }]
+  ];
+  const failures = [];
+  for (const [name, commands, scope] of menus) {
+    try {
+      await bot.telegram.setMyCommands(commands, { scope });
+      console.log(`[COMMAND_MENU_SETUP] scope=${name} status=ok`);
+    } catch (error) {
+      const code = error?.code || "unknown";
+      console.warn(`[COMMAND_MENU_SETUP_FAILED] scope=${name} code=${code} message=${redactString(error?.message || "Telegram API error")}`);
+      failures.push({ name, error });
+    }
+  }
+  if (failures.length) {
+    const error = new Error(`Telegram command menu setup failed for scopes: ${failures.map(x => x.name).join(", ")}`);
+    error.code = "COMMAND_MENU_SETUP_FAILED";
+    error.failedScopes = failures.map(x => x.name);
+    throw error;
+  }
 }
 
 async function ensureDb() {

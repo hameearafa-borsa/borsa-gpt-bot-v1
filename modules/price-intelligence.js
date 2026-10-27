@@ -50,17 +50,11 @@ function numericPriceTokens(text) {
 
  
 function selectSalePrice(text, fallbackPrices) {
-  const s = toAsciiDigits(text);
-  // In multi-column catalog rows, the first amount is the package price;
-  // a later labelled "جملة" amount is a separate column.
-  const wholesaleLabel = s.search(/(?:جمله|جملة)\s*[:：]?/i);
-  if (wholesaleLabel >= 0) {
-    const beforeWholesale = numericPriceTokens(s.slice(0, wholesaleLabel));
-    if (beforeWholesale.length) return beforeWholesale[beforeWholesale.length - 1];
-    const explicit = s.slice(wholesaleLabel).match(/(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i);
-    const labelled = explicit ? parseNumber(explicit[1]) : null;
-    if (labelled != null && labelled > 0 && labelled < 100000) return labelled;
-  }
+  // The monitor is a wholesale-price monitor: when a row explicitly labels a
+  // value "جملة", that value wins. Preserve any earlier unlabelled amount in a
+  // separate field rather than silently treating it as the wholesale price.
+  const explicitWholesale = extractExplicitWholesalePrice(text);
+  if (explicitWholesale != null) return explicitWholesale;
   return fallbackPrices[0] ?? null;
 }
 
@@ -126,6 +120,13 @@ function extractPriceCandidates(text) {
 
     const explicitWholesalePrice = extractExplicitWholesalePrice(parsedLine);
     const explicitWholesale = explicitWholesalePrice != null;
+    const wholesaleLabelIndex = stripped.search(/(?:جمله|جملة)\s*[:：]?/i);
+    const preWholesalePrices = wholesaleLabelIndex >= 0
+      ? numericPriceTokens(stripped.slice(0, wholesaleLabelIndex))
+      : [];
+    const unlabelledPriceBeforeWholesale = preWholesalePrices.length
+      ? preWholesalePrices[preWholesalePrices.length - 1]
+      : null;
     const salePrice = selectSalePrice(stripped, numbers);
     if (salePrice == null) continue;
 
@@ -157,7 +158,9 @@ function extractPriceCandidates(text) {
       section,
       product_text: productText,
       package_sale_price: salePrice,
-      // Preserve the explicitly labelled amount as a separate price column.
+      // Preserve the first/unlabelled amount; do not confuse it with the
+      // explicitly labelled wholesale value used by the monitoring pipeline.
+      listed_base_price: explicitWholesale ? unlabelledPriceBeforeWholesale : null,
       explicit_wholesale_label_price: explicitWholesalePrice,
       consumer_price: consumerPrice,
       price_kind: priceKind,
@@ -166,10 +169,12 @@ function extractPriceCandidates(text) {
       offer_extra_weight_g: extraWeightG,
       pack_count: packCount,
       package_type: parsePackageType(line),
-      confidence: explicitWholesale && salePrice !== explicitWholesalePrice ? 0.72 : explicitWholesale ? 0.92 : (consumerIndex >= 0 ? 0.65 : 0.55),
-      needs_review: explicitWholesale && salePrice !== explicitWholesalePrice,
-      price_selection_reason: explicitWholesale && salePrice !== explicitWholesalePrice
-        ? "first_package_price_preserved; labelled_wholesale_amount_kept_separately"
+      confidence: explicitWholesale && unlabelledPriceBeforeWholesale != null && unlabelledPriceBeforeWholesale !== explicitWholesalePrice
+        ? 0.72
+        : explicitWholesale ? 0.92 : (consumerIndex >= 0 ? 0.65 : 0.55),
+      needs_review: explicitWholesale && unlabelledPriceBeforeWholesale != null && unlabelledPriceBeforeWholesale !== explicitWholesalePrice,
+      price_selection_reason: explicitWholesale && unlabelledPriceBeforeWholesale != null && unlabelledPriceBeforeWholesale !== explicitWholesalePrice
+        ? "explicit_wholesale_selected; unlabelled_pre_wholesale_price_preserved_for_review"
         : explicitWholesale ? "explicit_wholesale_label" : "first_price_candidate",
     });
   }

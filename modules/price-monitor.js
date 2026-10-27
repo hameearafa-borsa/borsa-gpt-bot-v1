@@ -78,4 +78,4 @@ async function observe({ pool, message, merchantId = null, registry }) {
   return { accepted, saved: savedRows.length, savedRows, silent: true };
 }
 
-module.exports = { isOwnMessage, isEligibleMessage, observe };
+module.exports = { isOwnMessage, isBulkPriceList, isEligibleMessage, observe };

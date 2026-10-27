@@ -29,6 +29,17 @@ assert.equal(msUntilNextCheck(after), 24 * 60 * 60 * 1000 - 60 * 1000);
     fetchImpl: async () => ({ ok: true, status: 200, headers: { get: () => "text/html" }, text: async () => "<html>ok</html>" })
   });
   assert.equal(html, "<html>ok</html>");
+  let timeoutSignalObserved = false;
+  await assert.rejects(() => fetchStorePage("https://snapflyer.io/eg/downtown/stores/kazyon", {
+    timeoutMs: 5,
+    fetchImpl: (_url, options) => new Promise((resolve, reject) => {
+      options.signal.addEventListener("abort", () => {
+        timeoutSignalObserved = true;
+        reject(Object.assign(new Error("aborted"), { name: "AbortError" }));
+      }, { once: true });
+    })
+  }), /aborted/);
+  assert.equal(timeoutSignalObserved, true, "catalog fetch must abort when its timeout expires");
   let oversizedBodyRead = false;
   await assert.rejects(() => fetchStorePage("https://snapflyer.io/eg/downtown/stores/kazyon", {
     fetchImpl: async () => ({

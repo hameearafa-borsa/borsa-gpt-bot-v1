@@ -43,8 +43,34 @@ async function fetchStorePage(url, { fetchImpl = globalThis.fetch, timeoutMs = F
     if (type && !/text\/html|application\/xhtml\+xml/i.test(type)) throw new Error("catalog_unexpected_content_type");
     const declaredLength = Number(response.headers?.get?.("content-length") || 0);
     if (declaredLength > MAX_HTML_BYTES) throw new Error("catalog_html_empty_or_too_large");
-    const html = await response.text();
-    if (!html || html.length > MAX_HTML_BYTES) throw new Error("catalog_html_empty_or_too_large");
+    let html;
+    if (response.body && typeof response.body.getReader === "function") {
+      const reader = response.body.getReader();
+      const chunks = [];
+      let totalBytes = 0;
+      const decoder = new TextDecoder();
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          totalBytes += value?.byteLength || 0;
+          if (totalBytes > MAX_HTML_BYTES) {
+            await reader.cancel().catch(() => {});
+            throw new Error("catalog_html_empty_or_too_large");
+          }
+          if (value) chunks.push(decoder.decode(value, { stream: true }));
+        }
+        chunks.push(decoder.decode());
+        html = chunks.join("");
+      } finally {
+        reader.releaseLock?.();
+      }
+    } else {
+      // Lightweight test doubles and non-streaming fetch adapters may only expose text().
+      html = await response.text();
+      if (Buffer.byteLength(html || "", "utf8") > MAX_HTML_BYTES) throw new Error("catalog_html_empty_or_too_large");
+    }
+    if (!html || Buffer.byteLength(html, "utf8") > MAX_HTML_BYTES) throw new Error("catalog_html_empty_or_too_large");
     return html;
   } finally { clearTimeout(timer); }
 }

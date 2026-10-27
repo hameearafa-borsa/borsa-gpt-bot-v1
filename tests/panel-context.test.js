@@ -8,5 +8,7 @@ assert.equal(source.includes('bot.action(/^panel:'), false, "panel callbacks mus
 assert.match(source, /async function configureCommandMenus\(\)/);
 assert.match(source, /command: "chemical"/);
 assert.match(source, /command: "weather"/);
+assert.match(source, /cmd === "settings"/, "settings command must be handled");
+assert.match(source, /canManage\(ctx\.telegram, m\.chatId, m\.userId\)/, "group settings must check the actual group creator");
 
-console.log("admin panel removal regression test: OK");
+console.log("legacy panel stays disabled while authorized settings are available: OK");

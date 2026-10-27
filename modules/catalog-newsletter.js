@@ -136,8 +136,8 @@ async function persistCatalogSnapshots(pool, catalogs) {
     }
     if (latest.rows[0].fingerprint === catalog.fingerprint) {
       await pool.query(
-        "UPDATE catalog_newsletter_snapshots SET last_seen_at=NOW() WHERE store_key=$1 AND catalog_url=$2 AND fingerprint=$3",
-        [catalog.store, catalog.url, catalog.fingerprint]
+        "UPDATE catalog_newsletter_snapshots SET title=$4, region=$5, displayed_date_range=$6, last_seen_at=NOW() WHERE store_key=$1 AND catalog_url=$2 AND fingerprint=$3",
+        [catalog.store, catalog.url, catalog.fingerprint, catalog.title, catalog.region || CATALOG_REGION, catalog.displayedDateRange || null]
       );
       result.unchanged++;
       continue;

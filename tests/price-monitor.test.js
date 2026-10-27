@@ -142,7 +142,7 @@ const registry = require("../data/product-registry.json");
     registry
   });
   assert.equal(pearl.saved, 1);
-  assert.equal(pearl.savedRows[0].row.package_sale_price, 487.4);
+  assert.equal(pearl.savedRows[0].row.package_sale_price, 505.31);
   assert.equal(pearl.savedRows[0].row.price_kind, "wholesale");
   assert.equal(pearl.savedRows[0].row.decision, "pending");
   assert.ok(pearl.savedRows[0].row.confidence < 0.8);

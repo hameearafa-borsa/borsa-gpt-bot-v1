@@ -193,6 +193,7 @@ function extractPriceCandidates(text) {
     if (row.explicit_wholesale_label_price != null || !contextGroups.get(key)) continue;
     row.price_kind = "wholesale";
     row.context_inferred_price_kind = true;
+    row.needs_review = true;
     row.confidence = Math.max(Number(row.confidence) || 0, 0.72);
     row.price_selection_reason = "section_context_inferred_wholesale; first_package_price_preserved";
   }

@@ -22,6 +22,21 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   assert.ok(calls[1].sql.includes("reviewed_price_products"));
   assert.ok(calls[2].sql.includes("price_review_queue"));
   assert.match(calls[2].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);
+  assert.match(calls[0].sql, /WHERE id=\$4 AND decision='pending'/);
+  assert.equal(calls[0].params[0], "accepted");
+  assert.equal(calls[2].params[0], "accepted");
+
+  const ignoredCalls = [];
+  const ignoredDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
+    ignoredCalls.push({ sql, params });
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ ...row, id: 45 }] };
+    return { rowCount: 1, rows: [];
+  } }); } };
+  const ignored = await resolveReview({ db: ignoredDb, id: 45, action: "ignore", reviewerId: 7 });
+  assert.equal(ignored.ok, true);
+  assert.equal(ignoredCalls[0].params[0], "ignored", "rejecting a price should retain its observation with ignored decision");
+  assert.match(ignoredCalls[1].sql, /UPDATE price_review_queue SET status=\$1/);
+  assert.equal(ignoredCalls[1].params[0], "ignored", "rejecting a price should resolve its queue entry too");
   const editedCalls = [];
   const editedDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
     editedCalls.push({ sql, params }); return { rowCount: 1, rows: [{ id: 42 }] };

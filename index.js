@@ -538,7 +538,7 @@ bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
 });
 
 bot.action(/^prv:edit:(\d+)$/, async ctx => {
-  if (!isLogChat(ctx.chat?.id) || !isMaster(ctx.from?.id)) {
+  if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !isMaster(ctx.from?.id)) {
     await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
     return;
   }

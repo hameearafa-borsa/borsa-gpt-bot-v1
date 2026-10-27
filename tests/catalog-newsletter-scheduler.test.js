@@ -64,6 +64,26 @@ assert.equal(msUntilNextCheck(after), 24 * 60 * 60 * 1000 - 60 * 1000);
     })
   }), /catalog_html_empty_or_too_large/);
   assert.equal(streamedBodyCancelled, true, "cancel oversized streamed response instead of buffering it fully");
+  const arabicHtml = "<span>منظفات وعناية</span>";
+  const arabicBytes = new TextEncoder().encode(arabicHtml);
+  const splitAt = arabicBytes.findIndex((byte, index) => index > 6 && (byte & 0xc0) === 0x80);
+  assert.ok(splitAt > 0, "fixture should include a split inside a multibyte UTF-8 character");
+  const utf8Chunks = [arabicBytes.slice(0, splitAt), arabicBytes.slice(splitAt)];
+  let chunkIndex = 0;
+  const decodedArabicHtml = await fetchStorePage("https://snapflyer.io/eg/downtown/stores/kazyon", {
+    fetchImpl: async () => ({
+      ok: true, status: 200,
+      headers: { get: name => name === "content-type" ? "text/html; charset=utf-8" : null },
+      body: { getReader: () => ({
+        read: async () => chunkIndex < utf8Chunks.length
+          ? { done: false, value: utf8Chunks[chunkIndex++] }
+          : { done: true },
+        cancel: async () => {},
+        releaseLock: () => {}
+      }) }
+    })
+  });
+  assert.equal(decodedArabicHtml, arabicHtml, "stream decoding must preserve Arabic across UTF-8 chunk boundaries");
   const skipped = await checkCatalogsOnce({ pool: null, telegram: null, chatId: null });
   assert.equal(skipped.skipped, true);
   console.log("catalog newsletter scheduler tests: OK");

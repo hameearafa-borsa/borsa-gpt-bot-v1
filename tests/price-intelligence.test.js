@@ -85,4 +85,42 @@ assert.match(variants[3].product_text, /اتوماتيك/);
 assert.notEqual(variants[0].product_text, variants[2].product_text);
 
 
+const pearlOctober = `أسعار بيرل – أكتوبر
+..... أوتوماتيك
+• 9 ك: 505.31 | جملة 487.40 | مستهلك 525
+• 5 ك: 308.43 | جملة 915.87 | مستهلك 325
+• 2.5 ك: 179.15 | جملة 716.63 | مستهلك 200
+..... أوزان وشكاير
+• شكارة 10 ك: 618.35 | مستهلك 630
+• شكارة 7 ك: 432.84 | مستهلك 450
+• 2 ك: 129.22 | جملة 516.90 | مستهلك 145
+• 1.5 ك: 98.96 | جملة 395.85 | مستهلك 110
+• 1 ك: 66.28 | جملة 265.15 | مستهلك 75
+.. العبوات الصغيرة
+• 290 جم: 22.03 | جملة 176.29 | مستهلك 25
+• 160 جم: 12 | جملة 144.06 | مستهلك 15
+• 120 جم: 8.46 | جملة 135.49 | مستهلك 10
+• 50 جم: 3.96 | جملة 47.52 | مستهلك 5
+• 30 جم: 3.79 | جملة 75.95 | مستهلك 5`;
+const pearlRows = extractPriceCandidates(pearlOctober);
+assert.equal(pearlRows.length, 13, "Pearl October list should yield 13 sale-price observations");
+assert.deepEqual(pearlRows.map(row => row.package_sale_price), [487.40, 915.87, 716.63, 618.35, 432.84, 516.90, 395.85, 265.15, 176.29, 144.06, 135.49, 47.52, 75.95]);
+assert.equal(pearlRows[0].weight_g, 9000);
+assert.equal(pearlRows[1].weight_g, 5000);
+assert.equal(pearlRows[2].weight_g, 2500);
+assert.equal(pearlRows[3].weight_g, 10000);
+assert.equal(pearlRows[0].company, "بيرل");
+assert.equal(pearlRows[0].section, "أوتوماتيك");
+assert.equal(pearlRows[0].consumer_price, 525);
+assert.equal(pearlRows[3].consumer_price, 630);
+assert.ok(pearlRows.every(row => row.package_sale_price !== row.consumer_price), "consumer column must not replace the observed sale price");
+const pearlListRows = deterministicList(pearlOctober);
+assert.equal(pearlListRows.length, 13, "Pearl company-list parser should preserve all 13 rows");
+assert.equal(pearlListRows.filter(row => row.decision === "accepted").length, 13, "Pearl rows with company, section and weight context should be accepted");
+assert.equal(pearlListRows[0].wholesale_carton_price, 487.40);
+assert.equal(pearlListRows[0].consumer_price, 525);
+assert.equal(pearlListRows[0].weight_g, 9000);
+assert.equal(pearlListRows[3].package_sale_price, 618.35);
+assert.equal(pearlListRows[3].consumer_price, 630);
+
 console.log("price intelligence tests: OK");

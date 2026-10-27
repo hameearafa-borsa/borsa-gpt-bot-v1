@@ -71,49 +71,85 @@ function extractProductText(line) {
 function extractPriceCandidates(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const out = [];
-  for (const line of lines) {
-    if (/^\//.test(line) || /^[-_=.*]+$/.test(line)) continue;
-    // Catalog metadata must never become a price observation (e.g. "شهر أكتوبر 2026").
-    if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
-    const kind = classifyPriceKind(line);
-    if (kind === "retail") continue;
+  let company = null;
+  let section = null;
 
+  for (const line of lines) {
+    if (/^\/|^[-_=.*]+$/.test(line)) continue;
+    if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
+
+    const normalized = normalizeArabic(line);
     const parsedLine = toAsciiDigits(line);
-    const packCount = parsePackCount(parsedLine);
-    const extraWeightG = parseExtraWeight(parsedLine);
     const stripped = stripQuantityTokens(parsedLine);
     const numbers = numericPriceTokens(stripped);
-    if (!numbers.length) continue;
 
-    const productText = extractProductText(parsedLine);
-    const normalizedProduct = normalizeArabic(productText);
-    if (normalizedProduct.length < 2 || /^\d/.test(normalizedProduct)) continue;
-    if (/^(?:جنيه|ج|egp|ق|قطعه|قطعة)$/.test(normalizedProduct)) continue;
+    // Company and section headings establish context for weight-only rows such as "9 ك:".
+    if (!numbers.length) {
+      if (/^(?:الاسعار?|اسعار)\s*(?:هي\s*)?(?:جمله|قطاعي|مستهلك)$/iu.test(normalized)) continue;
+      if (/^(?:اسعار)\s+/iu.test(normalized)) {
+        const heading = line.replace(/^(?:أسعار|اسعار)\s+/iu, "").split(/[–—-]/)[0].trim();
+        company = heading.replace(/^شركة\s+/iu, "").trim() || company;
+        continue;
+      }
+      if (/اوتوماتيك|automatic/u.test(normalized)) { section = "أوتوماتيك"; continue; }
+      if (/اوزان|شكاير|شكاره/u.test(normalized)) { section = "أوزان وشكاير"; continue; }
+      if (/عبوات صغيره|العبوات الصغيره/u.test(normalized)) { section = "العبوات الصغيرة"; continue; }
+      continue;
+    }
 
+    const kind = classifyPriceKind(line);
+    const retailIndex = parsedLine.search(RETAIL_WORDS);
+    const beforeRetail = retailIndex >= 0 ? parsedLine.slice(0, retailIndex) : parsedLine;
+    const preRetailNumbers = numericPriceTokens(stripQuantityTokens(beforeRetail));
+    // Skip retail-only observations, but keep a valid base/package price that precedes
+    // a separate consumer-price column (e.g. "شكارة 10 ك: 618.35 | مستهلك 630").
+    if (kind === "retail" && preRetailNumbers.length === 0) continue;
+
+    const packCount = parsePackCount(parsedLine);
+    const extraWeightG = parseExtraWeight(parsedLine);
     const quantity = parsedLine.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const q = quantity ? parseQuantity(quantity[0]) : null;
-    // In this catalog format, "2.500 اتوماتيك" denotes a 2.5 kg pack even without a unit suffix.
     const decimalAutomaticWeight = parsedLine.match(/(?:^|\s)(\d+[.,]\d{1,3})\s*(?:كجم|ك)?\s*(?:اتوماتيك|اوتوماتيك)/i);
     const decimalAutomaticGrams = decimalAutomaticWeight ? Math.round(Number(decimalAutomaticWeight[1].replace(",", ".")) * 1000) : null;
-    const priceKind = kind === "wholesale" ? "wholesale" : "wholesale_candidate";
 
+    const explicitWholesale = /(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i.test(parsedLine);
+    const salePrice = selectSalePrice(stripped, numbers);
+    if (salePrice == null) continue;
+
+    const consumerIndex = parsedLine.search(RETAIL_WORDS);
+    const consumerSuffix = consumerIndex >= 0
+      ? parsedLine.slice(consumerIndex).replace(RETAIL_WORDS, " ")
+      : "";
+    const consumerPrice = numericPriceTokens(stripQuantityTokens(consumerSuffix))[0] ?? null;
+
+    const candidateName = extractProductText(parsedLine)
+      .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى)/giu, " ")
+      .replace(/\s+/g, " ").trim();
+    const weightLabel = quantity?.[0]?.trim() || (decimalAutomaticWeight ? decimalAutomaticWeight[1] : null);
+    const productText = candidateName.length >= 2
+      ? candidateName
+      : [company, section, weightLabel].filter(Boolean).join(" ").trim();
+    const normalizedProduct = normalizeArabic(productText);
+    if (normalizedProduct.length < 2 || /^\d/.test(normalizedProduct)) continue;
+
+    const priceKind = explicitWholesale ? "wholesale" : "wholesale_candidate";
     out.push({
       raw_line: line,
+      company,
+      section,
       product_text: productText,
-      package_sale_price: selectSalePrice(stripped, numbers),
+      package_sale_price: salePrice,
+      consumer_price: consumerPrice,
       price_kind: priceKind,
       weight_g: q?.grams ?? decimalAutomaticGrams,
       volume_ml: q?.milliliters ?? null,
       offer_extra_weight_g: extraWeightG,
-      pack_count: packCount,
-      // Multiple distinct amounts on one row can mean carton/piece/retail columns or a bad source list.
-      // Preserve the explicitly labelled wholesale value, but leave the row pending for review.
-      confidence: kind === "wholesale" ? (new Set(numbers).size > 1 ? 0.65 : 0.92) : 0.55,
+      pack_count,
+      confidence: explicitWholesale ? (new Set(numbers).size > 1 ? 0.65 : 0.92) : (consumerIndex >= 0 ? 0.65 : 0.55),
     });
   }
   return out;
 }
-
 function commercialMetrics(row) {
   const weight = Number(row.weight_g) || 0;
   const extra = Number(row.offer_extra_weight_g) || 0;

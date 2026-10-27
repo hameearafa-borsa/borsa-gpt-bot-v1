@@ -120,6 +120,8 @@ async function runPersistenceTests() {
   assert.equal(calls.at(-1).params[6], "ignored");
   assert.deepEqual(await persistCatalogSnapshots(pool, [catalog]), { baseline: 0, changed: 0, unchanged: 1 });
   assert.match(calls.at(-1).sql, /last_seen_at=NOW\(\)/);
+  assert.match(calls.at(-1).sql, /title=\$4, region=\$5, displayed_date_range=\$6/);
+  assert.equal(calls.at(-1).params[3], catalog.title);
   const changed = { ...catalog, fingerprint: "fp-2", title: "Kazyon flyer updated" };
   assert.deepEqual(await persistCatalogSnapshots(pool, [changed]), { baseline: 0, changed: 1, unchanged: 0 });
   assert.match(calls.at(-1).sql, /'pending'/);

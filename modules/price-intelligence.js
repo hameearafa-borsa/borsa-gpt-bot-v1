@@ -51,11 +51,23 @@ function numericPriceTokens(text) {
  
 function selectSalePrice(text, fallbackPrices) {
   const s = toAsciiDigits(text);
-  // Prefer the value explicitly labelled as wholesale when a row has multiple prices.
-  const explicitWholesale = s.match(/(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i);
-  const labelled = explicitWholesale ? parseNumber(explicitWholesale[1]) : null;
-  if (labelled != null && labelled > 0 && labelled < 100000) return labelled;
+  // In multi-column catalog rows, the first amount is the package price;
+  // a later labelled "جملة" amount is a separate column.
+  const wholesaleLabel = s.search(/(?:جمله|جملة)\s*[:：]?/i);
+  if (wholesaleLabel >= 0) {
+    const beforeWholesale = numericPriceTokens(s.slice(0, wholesaleLabel));
+    if (beforeWholesale.length) return beforeWholesale[beforeWholesale.length - 1];
+    const explicit = s.slice(wholesaleLabel).match(/(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i);
+    const labelled = explicit ? parseNumber(explicit[1]) : null;
+    if (labelled != null && labelled > 0 && labelled < 100000) return labelled;
+  }
   return fallbackPrices[0] ?? null;
+}
+
+function extractExplicitWholesalePrice(text) {
+  const match = toAsciiDigits(text).match(/(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i);
+  const value = match ? parseNumber(match[1]) : null;
+  return value != null && value > 0 && value < 100000 ? value : null;
 }
 
 function extractProductText(line) {
@@ -112,7 +124,8 @@ function extractPriceCandidates(text) {
     const decimalAutomaticWeight = parsedLine.match(/(?:^|\s)(\d+[.,]\d{1,3})\s*(?:كجم|ك)?\s*(?:اتوماتيك|اوتوماتيك)/i);
     const decimalAutomaticGrams = decimalAutomaticWeight ? Math.round(Number(decimalAutomaticWeight[1].replace(",", ".")) * 1000) : null;
 
-    const explicitWholesale = /(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i.test(parsedLine);
+    const explicitWholesalePrice = extractExplicitWholesalePrice(parsedLine);
+    const explicitWholesale = explicitWholesalePrice != null;
     const salePrice = selectSalePrice(stripped, numbers);
     if (salePrice == null) continue;
 
@@ -144,6 +157,8 @@ function extractPriceCandidates(text) {
       section,
       product_text: productText,
       package_sale_price: salePrice,
+      // Preserve the explicitly labelled amount as a separate price column.
+      explicit_wholesale_label_price: explicitWholesalePrice,
       consumer_price: consumerPrice,
       price_kind: priceKind,
       weight_g: q?.grams ?? decimalAutomaticGrams,
@@ -151,7 +166,11 @@ function extractPriceCandidates(text) {
       offer_extra_weight_g: extraWeightG,
       pack_count: packCount,
       package_type: parsePackageType(line),
-      confidence: explicitWholesale ? (new Set(numbers).size > 1 ? 0.65 : 0.92) : (consumerIndex >= 0 ? 0.65 : 0.55),
+      confidence: explicitWholesale && salePrice !== explicitWholesalePrice ? 0.82 : explicitWholesale ? 0.92 : (consumerIndex >= 0 ? 0.65 : 0.55),
+      needs_review: explicitWholesale && salePrice !== explicitWholesalePrice,
+      price_selection_reason: explicitWholesale && salePrice !== explicitWholesalePrice
+        ? "first_package_price_preserved; labelled_wholesale_amount_kept_separately"
+        : explicitWholesale ? "explicit_wholesale_label" : "first_price_candidate",
     });
   }
   return out;

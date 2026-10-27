@@ -223,13 +223,20 @@ function makePipelinePool() {
     ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1378", "fp-new", "Kazyon flyer December 2026", "محافظة القاهرة", null, "pending"]
   );
   let publishErrors = 0;
+  let ambiguousDeliveryAlert = false;
   const failingTelegram = { sendMessage: async () => { throw new Error("telegram unavailable"); } };
   const failedPublish = await checkCatalogsOnce({
     pool: retryPool, telegram: failingTelegram, chatId: -100123, fetchPage,
-    onError: async (_error, meta) => { if (meta.stage === "catalog_publish") publishErrors++; }
+    onError: async (_error, meta) => {
+      if (meta.stage === "catalog_publish") {
+        publishErrors++;
+        ambiguousDeliveryAlert = meta.deliveryOutcome === "ambiguous" && meta.manualReviewRequired === true;
+      }
+    }
   });
   assert.ok(failedPublish.failed >= 1);
   assert.ok(publishErrors >= 1);
+  assert.equal(ambiguousDeliveryAlert, true, "Telegram send errors must explicitly flag ambiguous delivery for manual review");
   assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
     "terminal delivery failures must leave the pending queue so newer snapshots are not starved");
 

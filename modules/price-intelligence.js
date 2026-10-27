@@ -173,6 +173,24 @@ function extractPriceCandidates(text) {
         : explicitWholesale ? "explicit_wholesale_label" : "first_price_candidate",
     });
   }
+
+  // Infer a missing row-level price label from the same company + section when
+  // neighbouring rows consistently expose a labelled wholesale column.
+  // This is contextual classification only; it never changes any raw amount.
+  const contextGroups = new Map();
+  for (const row of out) {
+    if (row.explicit_wholesale_label_price == null || !row.company || !row.section) continue;
+    const key = `${normalizeArabic(row.company)}|${normalizeArabic(row.section)}`;
+    contextGroups.set(key, (contextGroups.get(key) || 0) + 1);
+  }
+  for (const row of out) {
+    const key = `${normalizeArabic(row.company || "")}|${normalizeArabic(row.section || "")}`;
+    if (row.explicit_wholesale_label_price != null || !contextGroups.get(key)) continue;
+    row.price_kind = "wholesale";
+    row.context_inferred_price_kind = true;
+    row.confidence = Math.max(Number(row.confidence) || 0, 0.72);
+    row.price_selection_reason = "section_context_inferred_wholesale; first_package_price_preserved";
+  }
   return out;
 }
 function parsePackageType(text) {

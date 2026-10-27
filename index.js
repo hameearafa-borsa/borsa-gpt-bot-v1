@@ -403,6 +403,10 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|reports|protectio
     return;
   }
   if (action === "scraper_test") {
+    if (process.env.ENABLE_SCRAPER_TEST !== "true") {
+      await ctx.editMessageText("⏸️ اختبار الجلب متوقف افتراضيًا لتجنب استهلاك رصيد ScraperAPI. لا يُرسل أي طلب خارجي.", { reply_markup: adminPanel.actionKeyboard() });
+      return;
+    }
     const result = await fetchSearch("amazon", "مسحوق غسيل", { timeoutMs: 70000 });
     const body = result.ok
       ? `🌐 اختبار ScraperAPI\nالحالة: اتصال HTTP ناجح\nالمصدر: Amazon.eg\nالعناصر المستخرجة: ${result.deals.length}\n\nتنبيه: الاتصال ناجح، لكن صفر عناصر قد يعني تغيّر صفحة المتجر أو حجب المحتوى.`
@@ -883,12 +887,17 @@ installFatalProcessHandlers({
     const report = makeReport({ module: "scheduler", stage: "dispatch_due", severity: "ERROR", action: "scheduled_message", error, details: { jobId: job?.id, chatId: job?.chat_id }, chatId: job?.chat_id });
     await emitReport({ bot, db, report });
   } });
-  // Deal newsletters resolve their destinations from currently approved groups.
-  // DEALS_CHAT_ID is no longer required for group selection.
-  stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
-    const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
-    await emitReport({ bot, db, report });
-  } });
+  // Paid deal scraping stays off unless explicitly enabled, to protect ScraperAPI credits.
+  // Once enabled, destinations are resolved from currently approved groups.
+  if (process.env.DEALS_SCHEDULER_ENABLED === "true") {
+    stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
+      const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
+      await emitReport({ bot, db, report });
+    } });
+    console.log("[DEALS_SCHEDULER] Enabled by explicit opt-in; targets active approved groups.");
+  } else {
+    console.log("[DEALS_SCHEDULER] Disabled by default; set DEALS_SCHEDULER_ENABLED=true only when ready to spend ScraperAPI credits.");
+  }
   // Catalog notices target every active, approved group from authorized_chats.
   stopCatalogs = startCatalogNewsletterScheduler({
     pool: db.pool,

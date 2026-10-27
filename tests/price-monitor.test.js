@@ -24,6 +24,7 @@ const registry = require("../data/product-registry.json");
   const pool = {
     async query(sql, params) {
       savedQueries.push({ sql, params });
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 91 }], rowCount: 1 };
       throw new Error("unexpected query");
@@ -40,11 +41,39 @@ const registry = require("../data/product-registry.json");
   assert.equal(result.accepted[0].price_kind, "wholesale");
   assert.equal(result.accepted[0].package_sale_price, 18.75);
   assert.equal(result.accepted[0].decision, "accepted");
-  assert.equal(savedQueries.length, 2);
-  assert.ok(savedQueries[1].sql.includes("INSERT INTO price_observations"));
-  assert.ok(savedQueries[1].sql.includes("product_text"));
-  assert.ok(savedQueries[1].sql.includes("offer_extra_weight_g"));
+  assert.equal(savedQueries.length, 3);
+  assert.ok(savedQueries[2].sql.includes("INSERT INTO price_observations"));
+  assert.ok(savedQueries[2].sql.includes("product_text"));
+  assert.ok(savedQueries[2].sql.includes("offer_extra_weight_g"));
   assert.equal(savedQueries[1].params[13], "accepted");
+
+  // Historical accepted observations are compared before insertion, without posting a chat message.
+  let historyInsertParams = null;
+  const historyPool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) {
+        return { rows: [{
+          product_identity_key: params[0], price_kind: params[1], product_text: "بريكس ارضيات",
+          package_sale_price: 17.50, weight_g: 25, volume_ml: null, pack_count: null,
+          offer_extra_weight_g: null, package_type: null, brand_key: null
+        }], rowCount: 1 };
+      }
+      if (sql.includes("INSERT INTO price_observations")) {
+        historyInsertParams = params;
+        return { rows: [{ id: 96 }], rowCount: 1 };
+      }
+      throw new Error("unexpected history query");
+    }
+  };
+  const historical = await observe({
+    pool: historyPool,
+    message: { chatId: -100123, messageId: 462, userId: 789, text: base.text },
+    registry
+  });
+  assert.equal(historical.saved, 1);
+  assert.equal(historical.savedRows[0].row.change_type, "price_change");
+  assert.equal(historyInsertParams[17], "price_change");
 
   // A plausible price without an explicit wholesale marker or registry match
   // is retained as pending review data instead of being silently discarded.
@@ -57,7 +86,7 @@ const registry = require("../data/product-registry.json");
   assert.equal(uncertain.saved, 1);
   assert.equal(uncertain.savedRows[0].row.decision, "pending");
   assert.ok(uncertain.savedRows[0].row.confidence < 0.8);
-  assert.equal(savedQueries.length, 4);
+  assert.equal(savedQueries.length, 5);
 
   const noDb = await observe({ message: { text: base.text }, registry });
   assert.equal(noDb.saved, 0);
@@ -79,6 +108,7 @@ const registry = require("../data/product-registry.json");
   const pearlPool = {
     async query(sql, params) {
       pearlQueries.push({ sql, params });
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 92 }], rowCount: 1 };
       throw new Error("unexpected Pearl query");
@@ -143,6 +173,7 @@ const registry = require("../data/product-registry.json");
   const captionPool = {
     async query(sql) {
       captionQueries.push(sql);
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 94 }], rowCount: 1 };
       throw new Error("unexpected caption query");
@@ -158,7 +189,7 @@ const registry = require("../data/product-registry.json");
   });
   assert.equal(caption.saved, 1);
   assert.equal(caption.savedRows[0].row.package_sale_price, 18.75);
-  assert.equal(captionQueries.length, 2);
+  assert.equal(captionQueries.length, 3);
 
   // An explicitly approved identity prevents repeated review for the same clear wholesale product.
   const { identityKey } = require("../modules/price-review");
@@ -166,6 +197,7 @@ const registry = require("../data/product-registry.json");
   const reviewedProductPool = {
     async query(sql) {
       if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 95 }], rowCount: 1 };
       throw new Error("unexpected reviewed product query");

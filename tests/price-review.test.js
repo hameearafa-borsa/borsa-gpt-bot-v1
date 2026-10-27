@@ -9,7 +9,14 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   assert.match(formatReviewMessage(42, row), /مراجعة سعر معلّق #42/);
   const keyboard = reviewKeyboard(42);
   assert.equal(keyboard.inline_keyboard.flat().length, 4);
-  assert.ok(keyboard.inline_keyboard.flat().some(button => button.callback_data === "prv:new:42"));
+  const callbackData = keyboard.inline_keyboard.flat().map(button => button.callback_data).sort();
+  assert.deepEqual(callbackData, ["prv:approve:42", "prv:edit:42", "prv:ignore:42", "prv:new:42"].sort(),
+    "all review buttons must use the callback prefixes registered by index.js");
+  const indexSource = require("node:fs").readFileSync(require("node:path").join(__dirname, "..", "index.js"), "utf8");
+  for (const pattern of [
+    /bot\\.action\\(\\/\\^prv:\\(approve\\|new\\|ignore\\):\\(\\\\d\\+\\)\\$/,
+    /bot\\.action\\(\\/\\^prv:edit:\\(\\\\d\\+\\)\\$/
+  ]) assert.match(indexSource, pattern, "every review button callback prefix must have a registered handler");
   const calls = [];
   const db = { async withTransaction(fn) { return fn({ async query(sql, params) {
     calls.push({ sql, params });

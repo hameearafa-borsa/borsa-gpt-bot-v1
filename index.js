@@ -724,20 +724,28 @@ bot.on("text", async ctx => {
       for (const item of pendingRows) {
         let sentReviewMessage = null;
         try {
-          const queued = await db.query(
+          await db.query(
             `INSERT INTO price_review_queue(observation_id, source_chat_id, log_chat_id)
-             VALUES($1,$2,$3) ON CONFLICT(observation_id) DO NOTHING RETURNING id`,
+             VALUES($1,$2,$3) ON CONFLICT(observation_id) DO NOTHING`,
             [item.id, m.chatId || null, LOG_CHAT_ID]
           );
-          if (!queued.rowCount) continue;
+          const claimToken = require("node:crypto").randomUUID();
+          const claimed = await db.query(
+            `UPDATE price_review_queue SET notification_claim_token=$1, notification_claimed_at=NOW()
+              WHERE observation_id=$2 AND status='pending' AND log_message_id IS NULL
+                AND (notification_claimed_at IS NULL OR notification_claimed_at < NOW() - INTERVAL '120 seconds')
+              RETURNING observation_id`,
+            [claimToken, item.id]
+          );
+          if (!claimed.rowCount) continue;
           sentReviewMessage = await bot.telegram.sendMessage(LOG_CHAT_ID, priceReview.formatReviewMessage(item.id, item.row), {
             reply_markup: priceReview.reviewKeyboard(item.id), disable_web_page_preview: true
           });
           const saved = await db.query(
-            `UPDATE price_review_queue SET log_message_id=$1
-              WHERE observation_id=$2 AND status='pending' AND log_message_id IS NULL
+            `UPDATE price_review_queue SET log_message_id=$1, notification_claim_token=NULL, notification_claimed_at=NULL
+              WHERE observation_id=$2 AND status='pending' AND log_message_id IS NULL AND notification_claim_token=$3
               RETURNING observation_id`,
-            [sentReviewMessage.message_id, item.id]
+            [sentReviewMessage.message_id, item.id, claimToken]
           );
           if (!saved.rowCount) throw new Error("price_review_notification_save_conflict");
         } catch (reviewError) {

@@ -38,7 +38,7 @@ function stripQuantityTokens(text) {
     .replace(PACK_ANY_RE, " ")
     .replace(EXTRA_RE, " ")
     // In Unilever-style lists, standalone "ق" means per piece, not part of the product name.
-    .replace(/(?:^|\\s)ق(?=\\s|$)/giu, " ");
+    .replace(/(?:^|\s)ق(?=\s|$)/giu, " ");
 }
 
 function numericPriceTokens(text) {
@@ -74,7 +74,7 @@ function extractPriceCandidates(text) {
   for (const line of lines) {
     if (/^\//.test(line) || /^[-_=.*]+$/.test(line)) continue;
     // Catalog metadata must never become a price observation (e.g. "شهر أكتوبر 2026").
-    if (/^(?:شهر\\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\\s+20\\d{2}$/iu.test(line)) continue;
+    if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
     const kind = classifyPriceKind(line);
     if (kind === "retail") continue;
 

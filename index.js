@@ -559,16 +559,16 @@ installFatalProcessHandlers({
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
   console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
-  // Paid deal scraping stays off unless explicitly enabled, to protect ScraperAPI credits.
-  // Once enabled, destinations are resolved from currently approved groups.
-  if (process.env.DEALS_SCHEDULER_ENABLED === "true") {
+  // Scheduled deal newsletters are enabled by default in this release branch so deployment needs no follow-up toggle.
+  // Set DEALS_SCHEDULER_ENABLED=false only to deliberately pause paid scraping; destinations remain active approved groups.
+  if (String(process.env.DEALS_SCHEDULER_ENABLED || "true").toLowerCase() !== "false") {
     stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
       const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
       await emitReport({ bot, db, report });
     } });
-    console.log("[DEALS_SCHEDULER] Enabled by explicit opt-in; targets active approved groups.");
+    console.log("[DEALS_SCHEDULER] Enabled by default; set DEALS_SCHEDULER_ENABLED=false to pause paid scraping. Targets active approved groups.");
   } else {
-    console.log("[DEALS_SCHEDULER] Disabled by default; set DEALS_SCHEDULER_ENABLED=true only when ready to spend ScraperAPI credits.");
+    console.log("[DEALS_SCHEDULER] Disabled explicitly by DEALS_SCHEDULER_ENABLED=false.");
   }
   // Catalog notices target every active, approved group from authorized_chats.
   stopCatalogs = startCatalogNewsletterScheduler({

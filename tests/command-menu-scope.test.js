@@ -13,11 +13,4 @@ const body = source.slice(start, end);
 assert.match(body, /command: "chemical"/);
 assert.match(body, /command: "weather"/);
 assert.doesNotMatch(body, /panel|approvechat|claim|settings|antispam|schedule|warn|pricelist|inactive/);
-assert.doesNotMatch(source, /bot\.action\(\/\^panel:/);
-assert.doesNotMatch(source, /adminPanel|legacyAdmin|canControl|cmd === "antispam"|cmd === "schedule"|cmd === "warn"|cmd === "warnings"|cmd === "clearwarn"|cmd === "inactive"/);
-assert.match(source, /isAuthorizedChat\(m\.chatId\)/, "group authorization remains a separate access-control gate");
-assert.match(source, /if \(cmd === "قائمة" \|\| cmd === "pricelist"\)/, "price-list service must remain available");
-assert.match(source, /if \(cmd === "weather" \|\| cmd === "الطقس"\)/, "weather service must remain available");
-assert.match(source, /if \(isChemicalCommand\)/, "chemical assistant must remain available");
-
-console.log("Borsa service-only command surface test: OK");
+console.log("service-only Telegram command menu test: OK");

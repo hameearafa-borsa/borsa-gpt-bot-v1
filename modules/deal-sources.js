@@ -106,22 +106,33 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
   if (!source) throw new Error("unsupported_deal_source");
   const keys = getScraperKeys();
   if (!keys.length) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
-  const key = keys[nextScraperKeyIndex % keys.length];
+  const startIndex = nextScraperKeyIndex % keys.length;
   nextScraperKeyIndex = (nextScraperKeyIndex + 1) % keys.length;
   const targetUrl = sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`;
-  const endpoint = new URL("https://api.scraperapi.com/");
-  endpoint.searchParams.set("api_key", key);
-  endpoint.searchParams.set("url", targetUrl);
-  endpoint.searchParams.set("country_code", "eg");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
-    if (!response.ok) return { source: sourceName, ok: false, reason: `http_${response.status}`, deals: [] };
-    const html = await response.text();
-    return { source: sourceName, ok: true, deals: extractCards(html, sourceName, query) };
-  } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
-  finally { clearTimeout(timer); }
+  const requestWithKey = async key => {
+    const endpoint = new URL("https://api.scraperapi.com/");
+    endpoint.searchParams.set("api_key", key);
+    endpoint.searchParams.set("url", targetUrl);
+    endpoint.searchParams.set("country_code", "eg");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
+      if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
+      const html = await response.text();
+      return { source: sourceName, ok: true, deals: extractCards(html, sourceName, query) };
+    } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
+    finally { clearTimeout(timer); }
+  };
+  const first = await requestWithKey(keys[startIndex]);
+  // Retry only credential rejection. Do not retry retailer errors, rate limits, or timeouts.
+  if (!first.ok && (first.status === 401 || first.status === 403) && keys.length > 1) {
+    const alternate = await requestWithKey(keys[(startIndex + 1) % keys.length]);
+    if (alternate.ok) return alternate;
+    return { ...alternate, reason: `${first.reason};alternate_${alternate.reason}` };
+  }
+  const { status, ...result } = first;
+  return result;
 }
 async function mapWithConcurrency(items, limit, worker) {
   const results = new Array(items.length);

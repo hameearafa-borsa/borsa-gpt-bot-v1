@@ -14,6 +14,7 @@ const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
 const { formatTelegramStartupError } = require("./core/telegram-startup-error");
 const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
+const { markTelegramRateLimited, isTelegramRateLimit, isTelegramRateLimitedNow } = require("./core/telegram-rate-limit");
 const { MASTER_ID, isMaster } = require("./core/permissions");
 const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
@@ -407,6 +408,7 @@ bot.on("text", async ctx => {
     if (result.saved > 0) {
       const pendingRows = result.savedRows.filter(item => item.row.decision === "pending");
       for (const item of pendingRows) {
+        if (isTelegramRateLimitedNow()) break;
         let sentReviewMessage = null;
         try {
           await db.query(
@@ -434,12 +436,15 @@ bot.on("text", async ctx => {
           );
           if (!saved.rowCount) throw new Error("price_review_notification_save_conflict");
         } catch (reviewError) {
+          const hitTelegramRateLimit = isTelegramRateLimit(reviewError);
+          if (hitTelegramRateLimit) markTelegramRateLimited(reviewError);
           // Telegram may have accepted the message even if saving its ID failed.
           // Best-effort deletion prevents a stale actionable message being duplicated by startup recovery.
           if (sentReviewMessage?.message_id != null) {
             try { await bot.telegram.deleteMessage(LOG_CHAT_ID, sentReviewMessage.message_id); } catch {}
           }
           await sendLog({ module: "price-monitor", stage: "review_notification", severity: "warn", status: "failed", details: { observationId: item.id, error: redactString(reviewError?.message || "review notification failed") } });
+          if (hitTelegramRateLimit) break;
         }
       }
       await sendLog({

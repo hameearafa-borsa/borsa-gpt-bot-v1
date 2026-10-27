@@ -84,6 +84,25 @@ assert.equal(msUntilNextCheck(after), 24 * 60 * 60 * 1000 - 60 * 1000);
     })
   });
   assert.equal(decodedArabicHtml, arabicHtml, "stream decoding must preserve Arabic across UTF-8 chunk boundaries");
+  let bodyTimeoutObserved = false;
+  await assert.rejects(() => fetchStorePage("https://snapflyer.io/eg/downtown/stores/kazyon", {
+    timeoutMs: 5,
+    fetchImpl: async (_url, options) => ({
+      ok: true, status: 200,
+      headers: { get: name => name === "content-type" ? "text/html" : null },
+      body: { getReader: () => ({
+        read: () => new Promise((_resolve, reject) => {
+          options.signal.addEventListener("abort", () => {
+            bodyTimeoutObserved = true;
+            reject(Object.assign(new Error("body aborted"), { name: "AbortError" }));
+          }, { once: true });
+        }),
+        cancel: async () => {},
+        releaseLock: () => {}
+      }) }
+    })
+  }), /body aborted/);
+  assert.equal(bodyTimeoutObserved, true, "fetch timeout must remain active while reading a slow response body");
   const skipped = await checkCatalogsOnce({ pool: null, telegram: null, chatId: null });
   assert.equal(skipped.skipped, true);
   console.log("catalog newsletter scheduler tests: OK");

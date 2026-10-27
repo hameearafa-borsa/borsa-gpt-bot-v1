@@ -154,6 +154,17 @@ for (const edition of [editionAmazon, editionOther]) {
  });
  assert.equal(rateLimited.ok, false);
  assert.equal(noRetryKeys.length, 1, "rate limits must not trigger a second potentially wasteful request");
+ const timeoutKeys = [];
+ const timeoutError = new Error("simulated timeout");
+ timeoutError.name = "AbortError";
+ const timedOut = await fetchSearch("amazon", "no retry on timeout", {
+   fetchImpl: async url => {
+     timeoutKeys.push(new URL(String(url)).searchParams.get("api_key"));
+     throw timeoutError;
+   }
+ });
+ assert.equal(timedOut.reason, "timeout");
+ assert.equal(timeoutKeys.length, 1, "timeouts must not retry and increase scraper usage");
  let activeRequests = 0, peakRequests = 0, requestCount = 0;
  const concurrencyFetch = async () => {
    activeRequests++;

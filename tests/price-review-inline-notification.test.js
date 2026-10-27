@@ -1,0 +1,14 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const source = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+const start = source.indexOf("let sentReviewMessage = null;");
+assert.notEqual(start, -1, "inline price review must retain the sent message for failure cleanup");
+const end = source.indexOf('stage: "review_notification"', start);
+assert.notEqual(end, -1, "inline price review error handler must be present");
+const block = source.slice(start, end);
+assert.match(block, /UPDATE price_review_queue SET log_message_id=\$1[\s\S]*status='pending' AND log_message_id IS NULL[\s\S]*RETURNING observation_id/);
+assert.match(block, /if \(!saved\.rowCount\) throw new Error\("price_review_notification_save_conflict"\)/);
+assert.match(block, /deleteMessage\(LOG_CHAT_ID, sentReviewMessage\.message_id\)/);
+console.log("inline price-review notification persistence and duplicate-cleanup regression tests: OK");

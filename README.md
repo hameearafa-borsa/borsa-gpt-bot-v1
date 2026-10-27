@@ -70,7 +70,7 @@ See `LEGACY-MIGRATION-MAP.md` and `RC1-ADDITIVE-PATCH-NOTES.md` for the full mig
 
 ## Read-only live release preflight
 
-After installing the declared dependencies in the runtime environment, run `npm run preflight:live`. This check is deliberately read-only: it does not run migrations, send Telegram messages, publish deals, or print API keys/tokens. It checks PostgreSQL connectivity and required columns, Telegram `getMe`, access to `DEALS_CHAT_ID` without sending a test post, and one live Amazon/ScraperAPI query when `SCRAPER_API_KEY` exists.
+After installing the declared dependencies in the runtime environment, run `npm run preflight:live` only when a live check is intended. It does not run migrations, send Telegram messages, publish deals, or print API keys/tokens. It checks PostgreSQL connectivity and required columns, Telegram `getMe`, and access to `DEALS_CHAT_ID` without sending a test post. **If `SCRAPER_API_KEY` exists, it also makes one live Amazon/ScraperAPI request and may consume credits; skip this check when conserving ScraperAPI balance is the priority.**
 
 Exit status: `0` all performed checks passed; `1` at least one check failed; `2` one or more live checks were blocked because required environment variables were absent. A blocked check is not a pass. A successful HTTP response with zero extracted products is not proof that the retailer parser is healthy.
 

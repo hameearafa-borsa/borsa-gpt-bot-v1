@@ -142,7 +142,8 @@ const registry = require("../data/product-registry.json");
     registry
   });
   assert.equal(pearl.saved, 1);
-  assert.equal(pearl.savedRows[0].row.package_sale_price, 505.31);
+  assert.equal(pearl.savedRows[0].row.package_sale_price, 487.40, "the monitor must save the explicitly labelled wholesale amount");
+  assert.equal(pearl.savedRows[0].row.listed_base_price, 505.31, "the unlabelled amount must remain available for review");
   assert.equal(pearl.savedRows[0].row.price_kind, "wholesale");
   assert.equal(pearl.savedRows[0].row.decision, "pending");
   assert.ok(pearl.savedRows[0].row.confidence < 0.8);

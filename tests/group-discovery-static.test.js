@@ -26,7 +26,8 @@ assert.doesNotMatch(memberHandler[0], /authorizeChat\(/, "adding the bot must ne
 assert.doesNotMatch(memberHandler[0], /status='approved'/, "adding the bot must never mark a pending group approved");
 assert.match(source, /Number\(m\.userId\) !== MASTER_ID/, "approval command must remain restricted to the fixed master");
 assert.match(source, /await approvePendingGroup\(\{[\s\S]*?approvedBy: m\.userId/, "approval flow must invoke transactional helper");
-const menuBlock = source.match(/await bot\.telegram\.setMyCommands\(\[([\s\S]*?)\], \{ scope: \{ type: "all_group_chats" \} \}\)/);
+const groupMenuStart = source.lastIndexOf('await bot.telegram.setMyCommands([');
+const menuBlock = source.slice(groupMenuStart).match(/await bot\.telegram\.setMyCommands\(\[([\s\S]*?)\], \{ scope: \{ type: "all_group_chats" \} \}\)/);
 assert.ok(menuBlock, "service command menu must be declared");
 assert.match(menuBlock[1], /command: "chemical"/);
 assert.match(menuBlock[1], /command: "weather"/);

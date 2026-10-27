@@ -19,11 +19,35 @@ function cairoClock(date = new Date()) {
   return Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type, Number(p.value)]));
 }
 
+function cairoLocalInstant(year, month, day, hour, minute) {
+  // Convert a Cairo wall-clock time to an instant without assuming the UTC
+  // offset is constant across the date (Egypt observes daylight-saving time).
+  const desiredWallTime = Date.UTC(year, month - 1, day, hour, minute, 0, 0);
+  let instant = desiredWallTime;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const actual = cairoClock(new Date(instant));
+    const actualWallTime = Date.UTC(
+      actual.year, actual.month - 1, actual.day,
+      actual.hour, actual.minute, actual.second, 0
+    );
+    const adjustment = desiredWallTime - actualWallTime;
+    if (adjustment === 0) break;
+    instant += adjustment;
+  }
+  return instant;
+}
+
 function msUntilNextCheck(now = new Date()) {
   const p = cairoClock(now);
   const elapsedToday = ((p.hour * 60 + p.minute) * 60 + p.second) * 1000 + now.getMilliseconds();
   const target = (DAILY_HOUR * 60 + DAILY_MINUTE) * 60 * 1000;
-  return elapsedToday < target ? target - elapsedToday : 24 * 60 * 60 * 1000 - elapsedToday + target;
+  const dayOffset = elapsedToday < target ? 0 : 1;
+  const nextDate = new Date(Date.UTC(p.year, p.month - 1, p.day + dayOffset));
+  const targetInstant = cairoLocalInstant(
+    nextDate.getUTCFullYear(), nextDate.getUTCMonth() + 1, nextDate.getUTCDate(),
+    DAILY_HOUR, DAILY_MINUTE
+  );
+  return Math.max(0, targetInstant - now.getTime());
 }
 
 async function fetchStorePage(url, { fetchImpl = globalThis.fetch, timeoutMs = FETCH_TIMEOUT_MS } = {}) {

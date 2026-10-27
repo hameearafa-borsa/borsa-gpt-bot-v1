@@ -2,20 +2,40 @@
 const { log, redactString } = require("./diagnostics");
 const { normalizeArabic } = require("./normalization");
 
-function deterministicType(input) {
+function isPotentialBotTask(input) {
   const s = normalizeArabic(input);
+  return /(سعر|اسعار|بكام|بكم|جنيه|ج\s|(?:^|\s)ب\s*\d|العبوه|عبوه|علبه|كرتونه|مسحوق|منظف|منظفات|اريال|تايد|بريكس|اوكسي|بيرل|ليدر|قائمه|كتالوج|عروض|خصم|امازون|نون|جوميا|تاجر|محل|عنوان|تليفون|هاتف|واتساب|واتس)/i.test(s);
+}
+
+function matchesRegistryBrand(text, registry) {
+  const s = normalizeArabic(text);
+  return (registry?.brands || []).some(brand => {
+    const aliases = brand.aliases || [brand.name_ar];
+    return aliases.some(alias => {
+      const normalizedAlias = normalizeArabic(alias);
+      return normalizedAlias && s.includes(normalizedAlias);
+    });
+  });
+}
+
+function deterministicType(input, registry) {
+  const s = normalizeArabic(input);
+  // Common short greetings and social acknowledgements do not need an AI call.
+  // Keep this deliberately narrow so useful questions are not silently ignored.
+  if (s.length <= 100 && /^(?:(?:السلام عليكم|وعليكم السلام)(?: ورحمه الله وبركاته)?(?: اخ العرب)?|صباح الخير|مساء الخير|اهلا(?: وسهلا)?|مرحبا|ازيك(?: عامل ايه)?|كيف الحال|شكرا(?: جزيلا)?|متشكر(?: جدا)?|جزاك الله خيرا|بارك الله فيك|الله يبارك فيك|تمام|حاضر|بالتوفيق|الحمد لله)[.!؟?\s]*$/i.test(s)) return "other";
   if (/(كلور|مطهر|ماده|تركيبه|pH|حامض|حمض|قلوي|خلط)/i.test(s)) return "chemical";
   if (/(^|\s)\/قائمه|قائمه اسعار|قائمه شركة|قائمه شركه/i.test(s)) return "price_list";
   if (/(تاجر|محل|عنوان|تليفون|هاتف|واتساب|واتس)/i.test(s) && !/ج\s|جنيه/.test(s)) return "merchant";
   if (/(خصم|عرض|سعر خاص|amazon|امازون|نون|jumia|جوميا)/i.test(s)) return "deals";
   if (/(مسحوق|جيل|اريال|أريال|تايد|بريكس|اوكسي|أوكسي|بيرل|ليدر|سعر|جنيه|ج\s)/i.test(s)) return "price_observation";
-  return null;
+  if (matchesRegistryBrand(s, registry) && (/\d/.test(s) || /(سعر|اسعار|بكام|بكم|جنيه|ج\s|بـ)/i.test(s))) return "price_observation";
+  return isPotentialBotTask(s) ? null : "other";
 }
 
 function createGPTCore({ ai, registry, diagnostics = log }) {
   if (!ai || typeof ai.generate !== "function") throw new Error("GPT Core يحتاج ai.generate");
   async function classify(input, context = {}) {
-    const deterministic = deterministicType(input);
+    const deterministic = deterministicType(input, registry);
     if (deterministic) return { type: deterministic, confidence: 0.9, method: "rules" };
     const started = Date.now();
     const prompt = ["أنت GPT Core لبوت بورصة المنظفات.", "أعد كلمة واحدة فقط: price_observation | price_list | merchant | chemical | moderation | deals | other.", "لا تنفذ قاعدة بيانات أو ترسل رسائل.", `النص: ${String(input || "").slice(0, 6000)}`].join("\n");

@@ -4,15 +4,16 @@ const { validateDeal } = require("./deals");
 const { normalizeArabic, toAsciiDigits } = require("../core/normalization");
 const { redactString } = require("../core/diagnostics");
 
-let nextApiKeyIndex = 0;
-
+let nextScraperKeyIndex = 0;
+const MAX_CONCURRENT_SCRAPER_REQUESTS = 2;
 const SOURCES = Object.freeze({
   amazon: { host: "www.amazon.eg", base: "https://www.amazon.eg/s?k=" },
   jumia: { host: "www.jumia.com.eg", base: "https://www.jumia.com.eg/catalog/?q=" },
-  noon: { host: "www.noon.com", base: "https://www.noon.com/egypt-ar/search/?q=" }
+  noon: { host: "www.noon.com", base: "https://www.noon.com/egypt-ar/search/?q=" },
+  carrefour: { host: "www.carrefouregypt.com", base: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers" }
 });
 const INCLUDE = /غسيل|مسحوق|بودر|جل|منعم|كلور|صابون|شامبو|كريم|مناديل|حفاض|فاين|ديتول|فيري|بريل|برسيل|تايد|اريال|آريال|اومو|أومو|كلوركس|دوف|لوكس|بانتين|بامبرز|مولفكس|محارم|غسول|مرطب|عناية|ورقي|مكياج|تجميل|لوشن|سيروم|مزيل عرق|معجون|فازلين|نيفيا/i;
-const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|ملابس|حذاء|مكيف|ثلاجة|تلفزيون|ايفون|سامسونج جالكسي/i;
+const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|حذاء|مكيف|ثلاجة|تلفزيون|ايفون|سامسونج جالكسي/i;
 function categoryOf(title) {
   const s = normalizeArabic(title);
   if (/حفاض|بامبرز|مولفكس|مناديل|فاين|محارم|كلينكس|ورقي/.test(s)) return "paper";
@@ -41,6 +42,37 @@ function extractCards(html, sourceName, query = "") {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
   const cards = [];
+  if (sourceName === "carrefour") {
+    const products = [];
+    // Match script elements first, then inspect the type attribute. This avoids
+    // depending on attribute order or whitespace in retailer-generated HTML.
+    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+      .filter(match => /\btype\s*=\s*(["'])application\/ld\+json\1/i.test(match[1]))
+      .map(match => match[2]);
+    const visit = value => {
+      if (!value || typeof value !== "object") return;
+      const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
+      if (types.includes("Product")) products.push(value);
+      if (Array.isArray(value)) value.forEach(visit);
+      else Object.values(value).forEach(visit);
+    };
+    for (const script of scripts) {
+      try { visit(JSON.parse(script.trim())); } catch { /* Ignore malformed structured data. */ }
+    }
+    for (const product of products) {
+      const title = htmlText(product.name || "");
+      if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
+      const url = safeProductUrl(product.url || product.offers?.url || "", sourceName);
+      const offerList = Array.isArray(product.offers) ? product.offers : [product.offers || {}];
+      const prices = offerList.map(offer => money(offer.price ?? offer.lowPrice)).filter(value => value !== null);
+      const price = prices.length ? Math.min(...prices) : null;
+      const oldPrice = money(product.offers?.highPrice || product.highPrice);
+      if (!url || !price) continue;
+      const deal = { merchant: "Carrefour Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
+      if (validateDeal(deal).ok) cards.push(deal);
+    }
+    return cards;
+  }
   let chunks = [];
   if (sourceName === "amazon") chunks = [...html.matchAll(/<div[^>]+data-component-type=["']s-search-result["'][\s\S]*?<\/div>\s*<\/div>/gi)].map(m=>m[0]);
   else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["'][^"']*prd[^"']*["'][\s\S]*?<\/article>/gi)].map(m=>m[0]);
@@ -63,39 +95,72 @@ function extractCards(html, sourceName, query = "") {
   }
   return cards;
 }
-async function fetchSearch(sourceName, query, { timeoutMs = 65000, fetchImpl = globalThis.fetch } = {}) {
+function getScraperKeys() {
+  return [...new Set([
+    String(process.env.SCRAPER_API_KEY || "").trim(),
+    String(process.env.SCRAPER_API_KEY_2 || "").trim()
+  ].filter(Boolean))];
+}
+async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = globalThis.fetch } = {}) {
   const source = SOURCES[sourceName];
   if (!source) throw new Error("unsupported_deal_source");
-  const keys = [process.env.SCRAPER_API_KEY, process.env.SCRAPER_API_KEY_2]
-    .map(value => String(value || "").trim()).filter(Boolean);
+  const keys = getScraperKeys();
   if (!keys.length) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
-  // Rotate between independent account keys without logging or exposing either value.
-  const key = keys[nextApiKeyIndex++ % keys.length];
-  const targetUrl = `${source.base}${encodeURIComponent(query)}`;
-  const endpoint = new URL("https://api.scraperapi.com/");
-  endpoint.searchParams.set("api_key", key);
-  endpoint.searchParams.set("url", targetUrl);
-  endpoint.searchParams.set("country_code", "eg");
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
-    if (!response.ok) return { source: sourceName, ok: false, reason: `http_${response.status}`, deals: [] };
-    const html = await response.text();
-    return { source: sourceName, ok: true, deals: extractCards(html, sourceName, query) };
-  } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
-  finally { clearTimeout(timer); }
-}
-async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف"], otherQueries = ["مسحوق غسيل منظف"], fetchImpl } = {}) {
-  const tasks = [];
-  for (const q of amazonQueries) tasks.push(() => fetchSearch("amazon", q, { fetchImpl }));
-  for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push(() => fetchSearch(source, q, { fetchImpl }));
-  // Run requests sequentially to avoid bursts that trigger 429s and waste credits.
-  const results = [];
-  for (const task of tasks) {
-    try { results.push({ status: "fulfilled", value: await task() }); }
-    catch { results.push({ status: "rejected" }); }
+  const startIndex = nextScraperKeyIndex % keys.length;
+  nextScraperKeyIndex = (nextScraperKeyIndex + 1) % keys.length;
+  const targetUrl = sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`;
+  const requestWithKey = async key => {
+    const endpoint = new URL("https://api.scraperapi.com/");
+    endpoint.searchParams.set("api_key", key);
+    endpoint.searchParams.set("url", targetUrl);
+    endpoint.searchParams.set("country_code", "eg");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
+      if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
+      const html = await response.text();
+      return { source: sourceName, ok: true, deals: extractCards(html, sourceName, query) };
+    } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
+    finally { clearTimeout(timer); }
+  };
+  const first = await requestWithKey(keys[startIndex]);
+  // Retry only credential rejection. Do not retry retailer errors, rate limits, or timeouts.
+  if (!first.ok && (first.status === 401 || first.status === 403) && keys.length > 1) {
+    const alternate = await requestWithKey(keys[(startIndex + 1) % keys.length]);
+    if (alternate.ok) return alternate;
+    return { ...alternate, reason: `${first.reason};alternate_${alternate.reason}` };
   }
+  const { status, ...result } = first;
+  return result;
+}
+async function mapWithConcurrency(items, limit, worker) {
+  const results = new Array(items.length);
+  let nextIndex = 0;
+  async function runWorker() {
+    while (true) {
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      try { results[index] = { status: "fulfilled", value: await worker(items[index], index) }; }
+      catch (reason) { results[index] = { status: "rejected", reason }; }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
+  return results;
+}
+async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], edition = "all", fetchImpl } = {}) {
+  const tasks = [];
+  // Each newsletter queries only the stores it can publish. This avoids
+  // paying for Amazon results during the other-store edition and vice versa.
+  if (edition === "all" || edition === "amazon") {
+    for (const q of amazonQueries) tasks.push({ source: "amazon", query: q });
+  }
+  if (edition === "all" || edition === "other_sites") {
+    for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push({ source, query: q });
+    tasks.push({ source: "carrefour", query: "" });
+  }
+  if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
+  const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
   const deals = [], errors = [];
   const seen = new Set();
   for (const r of results) {
@@ -108,4 +173,4 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   }
   return { deals, errors, sourceCount: tasks.length };
 }
-module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, fetchSearch, collectDealCandidates };
+module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, getScraperKeys, fetchSearch, collectDealCandidates };

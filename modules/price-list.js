@@ -164,6 +164,15 @@ async function extractList(ai, text) {
       if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };
       return { ...item, decision: ["accepted", "review", "skipped"].includes(item.decision) ? item.decision : "review" };
     });
+    const usableItems = parsed.items.filter(item =>
+      String(item.product || "").trim() &&
+      Number.isFinite(Number(item.package_sale_price)) &&
+      Number(item.package_sale_price) > 0 &&
+      item.decision !== "skipped"
+    );
+    if (usableItems.length === 0) {
+      return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: "AI returned no usable price rows" };
+    }
     return { ...metadata, ...parsed, company: parsed.company || metadata.company || null, method: result.provider || "ai" };
   } catch (error) { return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: error.message }; }
 }

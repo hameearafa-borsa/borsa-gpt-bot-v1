@@ -25,7 +25,7 @@ function parsePackCount(text) {
 }
 
 function parseExtraWeight(text) {
-  const m = String(text || "").match(EXTRA_RE);
+  const m = toAsciiDigits(String(text || "")).match(EXTRA_RE);
   if (!m) return null;
   const q = parseQuantity(`${m[1]} ${m[2]}`);
   return q?.grams ?? null;
@@ -46,6 +46,16 @@ function numericPriceTokens(text) {
   return [...attached, ...standalone].filter(n => n != null && n > 0 && n < 100000);
 }
 
+ 
+function selectSalePrice(text, fallbackPrices) {
+  const s = toAsciiDigits(text);
+  // Prefer the value explicitly labelled as wholesale when a row has multiple prices.
+  const explicitWholesale = s.match(/(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i);
+  const labelled = explicitWholesale ? parseNumber(explicitWholesale[1]) : null;
+  if (labelled != null && labelled > 0 && labelled < 100000) return labelled;
+  return fallbackPrices[0] ?? null;
+}
+
 function extractProductText(line) {
   return stripQuantityTokens(line)
     .replace(/\d+(?:[.,]\d+)?\s*(?:ج|جنيه|EGP)?/gi, " ")
@@ -64,31 +74,37 @@ function extractPriceCandidates(text) {
     const kind = classifyPriceKind(line);
     if (kind === "retail") continue;
 
-    const packCount = parsePackCount(line);
-    const extraWeightG = parseExtraWeight(line);
-    const stripped = stripQuantityTokens(line);
+    const parsedLine = toAsciiDigits(line);
+    const packCount = parsePackCount(parsedLine);
+    const extraWeightG = parseExtraWeight(parsedLine);
+    const stripped = stripQuantityTokens(parsedLine);
     const numbers = numericPriceTokens(stripped);
     if (!numbers.length) continue;
 
-    const productText = extractProductText(line);
+    const productText = extractProductText(parsedLine);
     const normalizedProduct = normalizeArabic(productText);
     if (normalizedProduct.length < 2 || /^\d/.test(normalizedProduct)) continue;
     if (/^(?:جنيه|ج|egp|ق|قطعه|قطعة)$/.test(normalizedProduct)) continue;
 
-    const quantity = line.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
+    const quantity = parsedLine.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const q = quantity ? parseQuantity(quantity[0]) : null;
+    // In this catalog format, "2.500 اتوماتيك" denotes a 2.5 kg pack even without a unit suffix.
+    const decimalAutomaticWeight = parsedLine.match(/(?:^|\s)(\d+[.,]\d{1,3})\s*(?:كجم|ك)?\s*(?:اتوماتيك|اوتوماتيك)/i);
+    const decimalAutomaticGrams = decimalAutomaticWeight ? Math.round(Number(decimalAutomaticWeight[1].replace(",", ".")) * 1000) : null;
     const priceKind = kind === "wholesale" ? "wholesale" : "wholesale_candidate";
 
     out.push({
       raw_line: line,
       product_text: productText,
-      package_sale_price: numbers[0],
+      package_sale_price: selectSalePrice(stripped, numbers),
       price_kind: priceKind,
-      weight_g: q?.grams ?? null,
+      weight_g: q?.grams ?? decimalAutomaticGrams,
       volume_ml: q?.milliliters ?? null,
       offer_extra_weight_g: extraWeightG,
       pack_count: packCount,
-      confidence: kind === "wholesale" ? 0.92 : 0.55,
+      // Multiple distinct amounts on one row can mean carton/piece/retail columns or a bad source list.
+      // Preserve the explicitly labelled wholesale value, but leave the row pending for review.
+      confidence: kind === "wholesale" ? (new Set(numbers).size > 1 ? 0.65 : 0.92) : 0.55,
     });
   }
   return out;

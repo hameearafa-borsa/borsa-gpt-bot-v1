@@ -14,6 +14,13 @@ const MIGRATION_FILES = Object.freeze([
   "006_price_observation_identity.sql",
   "007_rate_limit_events.sql",
   "008_deal_error_notifications.sql",
+  "009_group_approval.sql",
+  "010_price_list_item_types.sql",
+  "011_catalog_newsletter_snapshots.sql",
+  "012_catalog_newsletter_deliveries.sql",
+  "013_deal_publications_per_chat.sql",
+  "014_price_review_queue.sql",
+  "015_price_review_notification_leases.sql",
 ]);
 
 // A single transaction prevents a failed migration from leaving a partially

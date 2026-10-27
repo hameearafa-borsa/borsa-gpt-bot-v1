@@ -1,6 +1,6 @@
 "use strict";
 const { collectDealCandidates } = require("./deal-sources");
-const { filterRecentDeals, distributeDeals } = require("./deal-publication");
+const { filterRecentDeals, distributeDeals, formatNewsletterMessage } = require("./deal-publication");
 const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
 
 function cairoParts(date = new Date()) {
@@ -8,10 +8,23 @@ function cairoParts(date = new Date()) {
   return Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type,p.value]));
 }
 function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.year}-${p.month}-${p.day}`; }
-function isNewsletterWindow(date = new Date()) { const p = cairoParts(date); return Number(p.hour) >= 17; }
+function newsletterKindAt(date = new Date()) { const p = cairoParts(date); const hour = Number(p.hour); if (hour === 17) return "amazon"; if (hour === 18) return "other_sites"; return null; }
+function isNewsletterWindow(date = new Date()) { return newsletterKindAt(date) !== null; }
+function selectNewsletterDeals(recent, kind) {
+  const isAmazon = d => {
+    try {
+      const host = new URL(d.url).hostname.toLowerCase();
+      return host === "www.amazon.eg" || host === "amazon.eg";
+    } catch { return false; }
+  };
+  // Balance each edition independently so Amazon cannot crowd out the 6 PM edition.
+  const editionPool = recent.filter(d => kind === "amazon" ? isAmazon(d) : !isAmazon(d));
+  const balanced = distributeDeals(editionPool);
+  return [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
+}
 
 async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000, maxRedirects = 5 } = {}) {
-  const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com"]);
+  const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com"]);
   const safeUrl = value => {
     try {
       const u = new URL(value);
@@ -38,12 +51,17 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
         const location = response.headers?.get?.("location") || response.headers?.location;
         if (!location) return { ok: false, reason: "redirect_without_location" };
         if (redirects === maxRedirects) return { ok: false, reason: "too_many_redirects" };
-        const next = safeUrl(new URL(location, url).href);
+        let resolvedLocation;
+        try { resolvedLocation = new URL(location, url).href; }
+        catch { return { ok: false, reason: "redirect_host_not_allowed" }; }
+        const next = safeUrl(resolvedLocation);
         if (!next) return { ok: false, reason: "redirect_host_not_allowed" };
         url = next;
         continue;
       }
-      const ok = response.status >= 200 && response.status < 400;
+      // Only successful 2xx responses verify a product page. Unhandled 3xx
+      // statuses (for example 304) are not proof that the URL is reachable.
+      const ok = response.status >= 200 && response.status < 300;
       return { ok, status: response.status, finalUrl: url.href, reason: ok ? null : "http_error" };
     }
     return { ok: false, reason: "too_many_redirects" };
@@ -56,7 +74,19 @@ async function verifyDeals(deals, options = {}) {
   for (let i = 0; i < deals.length; i += 5) {
     const group = deals.slice(i, i + 5);
     const results = await Promise.all(group.map(d => verifyProductUrl(d.url, options)));
-    results.forEach((r,j) => { if (r.ok) output.push({ ...group[j], url: r.finalUrl, verified_url: true }); });
+    results.forEach((r,j) => {
+      if (r.ok) {
+        output.push({ ...group[j], url: r.finalUrl, verified_url: true });
+        return;
+      }
+      // Retailers and scraping proxies may block HEAD/GET checks even when a
+      // product page exists. Keep allowlisted candidates when reachability is
+      // inconclusive; drop only links explicitly rejected by URL/redirect safety.
+      const transientHttp = r.reason === "http_error" &&
+        (r.status === 403 || r.status === 429 || r.status >= 500);
+      const inconclusive = transientHttp || r.reason === "timeout" || r.reason === "fetch_failed";
+      if (inconclusive) output.push({ ...group[j], verified_url: false, verification_note: r.reason });
+    });
   }
   return output;
 }
@@ -72,13 +102,38 @@ async function persistDeals(pool, deals) {
   }
   return saved;
 }
-async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
-  if (!pool || !telegram || !chatId) return { skipped: true, reason: "database_telegram_or_deals_chat_missing" };
-  if (!isNewsletterWindow(now)) return { skipped: true, reason: "before_17_cairo" };
+async function resolveDealChatIds({ pool, chatId, chatIds }) {
+  if (Array.isArray(chatIds)) return [...new Set(chatIds.map(Number).filter(Number.isSafeInteger))];
+  // Explicit chatId is retained for tests and intentional single-group runs.
+  if (chatId !== undefined && chatId !== null && Number.isSafeInteger(Number(chatId))) return [Number(chatId)];
+  const r = await pool.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE AND chat_type IN ('group','supergroup') ORDER BY chat_id");
+  return [...new Set((r.rows || []).map(row => Number(row.chat_id)).filter(Number.isSafeInteger))];
+}
+
+async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
+  if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
+  const targetChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
+  if (!targetChatIds.length) return { skipped: true, reason: "no_active_authorized_groups" };
+  const kind = newsletterKindAt(now);
+  if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
   const key = batchKey(now);
-  const existing = await pool.query("SELECT channel_kind,status FROM deal_publications WHERE batch_key=$1", [key]);
-  if (["amazon","other_sites","best_deals"].every(kind => existing.rows.some(r => r.channel_kind === kind && r.status === "published"))) return { skipped: true, reason: "already_published", batchKey: key };
-  const gathered = await fetcher();
+  const existing = await pool.query(
+    "SELECT channel_kind,status,chat_id FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
+    [key, kind, targetChatIds]
+  );
+  const reservedChats = new Set(existing.rows.filter(row => row.channel_kind === kind).map(row => Number(row.chat_id)));
+  const publishedChats = new Set(existing.rows.filter(row => row.channel_kind === kind && row.status === "published").map(row => Number(row.chat_id)));
+  const unreservedTargets = targetChatIds.filter(id => !reservedChats.has(id));
+  if (!unreservedTargets.length) {
+    return {
+      skipped: true,
+      reason: targetChatIds.every(id => publishedChats.has(id)) ? "already_published" : "all_targets_already_reserved",
+      batchKey: key, kind
+    };
+  }
+
+  // Collect and verify once per edition, regardless of the number of target groups.
+  const gathered = await fetcher({ edition: kind });
   if (!gathered.deals?.length) {
     await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [] });
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [] };
@@ -86,59 +141,73 @@ async function publishDailyDeals({ pool, telegram, chatId, fetcher = collectDeal
   const verified = await verify(gathered.deals);
   const recent = await filterRecentDeals(pool, verified, 7);
   if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
-  // Overall pool is category-balanced (10 detergents, 10 paper, 10 care when supply allows).
-  const balanced = distributeDeals(recent);
-  const ordered = [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
-  const amazon = ordered.filter(d => /amazon\.eg/i.test(new URL(d.url).hostname)).slice(0, 10);
-  const amazonKeys = new Set(amazon.map(d => d.fingerprint));
-  const remaining = ordered.filter(d => !amazonKeys.has(d.fingerprint));
-  const other = remaining.filter(d => !/amazon\.eg/i.test(new URL(d.url).hostname)).slice(0, 10);
-  const otherKeys = new Set(other.map(d => d.fingerprint));
-  const publishedKeys = new Set([...amazonKeys, ...otherKeys]);
-  const best = ordered.filter(d => !publishedKeys.has(d.fingerprint)).sort((a,b) => (Number(b.discount_pct)||0) - (Number(a.discount_pct)||0)).slice(0, 10);
-  const batches = [
-    { kind: "amazon", items: amazon, title: "عروض أمازون للمنظفات والورقيات والعناية" },
-    { kind: "other_sites", items: other, title: "عروض المتاجر الأخرى" },
-    { kind: "best_deals", items: best, title: "أفضل العروض المختارة" }
-  ];
+  const items = selectNewsletterDeals(recent, kind);
+  if (!items.length) {
+    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], batchKind: kind });
+    return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
+  }
+  const title = kind === "amazon"
+    ? "عروض أمازون للمنظفات والورقيات والعناية"
+    : "عروض المتاجر الأخرى المختارة";
+  const formatted = formatNewsletterMessage(items, title);
+  const formattedItems = formatted.items;
+  if (!formattedItems.length) {
+    await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: kind, batchKey: key });
+    return { skipped: true, reason: "message_too_long", batchKey: key, kind };
+  }
+
   const published = [];
-  for (const batch of batches) {
-    if (!batch.items.length) continue;
-    const reservation = await pool.query(`INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status)
-      VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind) DO NOTHING RETURNING id`, [key,batch.kind,chatId,batch.items.length]);
+  for (const targetId of unreservedTargets) {
+    const reservation = await pool.query(
+      "INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status) VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind,chat_id) DO NOTHING RETURNING id",
+      [key, kind, targetId, formattedItems.length]
+    );
     if (!reservation.rowCount) {
-      const old = await pool.query("SELECT status FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2", [key,batch.kind]);
-      if (old.rows[0]?.status === "published") continue;
-      // Do not auto-repeat a prepared/failed post; leave it for diagnosis and manual repair.
+      // A prepared/failed reservation may represent an ambiguous Telegram outcome.
+      // Never auto-repeat it; a human can inspect and repair the record if needed.
       continue;
     }
-    const lines = [`🛍️ ${batch.title}`, "بورصة المنظفات لأصحاب المحلات", ""];
-    for (const [i,d] of batch.items.entries()) {
-      lines.push(`${i+1}. ${d.title}`, `🏪 ${d.merchant || "المتجر"}`, `💰 ${Number(d.price).toFixed(2)} جنيه`);
-      if (Number(d.old_price) > Number(d.price)) lines.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه (${Number(d.discount_pct).toFixed(0)}%)`);
-      lines.push(`🔗 ${d.url}`, "");
-    }
-    lines.push("مدعوم بتقنيات ChatGPT");
+    let msg;
     try {
-      const msg = await telegram.sendMessage(chatId, lines.join("\n").slice(0,3900), { disable_web_page_preview: true });
-      await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id,reservation.rows[0].id]);
-      await persistDeals(pool, batch.items);
-      published.push({ kind: batch.kind, count: batch.items.length });
+      msg = await telegram.sendMessage(targetId, formatted.text, { disable_web_page_preview: true });
     } catch (error) {
-      await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(()=>{});
-      await onError(error, { stage: "publish", batchKind: batch.kind, batchKey: key });
+      await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(() => {});
+      await onError(error, { stage: "publish", batchKind: kind, batchKey: key, chatId: targetId });
+      continue;
+    }
+
+    published.push({ kind, count: formattedItems.length, messageId: msg.message_id, chatId: targetId });
+    try {
+      await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id, reservation.rows[0].id]);
+    } catch (error) {
+      await onError(error, { stage: "publication_record", batchKind: kind, batchKey: key, messageId: msg.message_id, chatId: targetId });
     }
   }
-  return { batchKey: key, verified: verified.length, recent: recent.length, saved: published.reduce((n,x) => n + x.count, 0), published, sourceErrors: gathered.errors || [] };
+
+  // Persist each observed offer once after at least one Telegram send was confirmed.
+  if (published.length) {
+    try {
+      await persistDeals(pool, formattedItems);
+    } catch (error) {
+      await onError(error, { stage: "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) });
+    }
+  }
+  return {
+    batchKey: key, kind, verified: verified.length, recent: recent.length,
+    saved: published.reduce((count, item) => count + item.count, 0),
+    published, sourceErrors: gathered.errors || []
+  };
 }
-function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 24 * 60 * 60_000 } = {}) {
+function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 15 * 60_000 } = {}) {
   let busy = false;
   let nextAttemptAt = 0;
+  let backoffKind = null;
   let activeDay = batchKey();
   const reportedFetchFailures = new Set();
 
   // A failed source query used to emit the same diagnostic every minute. Keep
-  // Retry at most once per day after a failed fetch to protect API credits. A changed source/status signature is reported on the next daily attempt.
+  // trying periodically, but emit only one identical fetch-failure report per
+  // Cairo day. A changed source/status signature is still reported immediately.
   const scheduledOptions = {
     ...options,
     onError: async (error, details = {}) => {
@@ -160,14 +229,28 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
   };
 
   const timer = setInterval(async () => {
+    const currentKind = newsletterKindAt();
+    if (shouldResetDealBackoff(backoffKind, currentKind)) {
+      nextAttemptAt = 0;
+      backoffKind = null;
+    }
     if (busy || Date.now() < nextAttemptAt) return;
     busy = true;
+    // Associate backoff with the edition that started this attempt, not the
+    // wall-clock hour when a slow request happens to finish.
+    const attemptKind = currentKind;
     try {
       const result = await publishDailyDeals(scheduledOptions);
-      // One scrape cycle per day, regardless of outcome; never loop through paid API requests after an empty/duplicate result.
-      nextAttemptAt = Date.now() + retryAfterFailureMs;
+      if (shouldBackoffAfterDealAttempt(result)) {
+        nextAttemptAt = Date.now() + retryAfterFailureMs;
+        backoffKind = attemptKind;
+      } else {
+        nextAttemptAt = 0;
+        backoffKind = null;
+      }
     } catch (error) {
       nextAttemptAt = Date.now() + retryAfterFailureMs;
+      backoffKind = attemptKind;
       await scheduledOptions.onError?.(error, { stage: "scheduler_tick" });
     } finally {
       busy = false;
@@ -176,4 +259,11 @@ function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs 
   timer.unref?.();
   return () => clearInterval(timer);
 }
-module.exports = { cairoParts, batchKey, isNewsletterWindow, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, startDealScheduler };
+function shouldBackoffAfterDealAttempt(result) {
+  return Boolean(result?.skipped && ["no_deals", "all_recent_or_invalid", "message_too_long"].includes(result.reason));
+}
+function shouldResetDealBackoff(previousKind, currentKind) {
+  return Boolean(previousKind && currentKind && previousKind !== currentKind);
+}
+
+module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, startDealScheduler };

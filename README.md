@@ -1,81 +1,111 @@
-# Borsa GBT Bot V1 Mona Lisa — Release Candidate 1
+# Borsa GPT Bot V1
 
-**الحالة: مرشح إصلاح ومراجعة (RC1+). غير معتمد للإنتاج حتى اجتياز اختبارات Termux والتكامل الحي.** لا ترفع هذه الحزمة إلى Railway قبل إكمال بوابات الإصدار أدناه.
+بوت Telegram عربي لمجموعة «بورصة المنظفات»، يعمل على Node.js 24.x وPostgreSQL. يستخدم Telegram Webhook، ويشمل المساعد الكيميائي، قوائم الأسعار، نشرات العروض والكتالوجات، الطقس، والتقارير التشغيلية.
 
-## مبادئ ثابتة
-- مصدر عمل رئيسي واحد؛ كل تعديل لاحق يُطبّق على هذا المجلد نفسه.
-- لا حذف لأي وظيفة قديمة قبل تسجيلها في `LEGACY-MIGRATION-MAP.md` وتحديد بديلها أو سبب استبعادها.
-- GPT يقترح/يصنّف فقط؛ كود البوت يتحقق قبل الحفظ أو النشر.
-- سعر العبوة هو المؤشر التجاري، والوزن الأساسي/الوزن الإضافي/الوزن الكلي/عدد القطع صفات منفصلة.
-- الرصد صامت؛ لا رسالة «تم الرصد» لكل سعر.
-- منع التكرار حسب الرسالة، مع عدم معالجة رسائل البوت أو قناة السجلات.
-- تقارير الأخطاء تحمل Report ID، وتُحجب الأسرار قبل السجل أو الإرسال.
-- روابط البحث تُولّد بقوالب ثابتة وتُقبل فقط عبر HTTPS والدومينات المحددة.
-- `.env` محلي/بيئة تشغيل فقط، وممنوع رفعه إلى GitHub أو إرساله في المحادثة.
+> **حالة النشر:** إعداد الملفات أو نجاح الاختبارات لا يعني أن التشغيل الحي قد تم التحقق منه. لا تُجرِ نشرًا أو تغييرًا في Railway أو قاعدة الإنتاج قبل موافقة صريحة واجتياز بوابات الاختبار.
 
-## البيئة
-المطلوب Node.js 24.x، وPostgreSQL الحالية؛ التشغيل يرفض البدء دون `DATABASE_URL`، ومتغيرات البيئة الموضحة في `.env.example`. لا تضع قيم الأسرار في هذا الملف؛ إنه قالب بأسماء المتغيرات فقط.
+## 1. المتطلبات
 
-## فحوص المختبر التي نُفذت
-- `node tests/run-all.js`
-- `node tests/links-diagnostics.test.js`
-- `node tests/weather-live-parser.test.js` (mocked HTTP responses; no live provider call)
-- فحوص نحوية لكل ملفات JavaScript
+- Node.js 24.x وnpm.
+- قاعدة PostgreSQL متاحة للتطبيق.
+- بوت Telegram Token.
+- رابط HTTPS عام للخدمة وإعداد Webhook.
+- مفاتيح مزودي الذكاء الاصطناعي أو ScraperAPI فقط للميزات التي ستُفعّلها.
 
-نجحت الاختبارات المحلية الموجودة في الحزمة. **لم يتم اختبار مفاتيح API الحقيقية أو Telegram الحقيقي أو اتصال قاعدة الإنتاج**؛ لذلك لا ندّعي أن التشغيل الإنتاجي قد تم التحقق منه. تم تحديث `package-lock.json` محليًا باستخدام npm، لكن يجب التحقق من `npm ci` على Node.js 24.x قبل اعتبار الحزمة قابلة للبناء النهائي.
+## 2. إعداد ملف البيئة المحلي
 
-## قبل الإنتاج — بوابات إلزامية
-1. إكمال/اعتماد ترحيل ميزات الحماية والإدارة والجدولة والعروض من المصدر القديم؛ التفاصيل في `LEGACY-MIGRATION-MAP.md`.
-2. ملف القفل الحالي يتضمن `sharp 0.35.5` وحزمة WASM. على Termux/Android ARM64: نفّذ `npm ci` ثم `npm install --cpu=wasm32 sharp` لأن `npm ci` وحده قد يتجاوز حزمة WASM الاختيارية، ثم شغّل `npm run check && npm test`.
-3. أخذ نسخة احتياطية من PostgreSQL، ثم فحص المخطط الحالي ومقارنته بملفات migrations؛ لا تشغّل migrations على قاعدة الإنتاج قبل المراجعة.
-4. اختبار OpenAI Responses API فعليًا من Termux بمفتاح مخزّن محليًا، دون طباعته أو إرساله.
-5. اختبار Telegram في مجموعة اختبار: `/claim` يجب أن ينفذه منشئ المجموعة الأصلي، ثم اختبار لوحة الخاص والاستعادة والتراجع.
-6. اختبار الطقس الحي عبر Open-Meteo؛ الاختبار المحلي لا يستخدم الشبكة.
-7. اختبار أوامر الحماية والإنذارات والرسائل المجدولة على مجموعة اختبار، مع التحقق من توقيت Africa/Cairo.
-8. بعد اجتياز ما سبق فقط: تحديث GitHub وربط خدمة Railway الحالية دون إنشاء خدمة أو قاعدة ثانية.
+ملف `.env.example` هو **قالب أسماء المتغيرات** وليس ملف أسرار. أنشئ نسخة محلية باسم `.env` ثم أدخل القيم بنفسك:
 
-## RC1 legacy-service additions
-See `LEGACY-MIGRATION-MAP.md` and `RC1-ADDITIVE-PATCH-NOTES.md` for the full migration status. This patch is additive: the original legacy source snapshots are retained in `legacy/reference/` and are not loaded by the runtime.
+```sh
+cp .env.example .env
+```
 
-Optional environment values:
-- `SCRAPER_API_KEY`: required for live deal scraping via ScraperAPI.
-- `DEALS_CHAT_ID`: publication destination for the scheduled deal newsletters. If unset, the deal scheduler remains disabled.
-- `PROTECTION_ENFORCE=false`: recommended default; protection records suspicious messages without deleting them. Only set to `true` after reviewing the diagnostics and confirming the bot has delete permissions.
+افتح `.env` بمحرر نصوص محلي، وأكمل القيم المطلوبة. لا ترسل الملف في المحادثة ولا ترفعه إلى GitHub. ملف `.gitignore` يستثني `.env` وملفات البيئة المشابهة، مع السماح فقط بملف `.env.example`.
 
-The fresh RC1 `package-lock.json` could not be generated in the lab because npm registry access timed out. Do not use `legacy/reference/package-lock.json` as the RC1 lockfile; it belongs to the legacy dependency graph. See `RC1-ADDITIVE-PATCH-NOTES.md`.
+يحمّل التطبيق المتغيرات تلقائيًا عبر `require("dotenv").config()` في بداية `index.js`. حزمة `dotenv` مدرجة بالفعل في `package.json`؛ لا يلزم أمر استيراد إضافي لتشغيل التطبيق محليًا. في Railway، تُضبط المتغيرات من إعدادات Variables الخاصة بالخدمة، وليس برفع ملف `.env`.
 
-## Legacy moderation/activity commands added in RC1 patch
-- `/warn USER_ID reason` records a warning for an authorized group manager.
-- `/warnings USER_ID` lists active warnings.
-- `/clearwarn USER_ID` clears active warnings.
-- `/inactive [days]` reports previously observed members whose last observed message is older than the threshold. It is not a full member census because Telegram bots cannot enumerate all ordinary group members through the Bot API.
-- Activity tracking and warning counts are persisted in PostgreSQL. Reaching three warnings produces a review notice; the bot does not automatically mute on that count in this patch.
+### المتغيرات المطلوبة لبدء التشغيل
 
-## Private controller panel additive update
-- Open `/panel` in a private chat as the master or verified group creator.
-- Inline actions re-check controller authorization on every callback; do not rely on hidden buttons alone.
-- Global and group command menus are cleared; the command list is scoped to the master and verified group-owner private chats.
-- The panel includes a live ScraperAPI source test. It reports configured/not configured and request outcome without revealing the API key.
-- RC1 still requires a freshly generated root `package-lock.json` and `npm ci` verification. The archived legacy lockfile is reference-only and must not be used as the RC1 lock.
+| المتغير | الغرض |
+|---|---|
+| `BOT_TOKEN` | رمز بوت Telegram السري |
+| `DATABASE_URL` | رابط اتصال PostgreSQL |
+| `WEBHOOK_URL` | رابط HTTPS كامل مع مسار، مثل `https://YOUR-DOMAIN/telegram/webhook` |
+| `WEBHOOK_SECRET` | رمز سري من 1 إلى 256 حرفًا/رقمًا أو `_` أو `-` |
+| `PORT` | منفذ HTTP؛ Railway يحدده تلقائيًا، ومحليًا الافتراضي 3000 |
 
-## إصلاحات RC1+ في هذا الأرشيف
-- أُضيف `/claim` داخل المجموعة غير المسجلة، ويقبل الربط فقط إذا طابق المستخدم منشئ المجموعة الذي تعيده Telegram.
-- أُضيفت قراءة طقس فعلية من Open-Meteo (بحث جغرافي ثم الطقس الحالي) مع فشل آمن دون اختلاق درجة الحرارة.
-- أُضيف `OPENAI_API_KEY_3` إلى ترتيب مفاتيح OpenAI.
-- أمر `/schedule` يفسر الوقت المحلي في توقيت القاهرة في الوقت الحالي؛ يجب مراجعة تحويل التوقيت عند تغيّر التوقيت الصيفي قبل الاعتماد السنوي.
-- أُضيف اختبار وحدات لقراءة الطقس باستجابات HTTP محاكية.
+يجب أن يكون `WEBHOOK_URL` رابط HTTPS عامًا، دون بيانات دخول أو query string أو fragment، وأن يحتوي مسارًا مخصصًا. لا تشغّل نسختين تستخدمان التوكن نفسه أثناء التحويل إلى Webhook.
 
-## Read-only live release preflight
+### مزودو الذكاء الاصطناعي
 
-After installing the declared dependencies in the runtime environment, run `npm run preflight:live`. This check is deliberately read-only: it does not run migrations, send Telegram messages, publish deals, or print API keys/tokens. It checks PostgreSQL connectivity and required columns, Telegram `getMe`, access to `DEALS_CHAT_ID` without sending a test post, and one live Amazon/ScraperAPI query when `SCRAPER_API_KEY` exists.
+- `AI_PROVIDER`: المزود الأساسي للطلبات العامة؛ الافتراضي `openai`.
+- `AI_FALLBACK_ENABLED`: تفعيل fallback العام؛ الافتراضي `false`.
+- `OPENAI_API_KEY`, `OPENAI_API_KEY_2`, `OPENAI_API_KEY_3`: مفاتيح OpenAI حتى ثلاثة.
+- `GEMINI_API_KEY` أو `GEMINI_API_KEY_1`: المفتاح الأول؛ استخدم أحدهما فقط، ثم `GEMINI_API_KEY_2` و`GEMINI_API_KEY_3` عند الحاجة.
+- `GROQ_API_KEY`, `GROQ_API_KEY_2`: مفتاحا Groq الاختياريان.
+- `OPENAI_MODEL`, `GEMINI_MODEL`, `GROQ_MODEL`, `GROQ_MODEL_2`: معرّفات النماذج.
+- `AI_TIMEOUT_MS`, `GEMINI_TIMEOUT_MS`: مهلة الطلب بالمللي ثانية.
 
-Exit status: `0` all performed checks passed; `1` at least one check failed; `2` one or more live checks were blocked because required environment variables were absent. A blocked check is not a pass. A successful HTTP response with zero extracted products is not proof that the retailer parser is healthy.
+لا يلزم ملء كل المفاتيح. ابدأ بالمزود والمفاتيح التي اختبرتها بالفعل، ولا تضع قيمًا تجريبية على أنها مفاتيح صالحة. مسار المساعد الكيميائي يحدد ترتيب fallback الخاص به داخل التطبيق.
 
-## Telegram transport (Webhook only)
+### الخدمات المجدولة وتكلفتها
 
-This candidate uses Telegram **Webhook** transport only; it does not start `getUpdates` polling. Configure `WEBHOOK_URL` as the complete public HTTPS endpoint, including a dedicated path such as `https://YOUR-RAILWAY-DOMAIN/telegram/webhook`, and set `WEBHOOK_SECRET` to a private 1–256 character token containing only letters, digits, `_`, and `-`. Railway supplies `PORT`; the process binds to `0.0.0.0` and exposes `GET /health`. The app registers the webhook with Telegram without dropping pending updates.
+- `DEALS_SCHEDULER_ENABLED=false`: يظل جلب العروض المدفوع متوقفًا افتراضيًا لتجنّب استهلاك ScraperAPI دون قصد. لا تضبطه على `true` إلا بعد الموافقة على المصدر والتكلفة.
+- `SCRAPER_API_KEY` و`SCRAPER_API_KEY_2`: مفاتيح ScraperAPI؛ قد تستهلك الطلبات رصيدًا مدفوعًا.
+- `WEATHER_SCHEDULER_ENABLED=true`: نشر الطقس عند 11:00 و20:00 بتوقيت القاهرة؛ اضبطه على `false` لإيقاف النشر.
+- كتالوجات Kazyon/BIM/Metro تُفحص وفق الجدولة في الكود، وتُرسل الإصدارات الجديدة إلى المجموعات النشطة المعتمدة.
+- النشرة الاقتصادية تُدار من التطبيق؛ لا تضف مفاتيح API غير مستخدمة إلى ملف البيئة.
 
-Do not run a second instance using the same token during cutover. This code change has only been locally tested; it does not verify the Railway domain, Telegram webhook registration, or live delivery. Shutdown preserves queued updates and does not call `deleteWebhook`.
+### متغيرات اختيارية أخرى
 
-## Review candidate note — 2026-10-19
-This archive includes a `sharp`-based price-list image renderer. The lockfile has since been refreshed for `sharp 0.35.5` and includes the optional WASM package. On Termux/Android ARM64, run `npm ci` followed by `npm install --cpu=wasm32 sharp` before testing; the second command installs the WASM runtime that npm may skip for Android's `arm64` platform. On Railway/Linux, use the standard `npm ci` path so npm selects the platform's native `sharp` binary. This candidate has not been live-tested or approved for production.
+- `DB_POOL_MAX`: الحد الأقصى لاتصالات PostgreSQL، الافتراضي 8.
+- `LOG_CHAT_ID`: وجهة سجل Telegram؛ إذا تُرك فارغًا يستخدم التطبيق القيمة الافتراضية المعرفة في الكود.
+- `OWNER_ID`: معرّفات Telegram مفصولة بفواصل للمخولين بمراجعة سجلات الأسعار، بالإضافة إلى المسؤول المضمن في التطبيق.
+- `FORMULA_CHANNEL_URL`: رابط قناة مرجعية اختيارية للمساعد الكيميائي.
+- `DEALS_CHAT_ID`: متغير قديم لفحص ما قبل النشر فقط؛ وجهات النشرات المجدولة تُقرأ من `authorized_chats` النشطة.
+
+## 3. التثبيت والفحوص المحلية
+
+من جذر المشروع:
+
+```sh
+npm ci
+npm run check
+npm test
+```
+
+على Termux/Android ARM64، قد يحتاج مُصيّر الصور `sharp` إلى نسخة WASM بعد التثبيت:
+
+```sh
+npm install --cpu=wasm32 sharp
+npm run check
+npm test
+```
+
+لا تستخدم هذا الأمر الأخير في Railway؛ اترك npm يختار حزمة `sharp` المناسبة لبيئة Linux هناك.
+
+## 4. تشغيل محلي
+
+بعد استكمال `.env` وربط قاعدة اختبار مناسبة:
+
+```sh
+npm start
+```
+
+يتوقف التطبيق عند غياب `BOT_TOKEN` أو `DATABASE_URL` أو إعداد Webhook صالح. يستخدم التطبيق Telegram Webhook وليس polling عبر `getUpdates`. المسار `GET /health` يعيد حالة الصحة الأساسية، ولا يثبت وحده أن قاعدة البيانات أو Telegram أو مزودي الذكاء الاصطناعي يعملون بالكامل.
+
+## 5. الفحص الحي الاختياري
+
+`npm run preflight:live` يفحص اتصال PostgreSQL، وTelegram `getMe`، والوصول إلى `DEALS_CHAT_ID` دون إرسال منشور. **إذا كان `SCRAPER_API_KEY` مضبوطًا، فقد ينفذ الفحص طلب Amazon حيًا ويستهلك رصيد ScraperAPI**؛ تخطَّ هذا الفحص إذا كانت المحافظة على الرصيد أولوية.
+
+رموز الخروج: `0` اجتازت الفحوص المنفذة، `1` فشل فحص، `2` فحوص محجوبة بسبب متغيرات مفقودة. الفحص المحجوب ليس نجاحًا. لا تشغّل الفحص الحي أو migrations على قاعدة الإنتاج دون موافقة ومراجعة مسبقة.
+
+## 6. ملاحظات التشغيل والأمان
+
+- لا تضع أسرارًا في GitHub أو `.env.example` أو رسائل المحادثة.
+- لا تُفعّل ScraperAPI قبل مراجعة التكلفة؛ إعداد العروض يبدأ متوقفًا.
+- لا تُشغّل migrations على قاعدة الإنتاج قبل النسخ الاحتياطي ومراجعة المخطط.
+- لا تختبر إرسال Telegram في مجموعة حقيقية دون موافقة.
+- المجموعات لا تحصل على صلاحية الاستخدام بمجرد إضافة البوت؛ يلزم اعتمادها عبر `/claim` و`/approvechat`.
+- خدمات إدارة الأعضاء والإشراف والحماية تخص Group Help Bot وليست جزءًا من وظائف Borsa GPT النشطة.
+- راجع `LEGACY-MIGRATION-MAP.md` و`RC1-ADDITIVE-PATCH-NOTES.md` عند الحاجة لتفاصيل التوافق والترحيل.

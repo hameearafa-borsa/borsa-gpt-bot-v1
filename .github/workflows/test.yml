@@ -1,0 +1,59 @@
+name: Borsa Bot Tests
+
+on:
+  pull_request:
+    branches:
+      - main
+      - termux-arm64-sharp-test-2026-10-21
+      - chemical-assistant-gemini-reply-once
+  push:
+    branches:
+      - owner-approved-group-access
+      - chemical-assistant-gemini-reply-once
+      - feature/deals-two-newsletters-carrefour-kazyon-2026-10-25
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: borsa_test
+          POSTGRES_PASSWORD: borsa_test_password
+          POSTGRES_DB: borsa_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U borsa_test -d borsa_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgres://borsa_test:borsa_test_password@localhost:5432/borsa_test
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Syntax check
+        run: npm run check
+      - name: Run automated tests
+        run: npm test
+      - name: Run PostgreSQL group approval integration test
+        run: node tests/group-approval-postgres.integration.test.js
+      - name: Build production Alpine Docker image
+        run: docker build --tag borsa-gpt-bot-ci:latest .
+      - name: Verify sharp PNG generation inside production image
+        run: >-
+          docker run --rm --entrypoint node borsa-gpt-bot-ci:latest -e
+          "const sharp = require('sharp'); sharp({ create: { width: 2, height: 2, channels: 4, background: '#ffffff' } }).png().toBuffer().then((buffer) => { if (buffer.subarray(1, 4).toString() !== 'PNG') throw new Error('Invalid PNG output'); console.log('sharp Docker PNG smoke test: OK'); }).catch((error) => { console.error(error); process.exit(1); });"

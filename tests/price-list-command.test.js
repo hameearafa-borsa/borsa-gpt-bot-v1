@@ -6,7 +6,7 @@ const root = path.join(__dirname, "..");
 const index = fs.readFileSync(path.join(root, "index.js"), "utf8");
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 assert.match(index, /cmd === "قائمة" \|\| cmd === "pricelist"/, "Arabic alias and Telegram-safe command must both work");
-assert.match(index, /command: "pricelist", description: "اعتماد ونشر قائمة أسعار شركة"/, "menu must expose the working command");
+assert.match(index, /command: "pricelist", description: "قائمة أسعار الشركات"/, "menu must expose the working command");
 assert.match(index, /db\.withTransaction\(async client =>/, "price-list persistence should be transactional");
 assert.match(index, /accepted\.length >= 3 && companyNames\.length === 1/, "publishing requires 3 accepted items from one company");
 assert.match(index, /renderPriceListImages/, "long lists must use adaptive multi-page rendering");

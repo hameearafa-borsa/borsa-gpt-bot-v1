@@ -1,12 +1,10 @@
+# Dependencies and generated output
 node_modules/
-.env
-.env.*
-!.env.example
-*.log
 coverage/
+*.log
 .DS_Store
 
+# Local runtime secrets: never commit .env files
 .env
 .env.*
 !.env.example
-node_modules/

@@ -46,6 +46,16 @@ const secondEdition = extractCatalogs(
 assert.equal(firstEdition[0].url, secondEdition[0].url);
 assert.notEqual(firstEdition[0].fingerprint, secondEdition[0].fingerprint,
   "a changed displayed validity range must create a new catalog fingerprint");
+const countdownVariant = extractCatalogs(
+  '<a href="/eg/downtown/offers/kazyon/1567"><span>✨ New Kazyon — Win Gold and Cash 6 days left 27 Oct - 2 Nov</span></a>',
+  "kazyon"
+);
+const countdownVariantNextDay = extractCatalogs(
+  '<a href="/eg/downtown/offers/kazyon/1567"><span>✨ New Kazyon — Win Gold and Cash 5 days left 27 Oct - 2 Nov</span></a>',
+  "kazyon"
+);
+assert.equal(countdownVariant[0].fingerprint, countdownVariantNextDay[0].fingerprint,
+  "a changing days-left countdown must not create a duplicate catalog edition");
 assert.equal(extractCatalogs(html, "unknown").length, 0);
 assert.equal(isRelevantOffer({ title: "Clorox laundry bleach", category: "groceries" }), true);
 assert.equal(isRelevantOffer({ title: "Women's cotton dress", category: "fashion" }), false);

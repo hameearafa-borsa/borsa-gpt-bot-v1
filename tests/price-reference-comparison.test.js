@@ -116,6 +116,17 @@ assert.equal(compareReferencePrice(
   { ...cartonObservation, unit_price_type: "بالقطعة", package_sale_price: 125, pack_count: null }
 ).referencePrice, 120, "a per-piece reference must not accidentally use the carton total");
 
+const retailPiece = compareReferencePrice(
+  { ...signalReference, price_kind: "retail", unit_price_type: "بالقطعة", package_sale_price: 600, consumer_price: 14 },
+  { ...signalObservation, price_kind: "retail", package_sale_price: 15 }
+);
+assert.equal(retailPiece.referencePrice, 14, "retail piece comparison must use the consumer piece price, not a separate carton total");
+const retailCarton = compareReferencePrice(
+  { ...cartonReference, price_kind: "retail", package_sale_price: 600, consumer_price: 14 },
+  { ...cartonObservation, price_kind: "retail", package_sale_price: 620 }
+);
+assert.equal(retailCarton.referencePrice, 600, "retail carton comparison must use the carton price, not the consumer piece price");
+
 // Database-backed lookup considers only the same kind, unit and exact size before
 // performing strict product-identity matching in JavaScript.
 (async () => {

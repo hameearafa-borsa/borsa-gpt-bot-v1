@@ -25,7 +25,7 @@ function buildListPrompt(text) {
     "استخرج قائمة أسعار تجارية للمنظفات ومنتجات الورق والعناية الشخصية.",
     "أعد JSON فقط بالشكل: {\"company\":null,\"items\":[{\"raw_line\":null,\"product\":null,\"variant\":null,\"weight_g\":null,\"volume_ml\":null,\"pack_count\":null,\"package_sale_price\":null,\"unit_price_type\":\"بالقطعة|بالكرتونة|null\",\"wholesale_carton_price\":null,\"consumer_price\":null,\"list_price\":null,\"decision\":\"accepted|review|skipped\"}]}.",
     "السعر الأول بعد الوزن هو سعر العبوة إذا كان واضحًا. قيمة جملة المنفصلة تحفظ في wholesale_carton_price ولا تستبدل سعر العبوة. قيمة مستهلك تحفظ في consumer_price.",
-    "عنوان الأسعار بالقطعة يجعل كل الأسطر التالية بالقطعة حتى يظهر عنوان الأسعار بالكرتونة؛ وعنوان الكرتونة يظل ساريًا حتى يتغير. احفظ ذلك في unit_price_type ولا تخمنه إذا غاب السياق.",
+    "عنوان الأسعار بالقطعة يجعل كل الأسطر التالية بالقطعة حتى يظهر عنوان الأسعار بالكرتونة؛ وعنوان الكرتونة يظل ساريًا حتى يتغير. في قائمة شركة معلن أنها أسعار جملة، اعتبر السعر غير المعلّم سعر كرتونة ما لم توجد علامة قطعة صريحة أو سياق مخالف. احفظ ذلك في unit_price_type.",
     "لا تستنتج عدد قطع الكرتونة من قسمة الأسعار؛ سجّل pack_count فقط إذا ذُكر صراحة مثل 4ق.",
     "أسماء الأقسام مثل أوتوماتيك وأوزان وشكاير والعبوات الصغيرة تصف النوع ولا تستبدل اسم الشركة/العلامة.",
     "كلمة شكارة هي نوع العبوة وليست اسم منتج. لا تعتبر الأرقام وحدها اسم منتج.",
@@ -160,7 +160,10 @@ function deterministicList(text) {
     if (rowUnitPriceType === "بالكرتونة" && /العرض\s+على\s+الكرتونة|العرض\s+على\s+الكرتونه/iu.test(line)) {
       sectionUnitPriceType = "بالكرتونة";
     }
-    const unitPriceType = rowUnitPriceType || sectionUnitPriceType;
+    const unitPriceType = rowUnitPriceType || sectionUnitPriceType ||
+      // In a named company wholesale catalog, an unmarked price is a carton price.
+      // Explicit per-piece markers and section headings take precedence above.
+      (metadata.company && metadata.priceType === "أسعار جملة" ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(productPrefix);

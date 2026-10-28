@@ -102,7 +102,7 @@ function detectUnitPriceType(line) {
   // Explicit row-level carton wording takes precedence over a section heading.
   if (/(?:بالكرتونة|بالكرتونه|للكرتونة|للكرتونه|سعر\s*الكرتونة|سعر\s*الكرتونه|الكرتونة|الكرتونه)/iu.test(s)) return "بالكرتونة";
   // Explicit wording or standalone Arabic ق identifies per-piece pricing.
-  if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|قطعة|بالقطعه|للقطعه)/iu.test(s) || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
+  if (/(?:بالقطعة|سعر\\s*القطعة|للقطعة|بالقطعه|سعر\\s*القطعه|للقطعه)/iu.test(s) || /(?:^|\\s)ق(?=\\s|[:：]|$)/iu.test(s)) return "بالقطعة";
   return null;
 }
 function isNonPriceCommentLine(line) {

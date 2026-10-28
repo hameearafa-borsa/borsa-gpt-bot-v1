@@ -6,6 +6,12 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   const row = { product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: 1, brand_key: null, raw_line: "منظف جديد 500 جم جملة 22 ج", package_sale_price: 22, price_kind: "wholesale" };
   assert.equal(identityKey(row), identityKey({ ...row }));
   assert.notEqual(identityKey(row), identityKey({ ...row, weight_g: 750 }));
+  assert.notEqual(identityKey(row), identityKey({ ...row, package_type: "sack" }),
+    "a sack and a non-sack package must not share reviewer identity memory");
+  assert.notEqual(identityKey({ ...row, offer_extra_weight_g: null }), identityKey({ ...row, offer_extra_weight_g: 300 }),
+    "an extra-weight offer must not inherit approval from the base-weight product");
+  assert.equal(identityKey({ ...row, pack_count: 24 }), identityKey({ ...row, pack_count: 1 }),
+    "carton count changes should not create a new reviewer identity");
   assert.match(formatReviewMessage(42, row), /مراجعة سعر معلّق #42/);
   const keyboard = reviewKeyboard(42);
   assert.equal(keyboard.inline_keyboard.flat().length, 4);

@@ -92,6 +92,7 @@ async function getDailyWeatherReport({ fetchJson = getJson, now = new Date() } =
   }).format(now);
   const lines = [
     "🌦️ نشرة الطقس الحية — بورصة المنظفات",
+    "🤖 الخدمة مقدمة بتقنيات GPT",
     `🕒 تحديث النشرة: ${stamp} بتوقيت القاهرة`,
     ""
   ];
@@ -140,6 +141,7 @@ async function getWeatherSummary(_ai, city = "القاهرة", options = {}) {
     const w = await getLiveWeather(city, options);
     const details = [
       `🌦️ الطقس الحالي في ${w.city}`,
+      "🤖 الخدمة مقدمة بتقنيات GPT",
       `الحالة: ${w.condition}`,
       `الحرارة: ${w.temperature}°م${w.feelsLike == null ? "" : `, المحسوسة ${w.feelsLike}°م`}`,
       w.humidity == null ? null : `الرطوبة: ${w.humidity}%`,

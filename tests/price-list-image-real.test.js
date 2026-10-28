@@ -16,8 +16,17 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.equal(metadata.month, "أكتوبر 2026");
   assert.equal(metadata.priceType, "أسعار جملة");
   assert.equal(new Set(accepted.map(row => row.company)).size, 1, "sections must not be mistaken for different companies");
-  assert.ok(accepted.length >= 60, "the long fixture should retain the clear product rows");
-  assert.ok(accepted.some(row => row.unit_price_type === "بالقطعة"), "explicit per-piece markers should be retained");
+  assert.ok(accepted.length >= 30, "the long fixture should retain clear rows with an explicit sale unit");
+  assert.ok(accepted.every(row => row.unit_price_type === "بالقطعة" || row.unit_price_type === "بالكرتونة"),
+    "accepted rows must have a verified per-piece or carton sale unit");
+  assert.ok(accepted.some(row => /سيجنال 120مل/.test(row.raw_line) && row.unit_price_type === "بالقطعة"),
+    "explicit per-piece markers should be retained");
+  assert.ok(accepted.some(row => /كلير أكياس 5 مل الكرتونة/.test(row.raw_line) && row.unit_price_type === "بالكرتونة"),
+    "explicit carton wording should be retained as carton pricing");
+  assert.ok(review.some(row => /جلو 40جم/.test(row.raw_line) && row.unit_price_type == null),
+    "unmarked rows must be reviewed instead of assuming a piece or carton price");
+  assert.ok(review.some(row => /لوكس 115جم/.test(row.raw_line) && row.unit_price_type == null),
+    "unit ambiguity in the soap section must not be inherited from unrelated piece-marked sections");
   assert.ok(review.some(row => /205 ح/.test(row.raw_line)), "ambiguous currency suffix must be sent to review, not silently accepted");
 
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });

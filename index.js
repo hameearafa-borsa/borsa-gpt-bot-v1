@@ -192,6 +192,7 @@ async function configureCommandMenus() {
     ["default", [], { type: "default" }],
     ["private", [
       { command: "settings", description: "إعدادات البوت وحالة الخدمات" },
+      { command: "panel", description: "لوحة خدمات البوت" },
       { command: "chemical", description: "المساعد الكيميائي" },
       { command: "weather", description: "الطقس" },
       { command: "pricelist", description: "قائمة أسعار الشركات" },

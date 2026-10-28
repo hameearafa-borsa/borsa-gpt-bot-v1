@@ -220,6 +220,26 @@ async function configureCommandMenus() {
   }
 }
 
+
+async function clearLegacyCommandScopesForAddedGroup(chatId, creatorId) {
+  // Telegram command scopes belong to this bot token only; never affects GroupHelpBot.
+  const scopes = [
+    [`group_chat:${chatId}`, { type: "chat", chat_id: chatId }],
+    [`group_admins:${chatId}`, { type: "chat_administrators", chat_id: chatId }]
+  ];
+  if (Number.isSafeInteger(Number(creatorId)) && Number(creatorId) > 0) {
+    scopes.push([`private_chat:${creatorId}`, { type: "chat", chat_id: Number(creatorId) }]);
+  }
+  for (const [name, scope] of scopes) {
+    try {
+      await bot.telegram.setMyCommands([], { scope });
+      console.log(`[COMMAND_MENU_CLEAR_ON_GROUP_ADD] scope=${name} status=ok`);
+    } catch (error) {
+      console.warn(`[COMMAND_MENU_CLEAR_ON_GROUP_ADD_FAILED] scope=${name} code=${error?.code || "unknown"} message=${redactString(error?.message || "Telegram API error")}`);
+    }
+  }
+}
+
 async function ensureDb() {
   if (!db.pool) throw new Error("DATABASE_URL غير مضبوط؛ لا يمكن تطبيق ترحيلات قاعدة البيانات بأمان");
   return runMigrations({ db, rootDir: __dirname });
@@ -250,6 +270,10 @@ bot.on("my_chat_member", async ctx => {
       creatorId = admins.find(a => a.status === "creator")?.user?.id || null;
     } catch { creatorId = null; }
   }
+  // Remove only Borsa's stale Telegram menu overrides when it is added to a group.
+  // GroupHelpBot has its own bot token and command scopes, so it is not modified.
+  await clearLegacyCommandScopesForAddedGroup(chat.id, creatorId);
+
   // Adding the bot never grants authorization, including when the actor is the fixed bot master.
   // Keep existing active approvals intact; every unapproved group must go through /claim and /approvechat.
   if (db.pool) {

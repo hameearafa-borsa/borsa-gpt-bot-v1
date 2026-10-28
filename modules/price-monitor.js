@@ -126,7 +126,17 @@ async function observe({ pool, message, merchantId = null, registry }) {
          ORDER BY observed_at DESC, id DESC LIMIT 1`,
         [row.product_identity_key, row.price_kind, row.product_text]
       );
-      row.change_type = classifyObservationChange(history.rows?.[0] || null, row);
+      const previous = history.rows?.[0] || null;
+      // If today's post omits carton count, reuse a known count from the same product/size history.
+      // Keep the source wording intact and mark the count as inherited; never override an explicit count.
+      if ((row.pack_count == null || row.pack_count === "") &&
+          previous?.pack_count != null && Number(previous.pack_count) > 0) {
+        row.pack_count = Number(previous.pack_count);
+        row.pack_count_inferred = true;
+        row.price_selection_reason = [row.price_selection_reason, "pack_count_inherited_from_prior_observation"].filter(Boolean).join(";");
+        row.piece_sale_price = row.package_sale_price / row.pack_count;
+      }
+      row.change_type = classifyObservationChange(previous, row);
     } else {
       row.change_type = null;
     }

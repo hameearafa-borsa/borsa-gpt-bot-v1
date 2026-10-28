@@ -154,12 +154,13 @@ function parseStructuredPriceTable(text) {
       raw_line: line, company, section, product_text: fullProductText,
       package_sale_price: casePrice, listed_base_price: piecePrice,
       explicit_wholesale_label_price: null, consumer_price: null,
-      price_kind: "wholesale_candidate",
+      price_kind: "wholesale",
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
       offer_extra_weight_g: extraWeight, pack_count: packCount,
-      package_type: parsePackageType(productText), confidence: 0.72,
-      needs_review: true,
-      price_selection_reason: "structured_table_case_total_and_piece_price_preserved_for_review"
+      package_type: parsePackageType(productText), confidence: 0.99,
+      trusted_catalog_row: true,
+      needs_review: false,
+      price_selection_reason: "trusted_structured_catalog_case_total_and_piece_price_preserved"
     });
   }
   return rows;
@@ -203,15 +204,16 @@ function parseInvoiceTable(text) {
       listed_base_price: null,
       explicit_wholesale_label_price: null,
       consumer_price: null,
-      price_kind: "wholesale_candidate",
+      price_kind: "wholesale",
       weight_g: quantity?.grams ?? null,
       volume_ml: quantity?.milliliters ?? null,
       offer_extra_weight_g: parseExtraWeight(rawProduct),
       pack_count: packCount,
       package_type: parsePackageType(rawProduct) || (/زجاجه|زجاجة/iu.test(rawProduct) ? "bottle" : /جركن/iu.test(rawProduct) ? "jerrycan" : /عبوه|عبوة/iu.test(rawProduct) ? "container" : null),
-      confidence: packCount == null ? 0.55 : 0.72,
-      needs_review: true,
-      price_selection_reason: "invoice_total_after_vat_and_promotion; preserve_package_count_and_size_for_review"
+      confidence: 0.99,
+      trusted_catalog_row: true,
+      needs_review: false,
+      price_selection_reason: "trusted_invoice_total_after_vat_and_promotion; preserve_package_count_and_size"
     });
   };
 

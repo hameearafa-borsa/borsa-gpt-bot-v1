@@ -235,7 +235,14 @@ function parseInvoiceTable(text) {
       flush(line);
       continue;
     }
-    if (/^(?:سعر الفاتوره|سعر الفاتورة|العرض الترويجي|الصنف)\b/iu.test(normalized)) continue;
+    // Arabic letters are not reliably delimited by JavaScript's ASCII-oriented \\b.
+    // Invoice exports may put all column headings on one line or split them across lines.
+    if (
+      (normalized.includes("الصنف") && normalized.includes("سعر الفاتوره") && normalized.includes("العرض الترويجي")) ||
+      normalized.startsWith("سعر الفاتوره") ||
+      normalized.startsWith("العرض الترويجي") ||
+      normalized === "الصنف"
+    ) continue;
     if (/^(?:قسم|المجموعه|المجموعة|منظفات|صابون|شامبو|منعم)/iu.test(normalized) && !/\d/u.test(line)) {
       if (current.length) current.push(line);
       else section = line;

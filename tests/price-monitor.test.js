@@ -31,8 +31,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(asc2September[4].package_sale_price, 1147.58);
   assert.equal(asc2September[4].listed_base_price, 95.6);
   assert.equal(asc2September[4].volume_ml, 1000);
-  assert.ok(asc2September.every(row => row.needs_review && row.confidence < 0.8),
-    "catalog rows should remain pending review rather than be auto-accepted");
+  assert.ok(asc2September.every(row => row.trusted_catalog_row && !row.needs_review && row.confidence >= 0.8 && row.price_kind === "wholesale"),
+    "interpreted structured catalog rows must be trusted wholesale observations with no review");
 
   const oxyInvoice = parseInvoiceTable(`الصنف
 سعر الفاتورة بعد 14% والعرض الترويجي
@@ -66,8 +66,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "inline invoice totals with thousands separators must remain intact after label extraction");
   assert.equal(extractPriceCandidates("شاور جل ريفولي 1 لتر جملة 1,147.58")[0].package_sale_price, 1147.58,
     "a thousands comma in a price must not be parsed as a decimal separator");
-  assert.ok(oxyInvoice.every(row => row.needs_review && row.confidence < 0.8),
-    "invoice-list rows must remain review candidates until validation rules are proven");
+  assert.ok(oxyInvoice.every(row => row.trusted_catalog_row && !row.needs_review && row.confidence >= 0.8 && row.price_kind === "wholesale"),
+    "interpreted invoice rows must be trusted wholesale observations with no review");
   assert.equal(extractPriceCandidates(`الصنف
 سعر الفاتورة بعد 14% والعرض الترويجي
 أوكسي كبسولات

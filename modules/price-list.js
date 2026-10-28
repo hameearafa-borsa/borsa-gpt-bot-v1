@@ -117,12 +117,22 @@ function isNonPriceCommentLine(line) {
 function removeNonPriceComments(text) {
   return String(text || "").split(/\r?\n/).filter(line => !isNonPriceCommentLine(line)).join("\n");
 }
+function hasContextualCurrencyTypo(lines, index) {
+  // Treat a trailing ح as a likely typo for ج only when an immediately adjacent
+  // priced row uses an unambiguous Egyptian-pound marker. Never globally rewrite ح.
+  const currencyPrice = /\\d+(?:[.,]\\d+)?\\s*(?:جنيه|ج|EGP)\\s*$/iu;
+  return [index - 1, index + 1].some(neighborIndex =>
+    neighborIndex >= 0 && neighborIndex < lines.length &&
+    currencyPrice.test(toAsciiDigits(lines[neighborIndex]))
+  );
+}
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const metadata = parseListMetadata(text);
   let company = metadata.company, section = null, sectionUnitPriceType = null;
   const out = [];
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
     if (isNonPriceCommentLine(line)) continue;
     if (/^[-_=.*.]{3,}$/.test(line) || /^\/(?:قائمة|pricelist)(?:\s|$)/iu.test(line)) continue;
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
@@ -174,8 +184,9 @@ function deterministicList(text) {
     const normalizedLine = normalizeArabic(line);
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
     const hasIdentity = metadata.company ? Boolean(productPrefix && /[\u0600-\u06ff]/u.test(productPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
-    const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
-    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : (suspiciousCurrency || !unitPriceType) ? "review" : "accepted";
+    const suspiciousCurrency = metadata.company && /\\b\\d+(?:[.,]\\d+)?\\s+ح(?:\\s|$)/u.test(toAsciiDigits(line));
+    const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
+    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";
     out.push({
       raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company,
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,

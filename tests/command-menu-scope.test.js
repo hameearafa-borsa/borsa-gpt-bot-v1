@@ -25,7 +25,9 @@ assert.match(body, /COMMAND_MENU_CLEAR\]/, "scope cleanup should be visible in s
 assert.match(body, /deleteMyCommands\(\{ scope \}\)/, "legacy command scopes must be deleted with Telegram deleteMyCommands, not setMyCommands with an empty list");
 assert.doesNotMatch(source, /setMyCommands\(\[\],\s*\{\s*scope\s*\}\)/, "empty setMyCommands calls are invalid and can leave stale menus in place");
 assert.match(source, /async function clearLegacyCommandScopesForAddedGroup[\s\S]*?deleteMyCommands\(\{ scope \}\)/, "group-add cleanup must use the supported delete method too");
-assert.doesNotMatch(body, /command: "(panel|approvechat|claim|antispam|schedule|warn|inactive)"/);
+assert.match(body, /\["private", \[[\s\S]*?command: "panel"/, "the owner service panel belongs in the private command menu");
+assert.doesNotMatch(body, /command: "(approvechat|claim|antispam|schedule|warn|inactive)"/, "GroupHelpBot moderation commands must stay out of Borsa menus");
+assert.match(body, /\["groups", \[[\s\S]*?\], \{ type: "all_group_chats" \}\]/, "group menu must remain separately scoped");
 assert.match(body, /for \(const \[name, commands, scope\] of menus\)/, "each Telegram command scope must be attempted independently");
 assert.match(body, /COMMAND_MENU_SETUP_FAILED/, "scope failures must be reported instead of silently hiding menu setup problems");
 assert.match(body, /COMMAND_MENU_SETUP\] scope=\$\{name\} status=ok/, "successful menu updates must be visible in startup logs");

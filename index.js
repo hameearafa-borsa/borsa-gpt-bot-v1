@@ -488,7 +488,23 @@ bot.on("text", async ctx => {
         const images = await renderPriceListImages({ company: companyNames[0], items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: parsedList.month || null, priceType: parsedList.priceType || "أسعار جملة" });
         const caption = `📋 قائمة أسعار ${companyNames[0]}\n${parsedList.month ? `الفترة: ${parsedList.month}\n` : ""}${parsedList.priceType || "أسعار جملة"}\nالأصناف المنشورة: ${accepted.length}\nعدد الصور: ${images.length}\n${BOT_CREDIT}`;
         if (typeof ctx.replyWithMediaGroup === "function" && images.length > 1) {
-          await ctx.replyWithMediaGroup(images.map((image, i) => ({ type: "photo", media: { source: image, filename: `borsa-price-list-${i + 1}.png` }, ...(i === 0 ? { caption } : {}) })));
+          // Telegram media groups accept at most 10 photos. Batch longer catalogs
+          // so expanding the row limit cannot make publication fail at Telegram's API.
+          for (let offset = 0; offset < images.length; offset += 10) {
+            const batch = images.slice(offset, offset + 10);
+            if (batch.length > 1) {
+              await ctx.replyWithMediaGroup(batch.map((image, i) => ({
+                type: "photo",
+                media: { source: image, filename: `borsa-price-list-${offset + i + 1}.png` },
+                ...(offset === 0 && i === 0 ? { caption } : {})
+              })));
+            } else {
+              await ctx.replyWithPhoto(
+                { source: batch[0], filename: `borsa-price-list-${offset + 1}.png` },
+                { caption: offset === 0 ? caption : `صفحة ${offset + 1} من ${images.length}` }
+              );
+            }
+          }
         } else {
           for (let i = 0; i < images.length; i++) {
             await ctx.replyWithPhoto({ source: images[i], filename: `borsa-price-list-${i + 1}.png` }, { caption: `${caption}\nصفحة ${i + 1} من ${images.length}` });

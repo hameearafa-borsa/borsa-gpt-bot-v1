@@ -199,8 +199,27 @@ async function extractList(ai, text) {
     parsed.items = parsed.items.map(item => {
       const rawLine = String(item.raw_line || "").trim();
       const localMatch = rawLine ? localItems.find(row => row.raw_line === rawLine) : null;
-      // Deterministic section context is authoritative over an AI guess.
-      if (localMatch?.unit_price_type) item = { ...item, unit_price_type: localMatch.unit_price_type, raw_line: rawLine };
+      // The deterministic parser owns numeric facts from a recognized source row.
+      // AI may improve the wording of the product identity, but must not replace
+      // the source-derived package, wholesale, consumer, weight, volume or count values.
+      if (localMatch) {
+        item = {
+          ...item,
+          raw_line: rawLine,
+          package_sale_price: localMatch.package_sale_price,
+          wholesale_carton_price: localMatch.wholesale_carton_price ?? null,
+          consumer_price: localMatch.consumer_price ?? null,
+          weight_g: localMatch.weight_g ?? null,
+          volume_ml: localMatch.volume_ml ?? null,
+          pack_count: localMatch.pack_count ?? null,
+          unit_price_type: localMatch.unit_price_type ?? null,
+          list_price: localMatch.list_price ?? null,
+          company: localMatch.company ?? item.company ?? null,
+        };
+        // A model cannot auto-approve a row the deterministic parser marked ambiguous.
+        if (localMatch.decision === "skipped") item.decision = "skipped";
+        else if (localMatch.decision === "review") item.decision = "review";
+      }
       const price = Number(item.package_sale_price);
       const product = String(item.product || "").trim();
       if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };

@@ -121,8 +121,9 @@ function parseStructuredPriceTable(text) {
   for (const line of lines.slice(0, headerIndex)) {
     if (/^تصفية اسعار|^اسعار شركة|^أسعار شركة/u.test(line)) company = line.trim();
   }
-  for (const line of lines.slice(headerIndex + 1)) {
-    const normalized = normalizeArabic(line);
+  for (const originalLine of lines.slice(headerIndex + 1)) {
+    const line = originalLine.replace(/\|/g, " ").replace(/\s+/g, " ").trim();
+    const normalized = normalizeArabic(line.replace(/^[\s\-—]+|[\s\-—]+$/g, ""));
     if (/^(?:عرض|العرض|عرض التوفير|عرض باهي|عرض توفير)/u.test(normalized)) {
       offerContext = line;
       continue;
@@ -229,6 +230,16 @@ function parseInvoiceTable(text) {
     if (/^(?:اجمالي|الإجمالي|المجموع|total)\b/iu.test(normalized)) {
       flush("");
       break;
+    }
+    if (line.includes("|")) {
+      const fields = line.split("|");
+      const amountText = fields.pop().trim();
+      if (amountLine.test(amountText)) {
+        const productPart = fields.join(" ").trim();
+        if (productPart) current.push(productPart);
+        flush(amountText);
+        continue;
+      }
     }
     const amountMatch = line.match(amountLine);
     if (amountMatch) {

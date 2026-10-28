@@ -115,8 +115,8 @@ function parseStructuredPriceTable(text) {
   let company = null;
   let section = null;
   let offerContext = null;
-  const amount = "[\\d,]+(?:\\.\\d{1,2})?";
-  const rowPattern = new RegExp("^(.*?)\\s+(\\d+)\\s+(" + amount + ")\\s+(" + amount + ")$");
+  const amount = "[\d,]+(?:\\.\d{1,2})?";
+  const rowPattern = new RegExp("^(.*?)\s+(\d+)\s+(" + amount + ")\s+(" + amount + ")$");
   for (const line of lines.slice(0, headerIndex)) {
     if (/^تصفية اسعار|^اسعار شركة|^أسعار شركة/u.test(line)) company = line.trim();
   }
@@ -136,16 +136,16 @@ function parseStructuredPriceTable(text) {
       if (!/\d/.test(line) && /^(?:الصابون|الباهي|مجموعة|مجموعه|الهاند|الشاور|الجل|الوفير|برايت)/u.test(normalized)) offerContext = null;
       continue;
     }
-    let productText = match[1].trim().replace(/^[•*\\-]+\\s*/, "");
-    if (/^باهي\\s+جرام$/u.test(normalizeArabic(productText)) &&
-        /شراء\\s*3\\s*كرتون/u.test(normalizeArabic(offerContext || ""))) {
+    let productText = match[1].trim().replace(/^[•*\-]+\s*/, "");
+    if (/^باهي\s+جرام$/u.test(normalizeArabic(productText)) &&
+        /شراء\s*3\s*كرتون/u.test(normalizeArabic(offerContext || ""))) {
       productText = "باهي 2000 جرام";
     }
     const packCount = Number(match[2]);
     const casePrice = Number(match[3].replace(/,/g, ""));
     const piecePrice = Number(match[4].replace(/,/g, ""));
     if (!productText || !Number.isFinite(casePrice) || !Number.isFinite(piecePrice)) continue;
-    const quantityMatch = productText.match(/\\d+(?:[.,]\\d+)?\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
+    const quantityMatch = productText.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
     const extraWeight = parseExtraWeight(productText);
     const fullProductText = offerContext ? productText + " — " + offerContext : productText;

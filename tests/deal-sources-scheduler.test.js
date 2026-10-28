@@ -33,6 +33,16 @@ assert.equal(cards[0].category,"paper");
 assert.equal(cards[0].price,25);
 assert.equal(cards[0].old_price,35);
 const carrefourFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"فلفيتا جل منظف للملابس السوداء - 1 كيلو","url":"https://www.carrefouregypt.com/mafegy/ar/p/velvet-gel","offers":{"@type":"Offer","price":"79.99","priceCurrency":"EGP"}}</script>`;
+const amazonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"اريال مسحوق غسيل 2 كيلو","url":"https://www.amazon.eg/dp/B0ABCDEF12","offers":{"@type":"Offer","price":"99.50","priceCurrency":"EGP"}}</script>`;
+const amazonStructuredCards = extractCards(amazonStructuredFixture, "amazon", "اريال");
+assert.equal(amazonStructuredCards.length, 1, "Amazon JSON-LD should be parsed when retailer HTML selectors change");
+assert.equal(amazonStructuredCards[0].price, 99.5);
+const noonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"شامبو نيفيا للعناية بالشعر","url":"https://www.noon.com/egypt-ar/product/N1234567","offers":{"@type":"Offer","price":"145","priceCurrency":"EGP"}}</script>`;
+const noonStructuredCards = extractCards(noonStructuredFixture, "noon", "نيفيا");
+assert.equal(noonStructuredCards.length, 1, "Noon JSON-LD should be parsed when retailer HTML selectors change");
+assert.equal(noonStructuredCards[0].merchant, "Noon Egypt");
+assert.equal(noonStructuredCards[0].price, 145);
+
 const carrefourCards = extractCards(carrefourFixture, "carrefour");
 assert.equal(carrefourCards.length, 1, "Carrefour Product JSON-LD should produce a validated deal");
 assert.equal(carrefourCards[0].merchant, "Carrefour Egypt");

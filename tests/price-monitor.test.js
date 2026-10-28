@@ -47,7 +47,7 @@ const { extractPriceCandidates, productIdentityKey } = require("../modules/price
     productIdentityKey({ product_text: invoiceAfterVatRows[1].product_text, price_kind: invoiceAfterVatRows[1].price_kind }),
     "Doush 60 g and 110 g must have separate product identity keys and price histories"
   );
-  const regularDoushRows = extractPriceCandidates("دوش 60 جملة 25 ج\\nدوش 110 جملة 30 ج");
+  const regularDoushRows = extractPriceCandidates("دوش 60 جملة 25 ج\nدوش 110 جملة 30 ج");
   assert.deepEqual(regularDoushRows.map(row => row.product_text), ["دوش 60 جرام", "دوش 110 جرام"],
     "Doush shorthand must normalize in ordinary price rows too, not only invoice exports");
   assert.deepEqual(regularDoushRows.map(row => row.weight_g), [60, 110],

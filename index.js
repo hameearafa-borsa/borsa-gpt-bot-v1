@@ -634,7 +634,7 @@ bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
       return;
     }
     resolved = true;
-    await ctx.answerCbQuery(action === "ignore" ? "تم تجاهل السجل." : "تم اعتماد السجل.");
+    await ctx.answerCbQuery(action === "ignore" ? "تم تجاهل السجل." : "تم اعتماد السجل.").catch(() => {});
     const status = action === "ignore" ? "🚫 تم التجاهل" : action === "new" ? "🆕 تم اعتماد السعر والصنف الجديد" : "✅ تم اعتماد السعر";
     const original = ctx.callbackQuery.message?.text || `مراجعة السعر #${id}`;
     await ctx.editMessageText(`${original}\n\n${status} — بواسطة المسؤول ${ctx.from.id}`, { reply_markup: { inline_keyboard: [] } });

@@ -62,6 +62,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(oxyInvoice[3].package_sale_price, 1421);
   assert.equal(oxyInvoice[4].pack_count, 6, "bottle counts must be extracted, not confused with price or size");
   assert.equal(oxyInvoice[4].volume_ml, 1000, "litre sizes must normalize to millilitres");
+  assert.equal(extractPriceCandidates("جوي كبسولات 14 جرام سعر الفاتورة بعد 14%: 1,107.40")[0].package_sale_price, 1107.4,
+    "inline invoice totals with thousands separators must remain intact after label extraction");
   assert.equal(extractPriceCandidates("شاور جل ريفولي 1 لتر جملة 1,147.58")[0].package_sale_price, 1147.58,
     "a thousands comma in a price must not be parsed as a decimal separator");
   assert.ok(oxyInvoice.every(row => row.needs_review && row.confidence < 0.8),

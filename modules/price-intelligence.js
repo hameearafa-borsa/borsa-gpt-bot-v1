@@ -9,6 +9,16 @@ const PACK_RE = /(?:\*|×)\s*(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|جوا�
 const PACK_ANY_RE = /(?:^|\s)(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|جوال|شكاره|شكارة|زجاجه|زجاجة|زجاجات|جركن|عبوه|عبوة|عبوات)(?=\s|$)/i;
 const EXTRA_RE = /(?:\+|زائد|زياده|زيادة)\s*(\d+(?:[.,]\d+)?)\s*(كيلو|كجم|ك|جرام|جم|g|kg)/i;
 
+function detectUnitPriceType(text, packCount = null) {
+  const source = String(text || "");
+  if (/(?:بالكرتونة|بالكرتونه|للكرتونة|للكرتونه|سعر\s*الكرتونة|سعر\s*الكرتونه|الكرتونة|الكرتونه)/iu.test(source)) return "بالكرتونة";
+  // A standalone ق is a piece-price marker; a numeric form such as 4ق is a pack count.
+  if (/(?:بالقطعة|بالقطعه|سعر\s*القطعة|سعر\s*القطعه|للقطعة|للقطعه|قطعة|قطعه)/iu.test(source) ||
+      /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(source)) return "بالقطعة";
+  if (packCount != null && Number(packCount) > 0) return "بالكرتونة";
+  return null;
+}
+
 function classifyPriceKind(text) {
   const s = normalizeArabic(text);
   if (RETAIL_WORDS.test(s) && !WHOLESALE_WORDS.test(s)) return "retail";
@@ -156,6 +166,7 @@ function parseStructuredPriceTable(text) {
       package_sale_price: casePrice, listed_base_price: piecePrice,
       explicit_wholesale_label_price: null, consumer_price: null,
       price_kind: "wholesale",
+      unit_price_type: "بالكرتونة",
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
       offer_extra_weight_g: extraWeight, pack_count: packCount,
       package_type: parsePackageType(productText), confidence: 0.99,
@@ -209,6 +220,7 @@ function parseInvoiceTable(text) {
       explicit_wholesale_label_price: null,
       consumer_price: null,
       price_kind: "wholesale",
+      unit_price_type: "بالكرتونة",
       weight_g: quantity?.grams ?? null,
       volume_ml: quantity?.milliliters ?? null,
       offer_extra_weight_g: parseExtraWeight(rawProduct),
@@ -309,6 +321,7 @@ function extractPriceCandidates(text) {
 
     const packCount = parsePackCount(parsedLine);
     const extraWeightG = parseExtraWeight(parsedLine);
+    const unitPriceType = detectUnitPriceType(parsedLine, packCount);
     const quantity = parsedLine.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const q = quantity ? parseQuantity(quantity[0]) : null;
     const decimalAutomaticWeight = parsedLine.match(/(?:^|\s)(\d+[.,]\d{1,3})\s*(?:كجم|ك)?\s*(?:اتوماتيك|اوتوماتيك)/i);
@@ -374,6 +387,7 @@ function extractPriceCandidates(text) {
       explicit_wholesale_label_price: explicitWholesalePrice,
       consumer_price: consumerPrice,
       price_kind: priceKind,
+      unit_price_type: unitPriceType,
       weight_g: inferredWeightG,
       volume_ml: q?.milliliters ?? null,
       offer_extra_weight_g: extraWeightG,
@@ -487,4 +501,4 @@ function fingerprint(row) {
   ].join("|")).digest("hex");
 }
 
-module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, commercialMetrics, fingerprint, extractInvoicePriceAfterTax };
+module.exports = { classifyPriceKind, detectUnitPriceType, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, commercialMetrics, fingerprint, extractInvoicePriceAfterTax };

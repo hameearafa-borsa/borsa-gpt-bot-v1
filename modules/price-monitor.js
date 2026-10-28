@@ -23,6 +23,16 @@ function isBulkPriceList(text) {
   // Detect repeated explicit currency amounts before the single-product monitor sees it.
   const currencyPrices = [...source.matchAll(/(?:^|[\s:|])\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)(?=$|[\s|])/giu)].length;
   const hasCatalogContext = /(?:أسعار|اسعار)\s*(?:شركة|شركه)|(?:قائمة|قائمه)\s*أسعار|(?:جملة|جمله)\s+.{0,40}(?:منتجات|أصناف|اصناف)/iu.test(source);
+  // Company price lists often omit the currency marker after every amount (e.g.
+  // "صنسيلك 350 مل عرض 76.25"). A clear catalog heading plus many numbered rows
+  // is enough to classify the whole message as a catalog, without requiring "جنيه"
+  // on every line. Keep the threshold high so ordinary single-product messages pass.
+  const numericRows = lines.filter(line => {
+    const asciiLine = line.replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+      .replace(/[۰-۹]/g, digit => String("۰۱۲۳۴۵۶۷۸۹".indexOf(digit)));
+    return /\d/.test(asciiLine);
+  }).length;
+  if (hasCatalogContext && lines.length >= 12 && numericRows >= 8) return true;
   return source.length >= 500 && currencyPrices >= 8 && (hasCatalogContext || currencyPrices >= 12);
 }
 

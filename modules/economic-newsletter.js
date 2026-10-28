@@ -192,6 +192,19 @@ async function publishEconomicSlot({ pool, telegram, now = new Date(), getPrices
     const groups = await client.query(`SELECT chat_id FROM authorized_chats
       WHERE active=TRUE AND chat_type IN ('group','supergroup') ORDER BY chat_id`);
     if (!groups.rows?.length) return { skipped: true, reason: "no_active_authorized_groups" };
+
+    // A second Railway instance can enter the same time window after the first
+    // instance has already published. Check the durable per-group reservations
+    // before making paid/slow external requests, so an already-completed slot
+    // does not emit a misleading source-timeout diagnostic.
+    const handled = await client.query(`SELECT COUNT(*)::int AS handled_count
+      FROM economic_publications
+      WHERE cairo_date=$1 AND slot_key='daily' AND chat_id = ANY($2::bigint[])`,
+      [slot.date, groups.rows.map(group => String(group.chat_id))]);
+    if (Number(handled.rows?.[0]?.handled_count || 0) >= groups.rows.length) {
+      return { skipped: true, reason: "all_groups_already_handled" };
+    }
+
     let report;
     try { report = await getPrices({ now }); }
     catch (error) {

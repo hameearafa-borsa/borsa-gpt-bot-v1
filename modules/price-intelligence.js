@@ -101,8 +101,73 @@ function extractInvoiceProductText(line) {
   return stripQuantityTokens(prefix).replace(/\s+/g, " ").trim();
 }
 
+function parseStructuredPriceTable(text) {
+  const lines = String(text || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const headerIndex = lines.findIndex(line => {
+    const header = normalizeArabic(line);
+    return header.includes("عدد القطع") &&
+      header.includes("السعر الصافي بعد الخصم") &&
+      header.includes("صافي سعر القطعه");
+  });
+  if (headerIndex < 0) return null;
+
+  const rows = [];
+  let company = null;
+  let section = null;
+  let offerContext = null;
+  const amount = "[\\d,]+(?:\\.\\d{1,2})?";
+  const rowPattern = new RegExp("^(.*?)\\s+(\\d+)\\s+(" + amount + ")\\s+(" + amount + ")$");
+  for (const line of lines.slice(0, headerIndex)) {
+    if (/^تصفية اسعار|^اسعار شركة|^أسعار شركة/u.test(line)) company = line.trim();
+  }
+  for (const line of lines.slice(headerIndex + 1)) {
+    const normalized = normalizeArabic(line);
+    if (/^(?:عرض|العرض|عرض التوفير|عرض باهي|عرض توفير)/u.test(normalized)) {
+      offerContext = line;
+      continue;
+    }
+    if (/^(?:الصابون الريحه|الباهي اليدوي|الباهي الاوتوماتيك|مجموعه الجيل العادي|مجموعة الجيل العادي|مجموعه الوفير|مجموعة الوفير|الهاند ووش|الشامبو|المنظفات)/u.test(normalized)) {
+      section = line;
+      if (!/^عرض/u.test(normalized)) offerContext = null;
+      continue;
+    }
+    const match = line.match(rowPattern);
+    if (!match) {
+      if (!/\d/.test(line) && /^(?:الصابون|الباهي|مجموعة|مجموعه|الهاند|الشاور|الجل|الوفير|برايت)/u.test(normalized)) offerContext = null;
+      continue;
+    }
+    let productText = match[1].trim().replace(/^[•*\\-]+\\s*/, "");
+    if (/^باهي\\s+جرام$/u.test(normalizeArabic(productText)) &&
+        /شراء\\s*3\\s*كرتون/u.test(normalizeArabic(offerContext || ""))) {
+      productText = "باهي 2000 جرام";
+    }
+    const packCount = Number(match[2]);
+    const casePrice = Number(match[3].replace(/,/g, ""));
+    const piecePrice = Number(match[4].replace(/,/g, ""));
+    if (!productText || !Number.isFinite(casePrice) || !Number.isFinite(piecePrice)) continue;
+    const quantityMatch = productText.match(/\\d+(?:[.,]\\d+)?\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
+    const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
+    const extraWeight = parseExtraWeight(productText);
+    const fullProductText = offerContext ? productText + " — " + offerContext : productText;
+    rows.push({
+      raw_line: line, company, section, product_text: fullProductText,
+      package_sale_price: casePrice, listed_base_price: piecePrice,
+      explicit_wholesale_label_price: null, consumer_price: null,
+      price_kind: "wholesale_candidate",
+      weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
+      offer_extra_weight_g: extraWeight, pack_count: packCount,
+      package_type: parsePackageType(productText), confidence: 0.72,
+      needs_review: true,
+      price_selection_reason: "structured_table_case_total_and_piece_price_preserved_for_review"
+    });
+  }
+  return rows;
+}
+
 function extractPriceCandidates(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  const structuredRows = parseStructuredPriceTable(text);
+  if (structuredRows) return structuredRows;
   const out = [];
   let company = null;
   let section = null;
@@ -304,4 +369,4 @@ function fingerprint(row) {
   ].join("|")).digest("hex");
 }
 
-module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, commercialMetrics, fingerprint, extractInvoicePriceAfterTax };
+module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, parseStructuredPriceTable, commercialMetrics, fingerprint, extractInvoicePriceAfterTax };

@@ -100,6 +100,16 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(invoiceAfterVatRows[1].weight_g, 110,
     "the Doush 110 shorthand must populate the weight field as 110 grams");
   assert.notEqual(
+    productIdentityKey({ product_text: "منظف معروف", price_kind: "wholesale_candidate", weight_g: 500, pack_count: 12 }),
+    productIdentityKey({ product_text: "منظف معروف", price_kind: "wholesale_candidate", weight_g: 1000, pack_count: 12 }),
+    "different weights must have independent identities even when display names omit the size"
+  );
+  assert.notEqual(
+    productIdentityKey({ product_text: "منظف معروف", price_kind: "wholesale_candidate", weight_g: 500, pack_count: 12 }),
+    productIdentityKey({ product_text: "منظف معروف", price_kind: "wholesale_candidate", weight_g: 500, pack_count: 24 }),
+    "different package counts must not share one carton-price history"
+  );
+  assert.notEqual(
     productIdentityKey({ product_text: invoiceAfterVatRows[0].product_text, price_kind: invoiceAfterVatRows[0].price_kind }),
     productIdentityKey({ product_text: invoiceAfterVatRows[1].product_text, price_kind: invoiceAfterVatRows[1].price_kind }),
     "Doush 60 g and 110 g must have separate product identity keys and price histories"

@@ -13,7 +13,7 @@ function detectUnitPriceType(text, packCount = null) {
   const source = String(text || "");
   if (/(?:بالكرتونة|بالكرتونه|للكرتونة|للكرتونه|سعر\s*الكرتونة|سعر\s*الكرتونه|الكرتونة|الكرتونه)/iu.test(source)) return "بالكرتونة";
   // A standalone ق is a piece-price marker; a numeric form such as 4ق is a pack count.
-  if (/(?:بالقطعة|بالقطعه|سعر\s*القطعة|سعر\s*القطعه|للقطعة|للقطعه|قطعة|قطعه)/iu.test(source) ||
+  if (/(?:بالقطعة|بالقطعه|سعر\s*القطعة|سعر\s*القطعه|للقطعة|للقطعه)/iu.test(source) ||
       /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(source)) return "بالقطعة";
   if (packCount != null && Number(packCount) > 0) return "بالكرتونة";
   return null;

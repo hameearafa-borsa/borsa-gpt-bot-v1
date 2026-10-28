@@ -153,7 +153,12 @@ function deterministicList(text) {
     const afterConsumer = consumerIndex >= 0 ? getPriceTokens(line.slice(consumerIndex + line.slice(consumerIndex).match(RETAIL_LABEL)[0].length))[0]?.value ?? null : null;
     const beforeLabel = priceTokens.find(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
     const packagePrice = beforeLabel?.value ?? null;
-    const unitPriceType = detectUnitPriceType(line) || sectionUnitPriceType;
+    const rowUnitPriceType = detectUnitPriceType(line);
+    // A carton-specific offer note establishes the unit for following rows in the same product section.
+    if (rowUnitPriceType === "بالكرتونة" && /العرض\s+على\s+الكرتونة|العرض\s+على\s+الكرتونه/iu.test(line)) {
+      sectionUnitPriceType = "بالكرتونة";
+    }
+    const unitPriceType = rowUnitPriceType || sectionUnitPriceType;
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(productPrefix);

@@ -424,8 +424,10 @@ function productIdentityKey(row) {
   const stableName = doushVariant
     ? normalizedName
     : normalizeArabic(stripQuantityTokens(row?.product_text || ""));
-  // Dimensions belong to identity: the same brand/name at 500 g and 1 kg, or in different carton counts, must not share one price history.
-  const dimensions = [row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g, row?.pack_count, row?.package_type]
+  // Product identity describes the item itself, not the supplier's temporary carton configuration.
+  // Keep size, extra free weight and package type in identity, but track carton count per observation:
+  // promotions and carton-merging can change count without changing the underlying product.
+  const dimensions = [row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g, row?.package_type]
     .map(value => value == null || value === "" ? "" : String(value));
   return [String(row?.brand_key || ""), stableName, String(row?.price_kind || ""), ...dimensions].join("|");
 }
@@ -442,12 +444,18 @@ function classifyObservationChange(previous, current) {
     if (av == null || bv == null) return av === bv;
     return Number.isFinite(av) && Number.isFinite(bv) && Math.abs(av - bv) < 0.0005;
   };
-  const dimensions = ["weight_g", "volume_ml", "offer_extra_weight_g", "pack_count"];
-  const weightChanged = dimensions.some(key => !sameNumber(previous[key], current[key])) ||
-    String(previous.package_type || "") !== String(current.package_type || "");
+  const dimensions = ["weight_g", "volume_ml", "offer_extra_weight_g"];
+  const weightChanged = dimensions.some(key => !sameNumber(previous[key], current[key]));
+  const packageTypeChanged = String(previous.package_type || "") !== String(current.package_type || "");
+  const packageCountChanged = !sameNumber(previous.pack_count, current.pack_count);
+  const packageConfigurationChanged = packageTypeChanged || packageCountChanged;
   const priceChanged = !sameNumber(previous.package_sale_price, current.package_sale_price);
 
-  if (weightChanged && priceChanged) return "price_and_weight_change";
+  if ((weightChanged || packageConfigurationChanged) && priceChanged) {
+    if (packageConfigurationChanged && !weightChanged) return "price_and_package_configuration_change";
+    return "price_and_weight_change";
+  }
+  if (packageConfigurationChanged && !weightChanged) return "package_configuration_change";
   if (weightChanged) return "weight_change";
   if (priceChanged) return "price_change";
   return "same_observation";
@@ -457,11 +465,12 @@ function commercialMetrics(row) {
   const weight = Number(row.weight_g) || 0;
   const extra = Number(row.offer_extra_weight_g) || 0;
   const price = Number(row.package_sale_price) || 0;
-  const count = Number(row.pack_count) || 1;
+  const count = row.pack_count == null || row.pack_count === "" ? null : Number(row.pack_count);
   const totalWeight = weight + extra;
   return {
     package_sale_price: price,
-    piece_sale_price: count > 1 ? price / count : price,
+    // Never present a carton total as a piece price when the count is unknown.
+    piece_sale_price: count != null && count > 0 ? price / count : null,
     effective_weight_g: totalWeight || null,
     effective_price_per_kg: totalWeight > 0 ? price / (totalWeight / 1000) : null,
     effective_volume_ml: Number(row.volume_ml) || null,

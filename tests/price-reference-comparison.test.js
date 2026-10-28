@@ -1,7 +1,10 @@
 "use strict";
 
 const assert = require("node:assert/strict");
-const { compareReferencePrice, comparableName } = require("../modules/price-reference-comparison");
+const {
+  compareReferencePrice, comparableName, compareObservationToLatestReference,
+  persistObservationReferenceComparison
+} = require("../modules/price-reference-comparison");
 
 const signalReference = {
   price_kind: "wholesale",
@@ -107,4 +110,54 @@ assert.equal(unchanged.comparable, true);
 assert.equal(unchanged.direction, "equal_to_reference");
 assert.equal(unchanged.differencePercent, 0);
 
-console.log("price reference comparison tests: OK");
+// Price selection must respect whether the reference is a piece or carton price.
+assert.equal(compareReferencePrice(
+  { ...cartonReference, unit_price_type: "بالقطعة", package_sale_price: 120, wholesale_carton_price: 480 },
+  { ...cartonObservation, unit_price_type: "بالقطعة", package_sale_price: 125, pack_count: null }
+).referencePrice, 120, "a per-piece reference must not accidentally use the carton total");
+
+// Database-backed lookup considers only the same kind, unit and exact size before
+// performing strict product-identity matching in JavaScript.
+(async () => {
+  const queries = [];
+  const pool = {
+    async query(sql, params) {
+      queries.push({ sql, params });
+      if (sql.includes("FROM price_reference_observations")) {
+        return { rows: [
+          { ...signalReference, id: 101, company_label: "يونيليفر", source_period: "أكتوبر 2026", created_at: "2026-10-01" },
+          { ...signalReference, id: 100, company_label: "يونيليفر", source_period: "سبتمبر 2026", package_sale_price: 40, created_at: "2026-09-01" }
+        ], rowCount: 2 };
+      }
+      if (sql.includes("UPDATE price_observations")) return { rows: [], rowCount: 1 };
+      throw new Error("unexpected comparison persistence query");
+    }
+  };
+  const dbComparison = await compareObservationToLatestReference(pool, signalObservation);
+  assert.equal(dbComparison.comparable, true);
+  assert.equal(dbComparison.referenceObservationId, 101);
+  assert.equal(dbComparison.sourcePeriod, "أكتوبر 2026");
+  assert.equal(dbComparison.difference, 2.67);
+  assert.equal(queries[0].params[0], "wholesale");
+  assert.equal(queries[0].params[1], "بالقطعة");
+  assert.equal(queries[0].params[3], 120);
+
+  const savedComparison = await persistObservationReferenceComparison(pool, 9001, signalObservation);
+  assert.equal(savedComparison.comparable, true);
+  assert.equal(queries.at(-1).params[0], 101);
+  assert.equal(queries.at(-1).params[1], 42.33);
+  assert.equal(queries.at(-1).params[2], 2.67);
+  assert.equal(queries.at(-1).params[4], "comparable");
+  assert.equal(queries.at(-1).params[6], 9001);
+  assert.match(queries.at(-1).sql, /reference_compared_at=NOW/);
+
+  const noReferencePool = { async query(sql) {
+    assert.match(sql, /FROM price_reference_observations/);
+    return { rows: [], rowCount: 0 };
+  } };
+  const noMatch = await compareObservationToLatestReference(noReferencePool, signalObservation);
+  assert.equal(noMatch.comparable, false);
+  assert.equal(noMatch.status, "not_comparable");
+
+  console.log("price reference comparison and database persistence tests: OK");
+})().catch(error => { console.error(error); process.exitCode = 1; });

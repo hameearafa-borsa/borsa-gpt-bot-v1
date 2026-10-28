@@ -51,6 +51,8 @@ jobs:
         run: npm test
       - name: Run PostgreSQL group approval integration test
         run: node tests/group-approval-postgres.integration.test.js
+      - name: Run PostgreSQL price observation integration test
+        run: node tests/price-observation-postgres.integration.test.js
       - name: Build production Alpine Docker image
         run: docker build --tag borsa-gpt-bot-ci:latest .
       - name: Verify sharp PNG generation inside production image

@@ -470,5 +470,37 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(contextualObserved.savedRows.every(item => item.row.decision === "pending"),
     "context inference alone must not silently approve a brand-new product identity");
 
+
+  // Pearl October regression test: the monitor must choose the explicitly labelled
+  // wholesale amount, not the preceding base amount or the consumer amount.
+  const pearlOctober = `أسعار بيرل – أكتوبر
+..... أوتوماتيك
+• 9 ك: 505.31 | جملة 487.40 | مستهلك 525
+• 5 ك: 308.43 | جملة 915.87 | مستهلك 325
+• 2.5 ك: 179.15 | جملة 716.63 | مستهلك 200
+..... أوزان وشكاير
+• شكارة 10 ك: 618.35 | مستهلك 630
+• شكارة 7 ك: 432.84 | مستهلك 450
+• 2 ك: 129.22 | جملة 516.90 | مستهلك 145
+• 1.5 ك: 98.96 | جملة 395.85 | مستهلك 110
+• 1 ك: 66.28 | جملة 265.15 | مستهلك 75
+.. العبوات الصغيرة
+• 290 جم: 22.03 | جملة 176.29 | مستهلك 25
+• 160 جم: 12 | جملة 144.06 | مستهلك 15
+• 120 جم: 8.46 | جملة 135.49 | مستهلك 10
+• 50 جم: 3.96 | جملة 47.52 | مستهلك 5
+• 30 جم: 3.79 | جملة 75.95 | مستهلك 5`;
+  const pearlRows = extractPriceCandidates(pearlOctober);
+  const pearlExpectedWholesale = [487.40, 915.87, 716.63, 618.35, 432.84, 516.90, 395.85, 265.15, 176.29, 144.06, 135.49, 47.52, 75.95];
+  assert.equal(pearlRows.length, 13, "Pearl October list must preserve all 13 products");
+  assert.deepEqual(pearlRows.map(row => row.package_sale_price), pearlExpectedWholesale,
+    "each row must select its explicit wholesale price where present, or its listed price when no wholesale label exists");
+  assert.equal(pearlRows[3].package_type, "sack", "10 kg sack must be preserved as a distinct package type");
+  assert.equal(pearlRows[4].package_type, "sack", "7 kg sack must be preserved as a distinct package type");
+  assert.equal(pearlRows[3].weight_g, 10000, "10 kg sack weight must be preserved");
+  assert.equal(pearlRows[4].weight_g, 7000, "7 kg sack weight must be preserved");
+  assert.deepEqual(pearlRows.slice(0, 3).map(row => row.listed_base_price), [505.31, 308.43, 179.15],
+    "the unlabeled pre-wholesale amount must remain separate from the selected wholesale price");
+
   console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, identity memory, context inference, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

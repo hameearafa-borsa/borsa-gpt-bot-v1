@@ -96,7 +96,7 @@ function extractInvoiceProductText(line) {
   const prefix = String(line || "")
     .replace(/[\u200B-\u200F\uFEFF]/g, "")
     .replace(/\*\*/g, "")
-    .split(/\s+-\s*(?:قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة)/iu)[0]
+    .split(/\s*(?:-\s*)?(?:قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة)/iu)[0]
     .replace(/^(?:\s*[-•.*]+\s*)/, "")
     .trim();
   return stripQuantityTokens(prefix).replace(/\s+/g, " ").trim();

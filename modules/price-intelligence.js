@@ -151,7 +151,7 @@ function extractPriceCandidates(text) {
     const consumerPrice = numericPriceTokens(stripQuantityTokens(consumerSuffix))[0] ?? null;
 
     const candidateName = extractProductText(parsedLine)
-      .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى)/giu, " ")
+      .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى|قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة|بعد)/giu, " ")
       .replace(/\s+/g, " ").trim();
     const weightLabel = quantity?.[0]?.trim() || (decimalAutomaticWeight ? decimalAutomaticWeight[1] : null);
     // Generic package words describe packaging, not the product identity.

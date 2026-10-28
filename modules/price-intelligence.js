@@ -417,7 +417,7 @@ function parsePackageType(text) {
 
 function productIdentityKey(row) {
   // Offer headings describe the price condition, not a different product identity.
-  const identityText = String(row?.product_text || "").split(/\\s+[—–-]\\s+(?=(?:عرض|العرض|شراء)\\b?)/u)[0];
+  const identityText = String(row?.product_text || "").split(/\s+[—–-]\s+(?=(?:عرض|العرض|شراء))/u)[0];
   const normalizedName = normalizeArabic(identityText);
   // Doush soap variants use a bare number as grams in invoice exports.
   // Preserve that product-specific size in the identity so 60 g and 110 g

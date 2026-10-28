@@ -156,8 +156,8 @@ async function configureCommandMenus() {
   const owners = [...new Set([MASTER_ID, ...String(process.env.OWNER_ID || "")
     .split(",").map(value => Number(value.trim())).filter(value => Number.isSafeInteger(value) && value > 0)])];
   for (const userId of owners) {
+    // Private-user overrides are chat scopes; chat_member scopes are only for group members.
     await clearScope(`private_chat:${userId}`, { type: "chat", chat_id: userId });
-    await clearScope(`private_member:${userId}`, { type: "chat_member", chat_id: userId, user_id: userId });
   }
 
   // Clear per-chat and per-chat-administrator overrides left by older builds.

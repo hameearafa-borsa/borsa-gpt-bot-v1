@@ -580,8 +580,10 @@ bot.on("text", async ctx => {
   if (!priceMonitor.isEligibleMessage({ chatType: m.chatType, text: text || m.caption || "", isLogChannel: false, isCommand: false, ownMessage: isBotMessage(ctx, botUserId) })) return;
 
   let merchantId = null;
-  const phone = text.match(/(?:\+?20|0)?1\d{9,10}/)?.[0];
-  if (phone && /(سعر|جنيه|ج\s|مسحوق|جيل|منظف|تاجر|محل)/i.test(text)) {
+  // Use captions too: sellers frequently attach the price and phone number to a photo.
+  const merchantSourceText = text || m.caption || "";
+  const phone = merchantSourceText.match(/(?:\+?20|0)?1\d{9,10}/)?.[0];
+  if (phone && /(سعر|جنيه|ج\s|مسحوق|جيل|منظف|تاجر|محل)/i.test(merchantSourceText)) {
     try {
       const saved = await saveMerchant(db.pool, {
         name: [ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(" ") || "تاجر غير مسمى",
@@ -589,7 +591,7 @@ bot.on("text", async ctx => {
         location: "غير محدد",
         phone,
         telegram_username: ctx.from?.username || null,
-      }, { chatId: m.chatId, messageId: m.messageId, userId: m.userId, rawText: text });
+      }, { chatId: m.chatId, messageId: m.messageId, userId: m.userId, rawText: merchantSourceText });
       merchantId = saved.merchant?.id || null;
       if (saved.saved) await sendLog({ module: "merchant", stage: saved.updated ? "updated" : "new", status: "ok", details: { merchantId, name: saved.merchant?.name } });
     } catch (e) { await sendLog({ module: "merchant", stage: "save", severity: "error", status: "failed", details: { error: e.message } }); }

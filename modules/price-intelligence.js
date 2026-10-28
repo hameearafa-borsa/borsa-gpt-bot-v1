@@ -248,7 +248,14 @@ function parsePackageType(text) {
 }
 
 function productIdentityKey(row) {
-  const stableName = normalizeArabic(stripQuantityTokens(row?.product_text || ""));
+  const normalizedName = normalizeArabic(row?.product_text || "");
+  // Doush soap variants use a bare number as grams in invoice exports.
+  // Preserve that product-specific size in the identity so 60 g and 110 g
+  // occupy separate price histories instead of appearing as a weight change.
+  const doushVariant = normalizedName.match(/^دوش\s+(\d{1,4})\s+جرام$/u);
+  const stableName = doushVariant
+    ? normalizedName
+    : normalizeArabic(stripQuantityTokens(row?.product_text || ""));
   return [String(row?.brand_key || ""), stableName, String(row?.price_kind || "")].join("|");
 }
 

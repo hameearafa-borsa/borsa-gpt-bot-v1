@@ -11,7 +11,7 @@ assert.match(index, /db\.withTransaction\(async client =>/, "price-list persiste
 assert.match(index, /INSERT INTO price_reference_observations/, "accepted company rows must be stored in the separate official reference ledger");
 assert.match(index, /if \(decision === "accepted"\)/, "only accepted company rows may enter the reference ledger");
 assert.match(index, /parsedList\.month \|\| null/, "the official reference ledger must preserve the source period when available");
-assert.match(index, /declaredPriceType,referencePriceKind,productLabel/, "the official reference ledger must preserve declared price type and product identity");
+assert.match(index, /declaredPriceType \|\| null, referencePriceKind, productLabel/, "the official reference ledger must preserve declared price type and product identity");
 assert.match(index, /accepted\.length >= 3 && companyNames\.length === 1/, "publishing requires 3 accepted items from one company");
 assert.match(index, /renderPriceListImages/, "long lists must use adaptive multi-page rendering");
 assert.match(index, /replyWithMediaGroup/, "multiple pages should be sent as a Telegram media group when supported");

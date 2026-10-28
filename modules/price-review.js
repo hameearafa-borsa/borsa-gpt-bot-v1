@@ -37,7 +37,7 @@ async function resolveReview({ db, id, action, reviewerId }) {
   const decision = action === "ignore" ? "ignored" : "accepted";
   return db.withTransaction(async client => {
     const result = await client.query(
-      `UPDATE price_observations SET decision=$1, reviewed_by=$2, reviewed_at=NOW(),
+      `UPDATE price_observations SET decision=$1, reviewed_by=$2, reviewed_at=NOW(), needs_review=FALSE,
        review_reason=CASE WHEN $3='new' THEN 'new_product_approved' ELSE review_reason END
        WHERE id=$4 AND decision='pending'
        RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, offer_extra_weight_g, package_type, package_sale_price, price_kind`,
@@ -70,7 +70,7 @@ async function saveEditedReview({ db, id, reviewerId, productText, price, weight
     const result = await client.query(
       `UPDATE price_observations SET product_text=$1, package_sale_price=$2, price_kind='wholesale',
        weight_g=$3, volume_ml=$4, pack_count=$5, confidence=1, decision='accepted',
-       reviewed_by=$6, reviewed_at=NOW(), review_reason='manually_corrected',
+       explicit_wholesale_label_price=$2, reviewed_by=$6, reviewed_at=NOW(), review_reason='manually_corrected',
        price_selection_reason='manually_corrected', needs_review=FALSE
        WHERE id=$7 AND decision='pending'
        RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, package_type, offer_extra_weight_g, price_kind`,

@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { isOwnMessage, isEligibleMessage, isBulkPriceList, observe } = require("../modules/price-monitor");
 const registry = require("../data/product-registry.json");
+const { extractPriceCandidates } = require("../modules/price-intelligence");
 
 (async () => {
   const base = { chatType: "supergroup", text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" };
@@ -17,6 +18,16 @@ const registry = require("../data/product-registry.json");
   assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
     "bulk price lists must not generate dozens of individual review messages");
   assert.equal(isBulkPriceList(base.text), false, "a single product price remains eligible");
+  const invoiceAfterVatRows = extractPriceCandidates(\`- **دوش** **60** - سعر الفاتورة بعد 14%: 329.28
+- **دوش** **110** - سعر الفاتورة بعد 14%: 612.50
+- **باهي** **5** **جم** **24** **كيس** - قيمة العرض: 2 - سعر الفاتورة بعد 14%: 92.54
+- **باهي** **10** **جم** **20** **كيس** - قيمة العرض: 10 - سعر الفاتورة بعد 14%: 152.26\`);
+  assert.deepEqual(invoiceAfterVatRows.map(row => row.package_sale_price), [329.28, 612.5, 92.54, 152.26],
+    "invoice total after 14% must win over product size and offer-value numbers");
+  assert.equal(invoiceAfterVatRows[2].pack_count, 24,
+    "Bahi 5 g with 24 sachets must preserve the pack count");
+  assert.equal(invoiceAfterVatRows[2].product_text.includes("قيمة العرض"), false,
+    "offer metadata must not contaminate the normalized product identity");
   const arielPromoList = `اريال ٢ك يدوي ٤٩٠ج ٤ق
 اريال ١ك يدوي ٣٩٦ج ٦ق
 اريال ١.٥ك يدوي ٣٨٠ج ٤ق

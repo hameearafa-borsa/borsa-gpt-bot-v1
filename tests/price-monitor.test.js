@@ -104,11 +104,13 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     productIdentityKey({ product_text: "منظف معروف", price_kind: "wholesale_candidate", weight_g: 1000, pack_count: 12 }),
     "different weights must have independent identities even when display names omit the size"
   );
-  assert.notEqual(
+  assert.equal(
     productIdentityKey({ product_text: "منظف معروف", price_kind: "wholesale_candidate", weight_g: 500, pack_count: 12 }),
     productIdentityKey({ product_text: "منظف معروف", price_kind: "wholesale_candidate", weight_g: 500, pack_count: 24 }),
-    "different package counts must not share one carton-price history"
+    "different carton counts are separate observations of the same product identity"
   );
+  assert.equal(require("../modules/price-intelligence").commercialMetrics({ package_sale_price: 300, pack_count: null }).piece_sale_price, null,
+    "do not invent a piece price when carton count is unknown");
   assert.notEqual(
     productIdentityKey({ product_text: invoiceAfterVatRows[0].product_text, price_kind: invoiceAfterVatRows[0].price_kind }),
     productIdentityKey({ product_text: invoiceAfterVatRows[1].product_text, price_kind: invoiceAfterVatRows[1].price_kind }),

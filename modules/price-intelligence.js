@@ -88,6 +88,19 @@ function extractProductText(line) {
     .trim();
 }
 
+function extractInvoiceProductText(line) {
+  // Invoice exports may bold a variant number without including its unit,
+  // e.g. "**دوش** **60**. Preserve that number in the product identity rather
+  // than guessing a unit or merging it with another variant such as "دوش 110".
+  const prefix = String(line || "")
+    .replace(/[\u200B-\u200F\uFEFF]/g, "")
+    .replace(/\*\*/g, "")
+    .split(/\s+-\s*(?:قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة)/iu)[0]
+    .replace(/^(?:\s*[-•.*]+\s*)/, "")
+    .trim();
+  return stripQuantityTokens(prefix).replace(/\s+/g, " ").trim();
+}
+
 function extractPriceCandidates(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const out = [];
@@ -150,7 +163,10 @@ function extractPriceCandidates(text) {
       : "";
     const consumerPrice = numericPriceTokens(stripQuantityTokens(consumerSuffix))[0] ?? null;
 
-    const candidateName = extractProductText(parsedLine)
+    const invoiceLabelledPrice = extractInvoicePriceAfterTax(parsedLine);
+    const candidateName = (invoiceLabelledPrice != null
+      ? extractInvoiceProductText(parsedLine)
+      : extractProductText(parsedLine))
       .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى|قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة|بعد)/giu, " ")
       .replace(/\s+/g, " ").trim();
     const weightLabel = quantity?.[0]?.trim() || (decimalAutomaticWeight ? decimalAutomaticWeight[1] : null);

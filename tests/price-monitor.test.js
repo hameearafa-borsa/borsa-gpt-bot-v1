@@ -299,6 +299,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(pearlQueries[1].params[19], 487.4, "the explicit wholesale amount must be persisted separately");
   assert.match(pearlQueries[1].params[20], /explicit_wholesale_selected/);
   assert.equal(pearlQueries[1].params[21], true, "ambiguous companion columns must remain flagged for review");
+  assert.equal(pearlQueries[1].params[22], 525, "consumer price must be persisted separately from the wholesale price");
+  assert.match(pearlQueries[1].sql, /needs_review,consumer_price/, "observation insert must store the consumer price in its own column");
   assert.equal(pearl.savedRows[0].row.price_kind, "wholesale");
   assert.equal(pearl.savedRows[0].row.decision, "pending");
   assert.ok(pearl.savedRows[0].row.confidence < 0.8);

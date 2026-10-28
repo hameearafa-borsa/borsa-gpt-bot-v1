@@ -182,12 +182,12 @@ function extractPriceCandidates(text) {
     // User-confirmed product-specific convention: in invoice rows, a bare
     // number after "دوش" is the soap weight in grams (e.g. "دوش 60" => "دوش 60 جرام").
     // Do not generalize this rule to other brands or products.
-    if (invoiceLabelledPrice != null) {
-      const doushWeight = productText.match(/^دوش\s+(\d{1,4})$/iu);
-      if (doushWeight) {
-        productText = `دوش ${doushWeight[1]} جرام`;
-        inferredWeightG = Number(doushWeight[1]);
-      }
+    const doushWeight = parsedLine.match(/^\s*(?:[-•*]+\s*)?دوش\s+(\d{1,4})(?!\s*(?:جرام|جم|غرام|كجم|كيلو|ك|g|kg)\b)/iu);
+    if (doushWeight) {
+      // Apply the confirmed convention to invoice rows and ordinary price rows,
+      // while leaving explicit units untouched.
+      productText = `دوش ${doushWeight[1]} جرام`;
+      inferredWeightG = Number(doushWeight[1]);
     }
     const normalizedProduct = normalizeArabic(productText);
     if (normalizedProduct.length < 2 || /^\d/.test(normalizedProduct)) continue;

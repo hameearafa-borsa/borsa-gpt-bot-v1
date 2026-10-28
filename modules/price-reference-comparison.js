@@ -33,13 +33,64 @@ function sameNumber(a, b) {
 }
 
 function getReferencePrice(reference) {
+  const unit = normalizeUnit(reference.unit_price_type);
   if (reference.price_kind === "wholesale") {
-    return numberOrNull(reference.wholesale_carton_price) ?? numberOrNull(reference.package_sale_price);
+    return unit === "بالكرتونة"
+      ? numberOrNull(reference.wholesale_carton_price) ?? numberOrNull(reference.package_sale_price)
+      : unit === "بالقطعة" ? numberOrNull(reference.package_sale_price) : null;
   }
   if (reference.price_kind === "retail") {
     return numberOrNull(reference.consumer_price) ?? numberOrNull(reference.package_sale_price);
   }
   return null;
+}
+
+async function compareObservationToLatestReference(pool, observation) {
+  if (!pool || typeof pool.query !== "function") return { comparable: false, status: "not_comparable", reason: "database_unavailable" };
+  const unit = normalizeUnit(observation?.unit_price_type);
+  const kind = String(observation?.price_kind || "unknown");
+  if (!["wholesale", "retail"].includes(kind) || !unit) {
+    return { comparable: false, status: "not_comparable", reason: "observation_kind_or_unit_unknown" };
+  }
+
+  const result = await pool.query(
+    `SELECT id, company_label, source_period, price_kind, product_label, variant_label,
+            weight_g, volume_ml, package_sale_price, wholesale_carton_price, consumer_price,
+            pack_count, unit_price_type, raw_line, created_at
+     FROM price_reference_observations
+     WHERE decision='accepted' AND price_kind=$1 AND unit_price_type=$2
+       AND weight_g IS NOT DISTINCT FROM $3
+       AND volume_ml IS NOT DISTINCT FROM $4
+     ORDER BY created_at DESC, id DESC
+     LIMIT 300`,
+    [kind, unit, observation.weight_g ?? null, observation.volume_ml ?? null]
+  );
+  let firstReason = "no_matching_reference";
+  for (const reference of result.rows || []) {
+    const comparison = compareReferencePrice(reference, observation);
+    if (comparison.comparable) {
+      return { ...comparison, referenceObservationId: reference.id, companyLabel: reference.company_label || null, sourcePeriod: reference.source_period || null };
+    }
+    if (firstReason === "no_matching_reference" && comparison.reason !== "product_identity_mismatch") {
+      firstReason = comparison.reason;
+    }
+  }
+  return { comparable: false, status: "not_comparable", reason: firstReason };
+}
+
+async function persistObservationReferenceComparison(pool, observationId, observation) {
+  const comparison = await compareObservationToLatestReference(pool, observation);
+  await pool.query(
+    `UPDATE price_observations
+     SET reference_observation_id=$1, reference_price=$2, reference_difference=$3,
+         reference_difference_percent=$4, reference_comparison_status=$5,
+         reference_comparison_reason=$6, reference_compared_at=NOW()
+     WHERE id=$7`,
+    [comparison.referenceObservationId ?? null, comparison.referencePrice ?? null,
+     comparison.difference ?? null, comparison.differencePercent ?? null,
+     comparison.status || "not_comparable", comparison.reason || "no_matching_reference", observationId]
+  );
+  return comparison;
 }
 
 function compareReferencePrice(reference, observation) {
@@ -103,4 +154,4 @@ function compareReferencePrice(reference, observation) {
   });
 }
 
-module.exports = { compareReferencePrice, comparableName, normalizeUnit };
+module.exports = { compareReferencePrice, comparableName, normalizeUnit, compareObservationToLatestReference, persistObservationReferenceComparison };

@@ -139,7 +139,8 @@ assert.ok(pearlRows.every(row => row.package_sale_price !== row.consumer_price),
 const pearlListRows = deterministicList(pearlOctober);
 assert.equal(pearlListRows.length, 13, "Pearl company-list parser should preserve all 13 rows");
 assert.equal(pearlListRows[9].category, "العبوات الصغيرة", "small-pack section heading must not overwrite the company context");
-assert.equal(pearlListRows.filter(row => row.decision === "accepted").length, 13, "Pearl rows with company, section and weight context should be accepted");
+assert.equal(pearlListRows.filter(row => row.decision === "accepted").length, 0, "Pearl rows without a clear piece/carton unit must not be auto-accepted");
+assert.equal(pearlListRows.filter(row => row.decision === "review").length, 13, "Pearl rows with uncertain sale units must remain available for review");
 assert.equal(pearlListRows[0].package_sale_price, 505.31);
 assert.equal(pearlListRows[0].wholesale_carton_price, 487.40);
 assert.equal(pearlListRows[0].consumer_price, 525);

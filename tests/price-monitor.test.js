@@ -355,5 +355,49 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(reviewed.saved, 1);
   assert.equal(reviewed.savedRows[0].row.decision, "accepted");
 
-  console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, and silent-mode tests: OK");
+  // A previously approved product must reuse its identity memory when a later
+  // seller post omits the word "جملة". This is the core repeat-observation path.
+  const rememberedPool = {
+    async query(sql) {
+      if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 97 }], rowCount: 1 };
+      throw new Error("unexpected remembered-product query");
+    }
+  };
+  const remembered = await observe({
+    pool: rememberedPool,
+    message: { chatId: -100123, messageId: 463, text: "منظف جديد 500 جم 22 ج" },
+    registry: []
+  });
+  assert.equal(remembered.saved, 1);
+  assert.equal(remembered.savedRows[0].row.decision, "accepted",
+    "previously approved product identities should not be sent back to review just because this post omits the wholesale label");
+  assert.equal(remembered.savedRows[0].row.price_kind, "wholesale");
+
+  // Multi-product context can infer wholesale classification, but must not
+  // auto-approve a brand-new identity without registry or prior approval.
+  const contextual = extractPriceCandidates("منظف ألف 500 جم 22 ج\\nمنظف باء 1 لتر 35 ج");
+  assert.ok(contextual.length >= 2);
+  const contextPool = {
+    async query(sql) {
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 98 }], rowCount: 1 };
+      throw new Error("unexpected context query");
+    }
+  };
+  const contextualObserved = await observe({
+    pool: contextPool,
+    message: { chatId: -100123, messageId: 464, text: "منظف ألف 500 جم 22 ج\\nمنظف باء 1 لتر 35 ج" },
+    registry: []
+  });
+  assert.ok(contextualObserved.accepted.every(row => row.price_kind === "wholesale"),
+    "the message-level context should classify multiple unlabelled product prices as wholesale candidates");
+  assert.ok(contextualObserved.savedRows.every(item => item.row.decision === "pending"),
+    "context inference alone must not silently approve a brand-new product identity");
+
+  console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, identity memory, context inference, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

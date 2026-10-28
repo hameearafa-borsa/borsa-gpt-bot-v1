@@ -40,7 +40,9 @@ function getReferencePrice(reference) {
       : unit === "بالقطعة" ? numberOrNull(reference.package_sale_price) : null;
   }
   if (reference.price_kind === "retail") {
-    return numberOrNull(reference.consumer_price) ?? numberOrNull(reference.package_sale_price);
+    if (unit === "بالكرتونة") return numberOrNull(reference.package_sale_price);
+    if (unit === "بالقطعة") return numberOrNull(reference.consumer_price) ?? numberOrNull(reference.package_sale_price);
+    return null;
   }
   return null;
 }

@@ -69,8 +69,8 @@ function extractStructuredCards(html, sourceName, query = "") {
 function extractCards(html, sourceName, query = "") {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
-  const cards = [];
   if (sourceName === "carrefour") {
+    const cards = [];
     const products = [];
     // Match script elements first, then inspect the type attribute. This avoids
     // depending on attribute order or whitespace in retailer-generated HTML.

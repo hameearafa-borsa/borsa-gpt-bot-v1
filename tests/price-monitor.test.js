@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { isOwnMessage, isEligibleMessage, isBulkPriceList, observe } = require("../modules/price-monitor");
 const registry = require("../data/product-registry.json");
-const { extractPriceCandidates, parseStructuredPriceTable, productIdentityKey } = require("../modules/price-intelligence");
+const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, productIdentityKey } = require("../modules/price-intelligence");
 
 (async () => {
   const base = { chatType: "supergroup", text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" };
@@ -33,6 +33,38 @@ const { extractPriceCandidates, parseStructuredPriceTable, productIdentityKey } 
   assert.equal(asc2September[4].volume_ml, 1000);
   assert.ok(asc2September.every(row => row.needs_review && row.confidence < 0.8),
     "catalog rows should remain pending review rather than be auto-accepted");
+
+  const oxyInvoice = parseInvoiceTable(`الصنف
+سعر الفاتورة بعد 14% والعرض الترويجي
+جوي
+110 جرام 48 قطعة
+628.64
+جوي هاندويش
+250 ملل
+427.28
+أوكسي كبسولات
+14 جرام 20 عبوة
+1,107.40
+كبسولات
+14 جرام 30 عبوة
+1,421.00`);
+  assert.equal(oxyInvoice.length, 4, "invoice parser should assemble multiline product descriptions and amount-only lines");
+  assert.deepEqual(oxyInvoice.slice(0, 3).map(row => [row.product_text, row.pack_count, row.package_sale_price, row.weight_g, row.volume_ml]), [
+    ["جوي 110 جرام 48 قطعة", 48, 628.64, 110, null],
+    ["جوي هاندويش 250 ملل", null, 427.28, null, 250],
+    ["أوكسي كبسولات 14 جرام 20 عبوة", 20, 1107.4, 14, null]
+  ], "invoice total, product size, and package count must be stored separately");
+  assert.equal(oxyInvoice[3].product_text, "كبسولات 14 جرام 30 عبوة",
+    "a row without a brand name must not inherit the previous row's brand");
+  assert.equal(oxyInvoice[3].package_sale_price, 1421);
+  assert.ok(oxyInvoice.every(row => row.needs_review && row.confidence < 0.8),
+    "invoice-list rows must remain review candidates until validation rules are proven");
+  assert.equal(extractPriceCandidates(`الصنف
+سعر الفاتورة بعد 14% والعرض الترويجي
+أوكسي كبسولات
+14 جرام 20 عبوة
+1,107.40`)[0].package_sale_price, 1107.4,
+    "invoice parser must accept thousands separators and return the invoice total");
 
   const invoiceAfterVatRows = extractPriceCandidates(`- **دوش** **60** - سعر الفاتورة بعد 14%: 329.28
 - **دوش** **110** - سعر الفاتورة بعد 14%: 612.50

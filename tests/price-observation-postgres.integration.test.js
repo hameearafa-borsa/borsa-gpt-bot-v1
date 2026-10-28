@@ -38,6 +38,13 @@ if (!connectionString) {
 
     const migrationResult = await runMigrations({ db, rootDir: path.join(__dirname, "..") });
     assert.ok(migrationResult.files.includes("018_price_observation_consumer_price.sql"));
+    assert.ok(migrationResult.files.includes("019_reviewed_product_pack_identity.sql"));
+    const memoryColumns = await pool.query(
+      "SELECT column_name FROM information_schema.columns WHERE table_schema=$1 AND table_name='reviewed_price_products'",
+      [schema]
+    );
+    assert.ok(memoryColumns.rows.some(row => row.column_name === "package_type"));
+    assert.ok(memoryColumns.rows.some(row => row.column_name === "offer_extra_weight_g"));
 
     const result = await observe({
       pool,

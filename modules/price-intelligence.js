@@ -115,8 +115,8 @@ function parseStructuredPriceTable(text) {
   let company = null;
   let section = null;
   let offerContext = null;
-  const amount = "[\d,]+(?:\.\d{1,2})?";
-  const rowPattern = new RegExp("^(.*?)\s+(\d+)\s+(" + amount + ")\s+(" + amount + ")$");
+  const amount = "[\\d,]+(?:\\.\\d{1,2})?";
+  const rowPattern = new RegExp("^(.*?)\\s+(\\d+)\\s+(" + amount + ")\\s+(" + amount + ")$");
   for (const line of lines.slice(0, headerIndex)) {
     if (/^تصفية اسعار|^اسعار شركة|^أسعار شركة/u.test(line)) company = line.trim();
   }
@@ -164,8 +164,87 @@ function parseStructuredPriceTable(text) {
   return rows;
 }
 
+function parseInvoiceTable(text) {
+  const lines = String(text || "").split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  const normalizedAll = normalizeArabic(lines.join(" "));
+  const hasInvoiceHeader = normalizedAll.includes("سعر الفاتوره بعد 14") &&
+    normalizedAll.includes("العرض الترويجي") && normalizedAll.includes("الصنف");
+  if (!hasInvoiceHeader) return null;
+
+  const rows = [];
+  let current = [];
+  let inRows = false;
+  let section = null;
+  const amountLine = /^(?:ج\s*)?([\d,]+(?:\.\d{1,2})?)(?:\s*(?:جنيه|ج|egp))?$/iu;
+  const flush = (amountText) => {
+    if (!current.length) return;
+    const rawProduct = current.join(" ").replace(/\s+/g, " ").trim();
+    current = [];
+    const amountMatch = String(amountText || "").match(amountLine);
+    if (!rawProduct || !amountMatch) return;
+    const price = Number(amountMatch[1].replace(/,/g, ""));
+    if (!Number.isFinite(price) || price <= 0 || price >= 100000) return;
+
+    const packCount = parsePackCount(rawProduct);
+    const quantityMatch = toAsciiDigits(rawProduct).match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|غرام|g|لتر|ل|liter|l|مل|ملل|ml)/iu);
+    const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
+    const productText = rawProduct
+      .replace(/(?:^|\s)(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|جوال|شكاره|شكارة|زجاجه|زجاجة|جركن|عبوه|عبوة)(?=\s|$)/iu, " ")
+      .replace(/\s+/g, " ").trim();
+    const normalizedName = normalizeArabic(productText);
+    if (!normalizedName || !/[\p{L}]/u.test(normalizedName)) return;
+    rows.push({
+      raw_line: rawProduct + " | " + amountText,
+      company: null,
+      section,
+      product_text: productText,
+      package_sale_price: price,
+      listed_base_price: null,
+      explicit_wholesale_label_price: null,
+      consumer_price: null,
+      price_kind: "wholesale_candidate",
+      weight_g: quantity?.grams ?? null,
+      volume_ml: quantity?.milliliters ?? null,
+      offer_extra_weight_g: parseExtraWeight(rawProduct),
+      pack_count: packCount,
+      package_type: parsePackageType(rawProduct) || (/زجاجه|زجاجة/iu.test(rawProduct) ? "bottle" : /جركن/iu.test(rawProduct) ? "jerrycan" : /عبوه|عبوة/iu.test(rawProduct) ? "container" : null),
+      confidence: packCount == null ? 0.55 : 0.72,
+      needs_review: true,
+      price_selection_reason: "invoice_total_after_vat_and_promotion; preserve_package_count_and_size_for_review"
+    });
+  };
+
+  for (const line of lines) {
+    const normalized = normalizeArabic(line);
+    if (!inRows) {
+      if (normalized.includes("الصنف") && normalized.includes("سعر الفاتوره بعد 14") && normalized.includes("العرض الترويجي")) inRows = true;
+      continue;
+    }
+    if (/^(?:اجمالي|الإجمالي|المجموع|total)\b/iu.test(normalized)) {
+      flush("");
+      break;
+    }
+    const amountMatch = line.match(amountLine);
+    if (amountMatch) {
+      flush(line);
+      continue;
+    }
+    if (/^(?:سعر الفاتوره|سعر الفاتورة|العرض الترويجي|الصنف)\b/iu.test(normalized)) continue;
+    if (/^(?:قسم|المجموعه|المجموعة|منظفات|صابون|شامبو|منعم)/iu.test(normalized) && !/\d/u.test(line)) {
+      if (current.length) current.push(line);
+      else section = line;
+      continue;
+    }
+    current.push(line.replace(/^[-•*]+\s*/, ""));
+  }
+  flush("");
+  return rows.length ? rows : null;
+}
+
 function extractPriceCandidates(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+  const invoiceRows = parseInvoiceTable(text);
+  if (invoiceRows) return invoiceRows;
   const structuredRows = parseStructuredPriceTable(text);
   if (structuredRows) return structuredRows;
   const out = [];
@@ -369,4 +448,4 @@ function fingerprint(row) {
   ].join("|")).digest("hex");
 }
 
-module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, parseStructuredPriceTable, commercialMetrics, fingerprint, extractInvoicePriceAfterTax };
+module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, commercialMetrics, fingerprint, extractInvoicePriceAfterTax };

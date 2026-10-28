@@ -100,6 +100,14 @@ assert.equal(
   "promotional extra quantity must not be compared as the base product"
 );
 assert.equal(
+  compareReferencePrice(
+    { ...signalReference, product_label: "سيجنال 120مل +25مل", raw_line: "سيجنال 120مل +25مل" },
+    signalObservation
+  ).reason,
+  "reference_offer_needs_structured_metadata",
+  "extra millilitres must not be compared as the base product even when the offer label is missing"
+);
+assert.equal(
   compareReferencePrice(cartonReference, { ...cartonObservation, offer_extra_weight_g: 300 }).reason,
   "observation_offer_mismatch",
   "an observed extra-weight offer must not be compared to a base reference"

@@ -15,7 +15,7 @@ function splitPages(rows, pageSize) {
 async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 22 }) {
   const rows = (Array.isArray(items) ? items : []).filter(x => x && String(x.product || x.product_label || "").trim() && Number.isFinite(Number(x.package_sale_price)) && Number(x.package_sale_price) > 0);
   if (rows.length < 3) throw new Error("price_list_image_requires_three_valid_products");
-  if (rows.length > 80) throw new Error("price_list_image_exceeds_80_products_split_list_first");
+  if (rows.length > 500) throw new Error("price_list_image_exceeds_500_products_split_list_first");
   const safePageSize = Math.max(6, Math.min(22, Math.trunc(Number(pageSize) || 22)));
   // Load lazily so parser/static tests can run before native dependencies are installed.
   let sharp;
@@ -36,7 +36,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
       const variant = String(item.variant || "");
       const size = item.weight_g ? `${item.weight_g} جم` : item.volume_ml ? `${item.volume_ml} مل` : "";
       const details = [variant && variant !== rawCategory ? variant : "", size && !rawName.includes(size) ? size : ""].filter(Boolean).map(escapeXml).join(" • ");
-      const unitLabel = item.unit_price_type === "بالقطعة" ? "بالقطعة" : "";
+      const unitLabel = item.unit_price_type === "بالقطعة" ? "بالقطعة" : item.unit_price_type === "بالكرتونة" ? "بالكرتونة" : "";
       const fill = i % 2 ? "#f3f7f5" : "#ffffff";
       return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><text x="1125" y="${y+14}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="12" font-weight="700" fill="#25805e">${category}${unitLabel ? ` • ${escapeXml(unitLabel)}` : ""}</text><text x="1125" y="${y+29}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="18" font-weight="700" fill="#172b26">${name}</text><text x="1125" y="${y+36}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" fill="#61716b">${escapeXml([details].filter(Boolean).join(" "))}</text><text x="72" y="${y+29}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="21" font-weight="700" fill="#176b50">${escapeXml(priceText(item.package_sale_price))}</text>`;
     }).join("");

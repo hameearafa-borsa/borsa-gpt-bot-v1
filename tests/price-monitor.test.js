@@ -36,7 +36,7 @@ const registry = require("../data/product-registry.json");
     "a full catalog pasted as one long Telegram paragraph must not trigger per-product monitoring");
   assert.equal(isBulkPriceList("أريال مسحوق 2 كجم ١٥٠ ج"), false,
     "a single product observation must remain eligible even when its price is written inline");
-  const unileverSeptemberNoCurrency = \`أسعار شركة يونيليفر
+  const unileverSeptemberNoCurrency = `أسعار شركة يونيليفر
 أسعار الشامبو
 صنسيلك 90 عرض 30
 صنسيلك 180 عرض 47
@@ -48,7 +48,7 @@ const registry = require("../data/product-registry.json");
 تريزيمي شامبو 600 مل 202.5
 سيجنال 25 مل 12.37
 لوكس 75 جرام 14.20ج
-كمفورت لتر عرض 87.15\`;
+كمفورت لتر عرض 87.15`;
   assert.equal(isBulkPriceList(unileverSeptemberNoCurrency), true,
     "a company list with many numeric prices but no currency suffix on most rows must be detected as bulk");
   assert.equal(isEligibleMessage({ ...base, text: unileverSeptemberNoCurrency, isLogChannel: false, isCommand: false, ownMessage: false }), false,

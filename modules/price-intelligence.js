@@ -53,8 +53,9 @@ function extractInvoicePriceAfterTax(text) {
   // Invoice exports often include product sizes and a separate offer-value field.
   // Prefer the amount explicitly labelled as the final invoice price after VAT,
   // rather than treating a size or "قيمة العرض" number as the sale price.
-  const normalized = normalizeArabic(toAsciiDigits(String(text || "")));
-  const match = normalized.match(/سعر\s+الفاتوره\s+بعد\s*\d+(?:[.,]\d+)?\s*%\s*[:：-]?\s*((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?))/iu);
+  // Do not normalize punctuation before extracting the amount: Arabic normalization turns a thousands comma into whitespace.
+  const normalized = toAsciiDigits(String(text || "")).replace(/[\u200B-\u200F\uFEFF]/g, "");
+  const match = normalized.match(/سعر\s+الفاتور[هة]\s+بعد\s*\d+(?:[.,]\d+)?\s*%\s*[:：-]?\s*((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?))/iu);
   const value = match ? parseNumber(match[1]) : null;
   return value != null && value > 0 && value < 100000 ? value : null;
 }

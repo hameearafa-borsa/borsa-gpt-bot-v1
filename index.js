@@ -144,7 +144,7 @@ async function configureCommandMenus() {
   const failures = [];
   const clearScope = async (name, scope) => {
     try {
-      await bot.telegram.setMyCommands([], { scope });
+      await bot.telegram.deleteMyCommands({ scope });
       console.log(`[COMMAND_MENU_CLEAR] scope=${name} status=ok`);
     } catch (error) {
       console.warn(`[COMMAND_MENU_CLEAR_FAILED] scope=${name} code=${error?.code || "unknown"} message=${redactString(error?.message || "Telegram API error")}`);
@@ -232,7 +232,7 @@ async function clearLegacyCommandScopesForAddedGroup(chatId, creatorId) {
   }
   for (const [name, scope] of scopes) {
     try {
-      await bot.telegram.setMyCommands([], { scope });
+      await bot.telegram.deleteMyCommands({ scope });
       console.log(`[COMMAND_MENU_CLEAR_ON_GROUP_ADD] scope=${name} status=ok`);
     } catch (error) {
       console.warn(`[COMMAND_MENU_CLEAR_ON_GROUP_ADD_FAILED] scope=${name} code=${error?.code || "unknown"} message=${redactString(error?.message || "Telegram API error")}`);

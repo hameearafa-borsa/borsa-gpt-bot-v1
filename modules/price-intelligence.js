@@ -49,7 +49,21 @@ function numericPriceTokens(text) {
 }
 
  
+function extractInvoicePriceAfterTax(text) {
+  // Invoice exports often include product sizes and a separate offer-value field.
+  // Prefer the amount explicitly labelled as the final invoice price after VAT,
+  // rather than treating a size or "قيمة العرض" number as the sale price.
+  const normalized = toAsciiDigits(String(text || ""));
+  const match = normalized.match(/سعر\s+الفاتوره\s+بعد\s*\d+(?:[.,]\d+)?\s*%\s*[:：-]?\s*(\d+(?:[.,]\d+)?)/iu);
+  const value = match ? parseNumber(match[1]) : null;
+  return value != null && value > 0 && value < 100000 ? value : null;
+}
+
 function selectSalePrice(text, fallbackPrices) {
+  // A specifically labelled final invoice amount takes precedence over sizes,
+  // offer-value fields, and other unlabelled numbers on the same row.
+  const invoicePrice = extractInvoicePriceAfterTax(text);
+  if (invoicePrice != null) return invoicePrice;
   // The monitor is a wholesale-price monitor: when a row explicitly labels a
   // value "جملة", that value wins. Preserve any earlier unlabelled amount in a
   // separate field rather than silently treating it as the wholesale price.
@@ -256,4 +270,4 @@ function fingerprint(row) {
   ].join("|")).digest("hex");
 }
 
-module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, commercialMetrics, fingerprint };
+module.exports = { classifyPriceKind, parsePackCount, parseExtraWeight, parsePackageType, productIdentityKey, classifyObservationChange, extractPriceCandidates, commercialMetrics, fingerprint, extractInvoicePriceAfterTax };

@@ -36,6 +36,7 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   assert.ok(calls[2].sql.includes("price_review_queue"));
   assert.match(calls[2].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);
   assert.match(calls[0].sql, /WHERE id=\$4 AND decision='pending'/);
+  assert.match(calls[0].sql, /needs_review=FALSE/, "reviewed observations must clear the unresolved review flag");
   assert.equal(calls[0].params[0], "accepted");
   assert.equal(calls[2].params[0], "accepted");
 
@@ -58,6 +59,8 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   assert.equal(edited.ok, true);
   assert.match(editedCalls[0].sql, /decision='accepted'/);
   assert.match(editedCalls[0].sql, /needs_review=FALSE/);
+  assert.match(editedCalls[0].sql, /explicit_wholesale_label_price=\$2/,
+    "a manually corrected wholesale price must update its dedicated field too");
   assert.match(editedCalls[1].sql, /product_identity_key/);
   assert.match(editedCalls[2].sql, /reviewed_price_products/);
   assert.equal(editedCalls[2].params[1], "منظف مصحح", "manual correction must be remembered under the corrected product identity");

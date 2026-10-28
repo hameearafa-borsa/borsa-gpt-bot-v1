@@ -43,8 +43,8 @@ function stripQuantityTokens(text) {
 
 function numericPriceTokens(text) {
   const s = toAsciiDigits(text);
-  const attached = [...s.matchAll(/(\d+(?:[.,]\d+)?)\s*(?:جنيه|ج|EGP)(?=\s|\||$)/gi)].map(m => parseNumber(m[1]));
-  const standalone = [...s.matchAll(/(?:^|\s|\|)(\d+(?:[.,]\d+)?)(?=\s|\||$)/gi)].map(m => parseNumber(m[1]));
+  const attached = [...s.matchAll(/((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?))\s*(?:جنيه|ج|EGP)(?=\s|\||$)/gi)].map(m => parseNumber(m[1]));
+  const standalone = [...s.matchAll(/(?:^|\s|\|)((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?))(?=\s|\||$)/gi)].map(m => parseNumber(m[1]));
   return [...attached, ...standalone].filter(n => n != null && n > 0 && n < 100000);
 }
 
@@ -54,7 +54,7 @@ function extractInvoicePriceAfterTax(text) {
   // Prefer the amount explicitly labelled as the final invoice price after VAT,
   // rather than treating a size or "قيمة العرض" number as the sale price.
   const normalized = normalizeArabic(toAsciiDigits(String(text || "")));
-  const match = normalized.match(/سعر\s+الفاتوره\s+بعد\s*\d+(?:[.,]\d+)?\s*%\s*[:：-]?\s*(\d+(?:[.,]\d+)?)/iu);
+  const match = normalized.match(/سعر\s+الفاتوره\s+بعد\s*\d+(?:[.,]\d+)?\s*%\s*[:：-]?\s*((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?))/iu);
   const value = match ? parseNumber(match[1]) : null;
   return value != null && value > 0 && value < 100000 ? value : null;
 }
@@ -73,7 +73,7 @@ function selectSalePrice(text, fallbackPrices) {
 }
 
 function extractExplicitWholesalePrice(text) {
-  const match = toAsciiDigits(text).match(/(?:جمله|جملة)\s*[:：]?\s*(\d+(?:[.,]\d+)?)/i);
+  const match = toAsciiDigits(text).match(/(?:جمله|جملة)\s*[:：]?\s*((?:\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:[.,]\d+)?))/i);
   const value = match ? parseNumber(match[1]) : null;
   return value != null && value > 0 && value < 100000 ? value : null;
 }

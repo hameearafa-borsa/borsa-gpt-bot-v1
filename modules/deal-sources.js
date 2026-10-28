@@ -38,6 +38,34 @@ function safeProductUrl(raw, sourceName) {
     return u.toString();
   } catch { return null; }
 }
+function extractStructuredCards(html, sourceName, query = "") {
+  const source = SOURCES[sourceName];
+  if (!source || typeof html !== "string") return [];
+  const products = [];
+  const visit = value => {
+    if (!value || typeof value !== "object") return;
+    const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
+    if (types.some(type => String(type || "").toLowerCase() === "product")) products.push(value);
+    if (Array.isArray(value)) value.forEach(visit); else Object.values(value).forEach(visit);
+  };
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(match => /\btype\s*=\s*(["\x27])application\/ld\+json\1/i.test(match[1])).map(match => match[2]);
+  for (const script of scripts) { try { visit(JSON.parse(script.trim())); } catch { /* Ignore malformed structured data. */ } }
+  const merchant = sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "noon" ? "Noon Egypt" : "Carrefour Egypt";
+  const cards = [];
+  for (const product of products) {
+    const title = htmlText(product.name || product.title || "");
+    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
+    const url = safeProductUrl(product.url || product.offers?.url || product.mainEntityOfPage?.["@id"] || "", sourceName);
+    const offerList = Array.isArray(product.offers) ? product.offers : [product.offers || {}];
+    const prices = offerList.filter(offer => !offer.priceCurrency || String(offer.priceCurrency).toUpperCase() === "EGP").map(offer => money(offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price)).filter(value => value !== null);
+    const price = prices.length ? Math.min(...prices) : null;
+    const oldPrice = money(product.offers?.highPrice || product.highPrice);
+    if (!url || !price) continue;
+    const deal = { merchant, title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
+    if (validateDeal(deal).ok) cards.push(deal);
+  }
+  return cards;
+}
 function extractCards(html, sourceName, query = "") {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
@@ -73,9 +101,11 @@ function extractCards(html, sourceName, query = "") {
     }
     return cards;
   }
+  let cards = extractStructuredCards(html, sourceName, query);
+  const structuredKeys = new Set(cards.map(deal => deal.url + "|" + deal.price));
   let chunks = [];
-  if (sourceName === "amazon") chunks = [...html.matchAll(/<div[^>]+data-component-type=["']s-search-result["'][\s\S]*?<\/div>\s*<\/div>/gi)].map(m=>m[0]);
-  else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["'][^"']*prd[^"']*["'][\s\S]*?<\/article>/gi)].map(m=>m[0]);
+  if (sourceName === "amazon") chunks = [...html.matchAll(/<div[^>]+data-component-type=["\x27]s-search-result["\x27][\s\S]*?<\/div>\s*<\/div>/gi)].map(m=>m[0]);
+  else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["\x27][^"\x27]*prd[^"\x27]*["\x27][\s\S]*?<\/article>/gi)].map(m=>m[0]);
   else chunks = [...html.matchAll(/<article[\s\S]*?<\/article>/gi)].map(m=>m[0]);
   for (const chunk of chunks) {
     const titleMatch = chunk.match(/<h2[^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/h2>/i) || chunk.match(/(?:data-qa=["']product-name["'][^>]*>|class=["']name["'][^>]*>)([\s\S]*?)<\//i);
@@ -91,7 +121,11 @@ function extractCards(html, sourceName, query = "") {
     const oldPrice = money(htmlText(oldMatch?.[1] || ""));
     if (!url || !price) continue;
     const deal = { merchant: sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : "Noon Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
-    if (validateDeal(deal).ok) cards.push(deal);
+    if (validateDeal(deal).ok) {
+      const key = deal.url + "|" + deal.price;
+      if (!structuredKeys.has(key)) cards.push(deal);
+      structuredKeys.add(key);
+    }
   }
   return cards;
 }

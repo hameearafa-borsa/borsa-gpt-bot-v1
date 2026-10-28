@@ -18,7 +18,7 @@ assert.match(body, /type: "all_private_chats"/, "settings and service commands m
 assert.match(body, /type: "all_group_chats"/, "group service commands must remain scoped to groups");
 assert.match(body, /all_chat_administrators/, "legacy all-admin command scope must be cleared so it cannot override the group menu");
 assert.match(body, /type: "chat_administrators"/, "legacy per-group administrator command scopes must be cleared");
-assert.match(body, /type: "chat_member"/, "legacy per-owner private command scopes must be cleared");
+assert.match(body, /private_chat:\$\{userId\}.*type: "chat"/, "legacy private-chat command overrides must be cleared with a valid Telegram scope");
 assert.match(body, /SELECT chat_id FROM authorized_chats/, "legacy per-chat command overrides must be discovered from configured groups");
 assert.match(body, /COMMAND_MENU_CLEAR\]/, "scope cleanup should be visible in startup logs");
 assert.doesNotMatch(body, /command: "(panel|approvechat|claim|antispam|schedule|warn|inactive)"/);

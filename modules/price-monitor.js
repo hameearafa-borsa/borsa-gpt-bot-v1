@@ -145,13 +145,13 @@ async function observe({ pool, message, merchantId = null, registry }) {
       `INSERT INTO price_observations
        (merchant_id,price_kind,package_sale_price,source_chat_id,source_message_id,source_user_id,raw_text,confidence,
         product_text,weight_g,volume_ml,pack_count,offer_extra_weight_g,decision,brand_key,package_type,product_identity_key,change_type,
-        listed_base_price,explicit_wholesale_label_price,price_selection_reason,needs_review)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22) RETURNING id`,
+        listed_base_price,explicit_wholesale_label_price,price_selection_reason,needs_review,consumer_price)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23) RETURNING id`,
       [merchantId, row.price_kind, row.package_sale_price, message.chatId || null, message.messageId || null,
        message.userId || null, row.raw_line, row.confidence, row.product_text, row.weight_g, row.volume_ml,
        row.pack_count, row.offer_extra_weight_g, row.decision, row.brand_key, row.package_type,
        row.product_identity_key, row.change_type, row.listed_base_price ?? null,
-       row.explicit_wholesale_label_price ?? null, row.price_selection_reason ?? null, Boolean(row.needs_review)]
+       row.explicit_wholesale_label_price ?? null, row.price_selection_reason ?? null, Boolean(row.needs_review), row.consumer_price ?? null]
     );
     savedRows.push({ id: inserted.rows[0].id, row });
   }

@@ -51,8 +51,12 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   const edited = await saveEditedReview({ db: editedDb, id: 42, reviewerId: 7, productText: "منظف مصحح", price: 23, weightG: 500 });
   assert.equal(edited.ok, true);
   assert.match(editedCalls[0].sql, /decision='accepted'/);
-  assert.match(editedCalls[1].sql, /status='accepted'/);
-  assert.match(editedCalls[1].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);
+  assert.match(editedCalls[0].sql, /needs_review=FALSE/);
+  assert.match(editedCalls[1].sql, /product_identity_key/);
+  assert.match(editedCalls[2].sql, /reviewed_price_products/);
+  assert.equal(editedCalls[2].params[1], "منظف مصحح", "manual correction must be remembered under the corrected product identity");
+  assert.match(editedCalls[3].sql, /status='accepted'/);
+  assert.match(editedCalls[3].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);
 
   // A missing queue row must fail the transaction rather than leave the
   // observation accepted while its review request is still unresolved.
@@ -68,6 +72,7 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   );
   const missingEditQueueDb = { async withTransaction(fn) { return fn({ async query(sql) {
     if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ id: 44 }] };
+    if (sql.includes("INSERT INTO reviewed_price_products")) return { rowCount: 1, rows: [] };
     if (sql.includes("UPDATE price_review_queue")) return { rowCount: 0, rows: [] };
     throw new Error("unexpected query");
   } }); } };

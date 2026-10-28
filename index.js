@@ -26,6 +26,7 @@ const priceReviewRecovery = require("./modules/price-review-recovery");
 const { saveMerchant } = require("./modules/merchant-intelligence");
 const chemical = require("./modules/chemical-assistant");
 const deals = require("./modules/deals");
+const adminPanel = require("./modules/admin-panel");
 
 
 
@@ -418,6 +419,17 @@ bot.on("text", async ctx => {
     }
     return;
   }
+  if (cmd === "panel" && m.chatType === "private") {
+    if (!isMaster(m.userId)) {
+      await ctx.reply("لوحة الخدمات الخاصة متاحة لمالك البوت فقط.");
+      return;
+    }
+    await ctx.reply(adminPanel.panelText(APP_VERSION, ai.providers || []), {
+      reply_markup: adminPanel.privatePanelKeyboard()
+    });
+    return;
+  }
+
   if (cmd === "settings" && ["private", "group", "supergroup"].includes(m.chatType)) {
     let permitted = false;
     if (m.chatType === "private") {
@@ -692,6 +704,47 @@ bot.on("text", async ctx => {
 
 });
 
+
+bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|health|diagnostics)$/, async ctx => {
+  const chatId = ctx.callbackQuery?.message?.chat?.id;
+  if (ctx.callbackQuery?.message?.chat?.type !== "private" || !isMaster(ctx.from?.id)) {
+    await ctx.answerCbQuery("هذه اللوحة متاحة لمالك البوت في الخاص فقط.", { show_alert: true }).catch(() => {});
+    return;
+  }
+
+  const section = ctx.match[1];
+  let body;
+  try {
+    if (section === "home") {
+      body = adminPanel.panelText(APP_VERSION, ai.providers || []);
+    } else if (section === "merchants") {
+      const count = await db.query("SELECT COUNT(*)::int AS count FROM merchants");
+      body = `🏪 قاعدة بيانات التجار\n\nعدد التجار المحفوظين: ${count.rows[0]?.count ?? 0}\n\nالحفظ تلقائي وليس ردًا ظاهرًا في المجموعة: يسجل البوت رقم الهاتف عندما تحتوي رسالة مؤهلة لمرصد الأسعار على رقم هاتف وسياق تجاري واضح مثل السعر أو الجنيه أو المنظفات. تُحفظ بيانات التاجر ومصدر الرسالة في PostgreSQL، وتُحدّث البيانات عند ظهور معلومات جديدة. الرسائل التي لا تستوفي الشروط لا تنشئ سجل تاجر.`;
+    } else if (section === "prices") {
+      const count = await db.query("SELECT COUNT(*)::int AS count FROM price_observations");
+      body = `💰 مرصد الأسعار\n\nإجمالي ملاحظات الأسعار المسجلة: ${count.rows[0]?.count ?? 0}\n\nيعمل المرصد بصمت، ويتجنب حفظ رسائل البوت نفسه، ويضع السجلات غير الواثقة في مسار المراجعة بدل اعتمادها تلقائيًا.`;
+    } else if (section === "chemical") {
+      body = "🧪 المساعد الكيميائي\n\nالخدمة متاحة عبر /chemical داخل المجموعة المعتمدة. يستخدم مزود Gemini أولًا ثم مزودي الاحتياط المضبوطين عند الحاجة.";
+    } else if (section === "lists") {
+      body = "📋 قوائم الشركات\n\nأرسل /قائمة متبوعًا بنص قائمة الأسعار. تحفظ الصفوف المقبولة كمرجع شركة منفصل، وتُبقى الصفوف غير الواضحة خارج المرجع المعتمد.";
+    } else if (section === "deals") {
+      body = `🛍️ العروض والنشرات\n\nالنشرات المجدولة: ${String(process.env.DEALS_SCHEDULER_ENABLED || "false").toLowerCase() === "true" ? "مفعلة حسب إعداد البيئة" : "متوقفة حسب إعداد البيئة"}. لا يطلق هذا الزر عملية scraping مدفوعة.`;
+    } else if (section === "weather") {
+      body = `🌦️ الطقس\n\nخدمة الطقس متاحة عبر /weather. النشرة المجدولة: ${String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() === "false" ? "متوقفة" : "مفعلة حسب إعداد البيئة"}.`;
+    } else if (section === "reports") {
+      body = "📊 التقارير\n\nتظهر أحداث الحفظ والمراجعة والأخطاء في قناة السجل المشتركة، مع تجنب عرض رسائل حفظ تلقائية للأعضاء.";
+    } else if (section === "health") {
+      body = `🩺 حالة الخدمات\n\nاتصال قاعدة البيانات: ${db.pool ? "مهيأ" : "غير متاح"}\nمزودو الذكاء: ${(ai.providers || []).join("، ") || "لا يوجد مزود مضبوط"}\nالإصدار: ${APP_VERSION}`;
+    } else {
+      body = "📄 التشخيص\n\nالأخطاء والتقارير التشغيلية تُرسل إلى قناة السجل. راجع آخر تقارير السجل لتحديد أي مشكلة قبل النشر.";
+    }
+    await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() });
+    await ctx.answerCbQuery().catch(() => {});
+  } catch (error) {
+    await ctx.answerCbQuery("تعذر تحميل بيانات هذه الخدمة. راجع قناة السجل.", { show_alert: true }).catch(() => {});
+    await sendLog({ module: "admin-panel", stage: section, severity: "warn", status: "failed", details: { error: redactString(error?.message || "panel section failed") } }).catch(() => {});
+  }
+});
 
 bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
   if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !(await isPriceReviewer(ctx.telegram, ctx.from?.id))) {

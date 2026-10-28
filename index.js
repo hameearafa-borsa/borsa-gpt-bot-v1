@@ -125,9 +125,42 @@ async function isAuthorizedChat(chatId) {
 }
 
 async function configureCommandMenus() {
+  // Old builds installed narrower scopes that override all_private_chats/all_group_chats.
+  // Clear those legacy scopes first so Telegram can display the new service-only menus.
+  const failures = [];
+  const clearScope = async (name, scope) => {
+    try {
+      await bot.telegram.setMyCommands([], { scope });
+      console.log(`[COMMAND_MENU_CLEAR] scope=${name} status=ok`);
+    } catch (error) {
+      console.warn(`[COMMAND_MENU_CLEAR_FAILED] scope=${name} code=${error?.code || "unknown"} message=${redactString(error?.message || "Telegram API error")}`);
+      failures.push({ name: `clear:${name}`, error });
+    }
+  };
+  await clearScope("all_chat_administrators", { type: "all_chat_administrators" });
+
+  const owners = [...new Set([MASTER_ID, ...String(process.env.OWNER_ID || "")
+    .split(",").map(value => Number(value.trim())).filter(value => Number.isSafeInteger(value) && value > 0)])];
+  for (const userId of owners) {
+    await clearScope(`private_chat:${userId}`, { type: "chat", chat_id: userId });
+    await clearScope(`private_member:${userId}`, { type: "chat_member", chat_id: userId, user_id: userId });
+  }
+
+  // Clear per-chat and per-chat-administrator overrides left by older builds.
+  try {
+    const groups = await db.query("SELECT chat_id FROM authorized_chats");
+    for (const row of groups.rows || []) {
+      const chatId = Number(row.chat_id);
+      if (!Number.isSafeInteger(chatId) || chatId >= 0) continue;
+      await clearScope(`group_chat:${chatId}`, { type: "chat", chat_id: chatId });
+      await clearScope(`group_admins:${chatId}`, { type: "chat_administrators", chat_id: chatId });
+    }
+  } catch (error) {
+    console.warn(`[COMMAND_MENU_LEGACY_SCOPE_DISCOVERY_FAILED] message=${redactString(error?.message || "database query failed")}`);
+    failures.push({ name: "clear:legacy_group_scopes", error });
+  }
+
   // Keep group menus service-only to avoid competing with GroupHelpBot.
-  // Attempt each scope independently: one Telegram API failure must not prevent
-  // the remaining command menus from being updated.
   const menus = [
     ["default", [], { type: "default" }],
     ["private", [
@@ -144,7 +177,6 @@ async function configureCommandMenus() {
       { command: "pricelist", description: "قائمة أسعار الشركات" }
     ], { type: "all_group_chats" }]
   ];
-  const failures = [];
   for (const [name, commands, scope] of menus) {
     try {
       await bot.telegram.setMyCommands(commands, { scope });

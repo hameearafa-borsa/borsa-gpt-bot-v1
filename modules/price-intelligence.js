@@ -175,7 +175,10 @@ function parseInvoiceTable(text) {
 
   const rows = [];
   let current = [];
-  let inRows = false;
+  // Header labels may be printed on separate lines in copied/OCR invoices.
+  // Once the whole document confirms the invoice schema, begin row parsing
+  // immediately and skip the individual header lines below.
+  let inRows = hasInvoiceHeader;
   let section = null;
   const amountLine = /^(?:ج\s*)?([\d,]+(?:\.\d{1,2})?)(?:\s*(?:جنيه|ج|egp))?$/iu;
   const flush = (amountText) => {

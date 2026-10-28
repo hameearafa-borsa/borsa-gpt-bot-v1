@@ -168,6 +168,17 @@ async function configureCommandMenus() {
       if (!Number.isSafeInteger(chatId) || chatId >= 0) continue;
       await clearScope(`group_chat:${chatId}`, { type: "chat", chat_id: chatId });
       await clearScope(`group_admins:${chatId}`, { type: "chat_administrators", chat_id: chatId });
+      // A group creator may also have a stale private-chat override from older builds.
+      try {
+        const admins = await bot.telegram.getChatAdministrators(chatId);
+        const creatorId = Number(admins.find(member => member.status === "creator")?.user?.id);
+        if (Number.isSafeInteger(creatorId) && creatorId > 0 && !owners.includes(creatorId)) {
+          owners.push(creatorId);
+          await clearScope(`private_chat:${creatorId}`, { type: "chat", chat_id: creatorId });
+        }
+      } catch (error) {
+        console.warn(`[COMMAND_MENU_OWNER_DISCOVERY_FAILED] chat=${chatId} code=${error?.code || "unknown"}`);
+      }
     }
   } catch (error) {
     console.warn(`[COMMAND_MENU_LEGACY_SCOPE_DISCOVERY_FAILED] message=${redactString(error?.message || "database query failed")}`);

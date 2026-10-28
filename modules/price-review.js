@@ -2,6 +2,7 @@
 
 const crypto = require("node:crypto");
 const { normalizeArabic } = require("../core/normalization");
+const { productIdentityKey } = require("./price-intelligence");
 
 function identityKey(row) {
   const numberKey = value => value == null || value === "" ? "" : (Number.isFinite(Number(value)) ? String(Number(value)) : "");
@@ -63,17 +64,38 @@ async function saveEditedReview({ db, id, reviewerId, productText, price, weight
     const result = await client.query(
       `UPDATE price_observations SET product_text=$1, package_sale_price=$2, price_kind='wholesale',
        weight_g=$3, volume_ml=$4, pack_count=$5, confidence=1, decision='accepted',
-       reviewed_by=$6, reviewed_at=NOW(), review_reason='manually_corrected'
-       WHERE id=$7 AND decision='pending' RETURNING id`,
+       reviewed_by=$6, reviewed_at=NOW(), review_reason='manually_corrected',
+       price_selection_reason='manually_corrected', needs_review=FALSE
+       WHERE id=$7 AND decision='pending'
+       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, package_type, offer_extra_weight_g, price_kind`,
       [productText, price, weightG, volumeMl, packCount, reviewerId, id]
     );
     if (!result.rowCount) return { ok: false, reason: "already_resolved" };
+    // Rebuild the canonical history identity from the corrected fields. Otherwise
+    // future prices could be attached to the pre-edit product/weight identity.
+    const row = {
+      ...result.rows[0], product_text: productText, package_sale_price: price,
+      price_kind: "wholesale", weight_g: weightG, volume_ml: volumeMl, pack_count: packCount
+    };
+    const productKey = productIdentityKey(row);
+    await client.query(
+      "UPDATE price_observations SET product_identity_key=$1 WHERE id=$2",
+      [productKey, id]
+    );
+    // A human-reviewed correction is an approval decision too: remember the
+    // corrected identity so future clear observations do not trigger review again.
+    await client.query(
+      `INSERT INTO reviewed_price_products(identity_key, product_text, weight_g, volume_ml, pack_count, brand_key, approved_by)
+       VALUES($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT(identity_key) DO UPDATE SET approved_by=EXCLUDED.approved_by, approved_at=NOW()`,
+      [identityKey(row), productText, weightG, volumeMl, packCount, row.brand_key || null, reviewerId]
+    );
     const queued = await client.query(
       "UPDATE price_review_queue SET status='accepted', reviewed_by=$1, reviewed_at=NOW(), notification_claim_token=NULL, notification_claimed_at=NULL WHERE observation_id=$2 AND status='pending' RETURNING id",
       [reviewerId, id]
     );
     if (!queued.rowCount) throw new Error("price_review_queue_missing_or_resolved");
-    return { ok: true };
+    return { ok: true, product_identity_key: productKey };
   });
 }
 module.exports = { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEditedReview };

@@ -10,7 +10,7 @@ const oxyRows = parseInvoiceTable(oxy);
 const bahiRows = parseStructuredPriceTable(bahi);
 
 assert.equal(oxyRows.length, 63, "Oxy: every product row should be parsed");
-assert.equal(bahiRows.length, 48, "Bahi ASC2: every product row should be parsed");
+assert.equal(bahiRows.length, 49, "Bahi ASC2: every product row should be parsed");
 assert.ok(oxyRows.every(r => r.trusted_catalog_row && !r.needs_review && r.price_kind === "wholesale"));
 assert.ok(bahiRows.every(r => r.trusted_catalog_row && !r.needs_review && r.price_kind === "wholesale"));
 

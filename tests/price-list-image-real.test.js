@@ -25,8 +25,8 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     "explicit carton wording should be retained as carton pricing");
   assert.ok(review.some(row => /جلو 40جم/.test(row.raw_line) && row.unit_price_type == null),
     "unmarked rows must be reviewed instead of assuming a piece or carton price");
-  assert.ok(review.some(row => /لوكس 115جم/.test(row.raw_line) && row.unit_price_type == null),
-    "unit ambiguity in the soap section must not be inherited from unrelated piece-marked sections");
+  assert.ok(accepted.some(row => /لوكس 115جم/.test(row.raw_line) && row.unit_price_type === "بالكرتونة"),
+    "the carton offer note in the soap section should establish carton pricing for following soap rows");
   assert.ok(review.some(row => /205 ح/.test(row.raw_line)), "ambiguous currency suffix must be sent to review, not silently accepted");
 
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });

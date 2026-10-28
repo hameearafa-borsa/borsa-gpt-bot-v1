@@ -192,6 +192,29 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(savedQueries[2].sql.includes("offer_extra_weight_g"));
   assert.equal(savedQueries[2].params[13], "accepted");
 
+  // Unit type must survive the full monitor -> database INSERT path.
+  let pieceInsertParams = null;
+  const piecePool = {
+    async query(sql, params) {
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) {
+        pieceInsertParams = params;
+        return { rows: [{ id: 92 }], rowCount: 1 };
+      }
+      throw new Error("unexpected query in piece-price persistence test");
+    }
+  };
+  const pieceResult = await observe({
+    pool: piecePool,
+    message: { chatId: -100123, messageId: 457, userId: 789, text: "سيجنال 120مل ق 42.33 ج" },
+    registry
+  });
+  assert.equal(pieceResult.saved, 1);
+  assert.equal(pieceInsertParams[23], "بالقطعة",
+    "unit_price_type must be persisted in the new final INSERT parameter");
+
   // Historical accepted observations are compared before insertion, without posting a chat message.
   let historyInsertParams = null;
   const historyPool = {

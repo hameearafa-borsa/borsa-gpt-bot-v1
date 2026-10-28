@@ -99,7 +99,7 @@ function extractPriceCandidates(text) {
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
 
     const normalized = normalizeArabic(line);
-    const parsedLine = toAsciiDigits(line);
+    const parsedLine = toAsciiDigits(line).replace(/\*\*/g, "").replace(/[\u200B-\u200F\uFEFF]/g, "");
     const stripped = stripQuantityTokens(parsedLine);
     const numbers = numericPriceTokens(stripped);
 

@@ -177,11 +177,6 @@ assert.ok(unileverSoapOffer.raw_line.includes("قطعة صابون هدية"),
   "the original source row must preserve the promotional gift wording");
 assert.doesNotMatch(unileverSoapOffer.product, /العرض على الكرتونة|قطعة صابون هدية/u,
   "a carton promotion note should not contaminate the product identity");
-const unileverRowsThroughCommand = await extractList(null, unileverOctoberText);
-assert.equal(unileverRowsThroughCommand.items.length, 66,
-  "the /قائمة deterministic path must preserve the complete Unilever source list without an AI dependency");
-assert.equal(unileverRowsThroughCommand.method, "deterministic");
-
 // Historical comparison preserves product identity when only weight/offer changes.
 const historyBase = {
   brand_key: "pearl",
@@ -230,6 +225,11 @@ assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوت
       };
     }
   };
+  const unileverRowsThroughCommand = await extractList(null, unileverOctoberText);
+  assert.equal(unileverRowsThroughCommand.items.length, 66,
+    "the /قائمة deterministic path must preserve the complete Unilever source list without an AI dependency");
+  assert.equal(unileverRowsThroughCommand.method, "deterministic");
+
   const protectedPearlList = await extractList(aiReturnsWrongNumbers, pearlOctober);
   assert.equal(protectedPearlList.items.length, 1);
   assert.equal(protectedPearlList.items[0].package_sale_price, 505.31,

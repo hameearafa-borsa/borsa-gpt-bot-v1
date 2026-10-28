@@ -13,14 +13,15 @@ async function successCase() {
     }
   };
   const result = await runMigrations({ db, rootDir: "/project", readFile: (file, encoding) => { assert.equal(encoding, "utf8"); calls.push({ read: file }); return `-- ${path.basename(file)}`; } });
-  assert.equal(result.applied, 20);
+  assert.equal(result.applied, 21);
   assert.ok(MIGRATION_FILES.includes("016_price_observation_history.sql"), "price-observation history migration must run");
   assert.ok(MIGRATION_FILES.includes("017_price_observation_price_columns.sql"), "price-column audit migration must run");
   assert.ok(MIGRATION_FILES.includes("018_price_observation_consumer_price.sql"), "consumer-price persistence migration must run");
+  assert.ok(MIGRATION_FILES.includes("019_reviewed_product_pack_identity.sql"), "reviewed product package identity migration must run");
   assert.deepEqual(result.files, [...MIGRATION_FILES]);
   assert.equal(calls[0], "BEGIN");
   assert.deepEqual(calls[1], { sql: "SELECT pg_advisory_xact_lock($1)", params: [MIGRATION_LOCK_KEY] });
-  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 21, "lock plus 20 migration statements should run in one transaction");
+  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 22, "lock plus 21 migration statements should run in one transaction");
   assert.equal(calls.at(-1), "COMMIT");
   assert.ok(calls.indexOf("COMMIT") > calls.findIndex(x => x?.read?.endsWith(MIGRATION_FILES.at(-1))));
 }

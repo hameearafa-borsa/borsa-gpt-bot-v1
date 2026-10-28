@@ -167,15 +167,19 @@ const unileverOctoberText = fs.readFileSync(path.join(__dirname, "fixtures-unile
 const unileverRows = deterministicList(unileverOctoberText);
 assert.equal(unileverRows.length, 66, "the actual Unilever October source should preserve all 66 price rows");
 
-assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 65,
+assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 66,
   "unmarked rows in a named company wholesale catalog should inherit carton pricing");
-assert.equal(unileverRows.filter(row => row.decision === "review").length, 1,
-  "only the row with a suspicious currency marker should require review");
+assert.equal(unileverRows.filter(row => row.decision === "review").length, 0,
+  "the contextual currency typo should be accepted only because adjacent price rows use ج");
 assert.equal(unileverRows.filter(row => row.decision === "skipped").length, 0,
   "no priced Unilever row should be silently discarded");
 const unileverCurrencyTypo = unileverRows.find(row => row.raw_line.includes("تريزيمي بلسم 600 مل"));
-assert.equal(unileverCurrencyTypo?.decision, "review",
-  "a suspicious currency marker must remain reviewable rather than being auto-approved");
+assert.equal(unileverCurrencyTypo?.decision, "accepted",
+  "the trailing ح should be interpreted as ج when an adjacent priced row confirms the currency convention");
+assert.equal(unileverCurrencyTypo?.package_sale_price, 205, "the numeric price must remain unchanged");
+assert.equal(unileverCurrencyTypo?.raw_line, "تريزيمي بلسم 600 مل ق 205 ح", "retain the original source text for audit");
+assert.equal(deterministicList("أسعار شركة يونيليفر:\nمنتج تجريبي 205 ح").find(row => row.raw_line.includes("205 ح"))?.decision, "review",
+  "a trailing ح without adjacent price evidence must remain in review");
 const unileverUnclearUnitRows = unileverRows.filter(row => row.category === "منتجات جلو و فازلين");
 assert.equal(unileverUnclearUnitRows.length, 8);
 assert.ok(unileverUnclearUnitRows.every(row => row.decision === "accepted" && row.unit_price_type === "بالكرتونة"),

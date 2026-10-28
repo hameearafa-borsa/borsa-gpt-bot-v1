@@ -378,7 +378,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 
   // Multi-product context can infer wholesale classification, but must not
   // auto-approve a brand-new identity without registry or prior approval.
-  const contextual = extractPriceCandidates("منظف ألف 500 جم 22 ج\\nمنظف باء 1 لتر 35 ج");
+  const contextual = extractPriceCandidates("منظف ألف 500 جم 22 ج\nمنظف باء 1 لتر 35 ج");
   assert.ok(contextual.length >= 2);
   const contextPool = {
     async query(sql) {
@@ -391,7 +391,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   };
   const contextualObserved = await observe({
     pool: contextPool,
-    message: { chatId: -100123, messageId: 464, text: "منظف ألف 500 جم 22 ج\\nمنظف باء 1 لتر 35 ج" },
+    message: { chatId: -100123, messageId: 464, text: "منظف ألف 500 جم 22 ج\nمنظف باء 1 لتر 35 ج" },
     registry: []
   });
   assert.ok(contextualObserved.accepted.every(row => row.price_kind === "wholesale"),

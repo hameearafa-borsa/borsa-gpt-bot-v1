@@ -220,6 +220,31 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(historical.savedRows[0].row.change_type, "price_change");
   assert.equal(historyInsertParams[17], "price_change");
 
+  // A known carton count can enrich a later observation that omits it, without being invented from the current message.
+  let inheritedInsertParams = null;
+  const inheritedCountPool = {
+    async query(sql) {
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [{
+        product_identity_key: "prior-product", price_kind: "wholesale", product_text: "بريكس ارضيات",
+        package_sale_price: 216, weight_g: 25, volume_ml: null, pack_count: 12,
+        offer_extra_weight_g: null, package_type: null, brand_key: null
+      }], rowCount: 1 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 99 }], rowCount: 1 };
+      throw new Error("unexpected inherited-count query");
+    }
+  };
+  const inheritedCount = await observe({
+    pool: inheritedCountPool,
+    message: { chatId: -100123, messageId: 465, text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" },
+    registry
+  });
+  assert.equal(inheritedCount.saved, 1);
+  assert.equal(inheritedCount.savedRows[0].row.pack_count, 12);
+  assert.equal(inheritedCount.savedRows[0].row.pack_count_inferred, true);
+  assert.equal(inheritedCount.savedRows[0].row.piece_sale_price, 18.75 / 12);
+
   // A plausible price without an explicit wholesale marker or registry match
   // is retained as pending review data instead of being silently discarded.
   const uncertain = await observe({

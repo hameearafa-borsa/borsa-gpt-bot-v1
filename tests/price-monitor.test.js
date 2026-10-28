@@ -13,6 +13,10 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(isEligibleMessage({ ...base, isLogChannel: true, isCommand: false, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: true, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: false, ownMessage: true }), false);
+  const oxyTextCatalog = fs.readFileSync(path.join(__dirname, "..", "قائمة أسعار أوكسي.txt"), "utf8");
+  const bahiTextCatalog = fs.readFileSync(path.join(__dirname, "..", "قائمة أسعار باهي.txt"), "utf8");
+  assert.equal(parseInvoiceTable(oxyTextCatalog).length, 63, "all Oxy text-catalog product rows must be parsed");
+  assert.equal(parseStructuredPriceTable(bahiTextCatalog).length, 48, "all Bahi ASC2 product rows must be parsed");
   const unileverList = fs.readFileSync(path.join(__dirname, "fixtures-unilever-oct-2026.txt"), "utf8");
   assert.equal(isBulkPriceList(unileverList), true, "a long Unilever price list is a catalog, not one ordinary price observation");
   assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,

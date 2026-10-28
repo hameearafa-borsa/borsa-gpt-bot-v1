@@ -14,4 +14,14 @@ assert.match(source, /if \(cmd === "weather" \|\| cmd === "الطقس"\)/, "weat
 assert.match(source, /if \(isChemicalCommand\)/, "chemical assistant must remain");
 assert.match(source, /isAuthorizedChat\(m\.chatId\)/, "approved-group access gate must remain independent of moderation");
 
+const settingsHandlerStart = source.indexOf('if (cmd === "settings" && ["private", "group", "supergroup"].includes(m.chatType))');
+const approvedGroupGate = source.indexOf('if (m.chatType !== "private" && !(await isAuthorizedChat(m.chatId))) return;', settingsHandlerStart);
+assert.ok(settingsHandlerStart >= 0 && approvedGroupGate > settingsHandlerStart,
+  "/settings must be handled before the general approved-group service gate");
+const settingsHandler = source.slice(settingsHandlerStart, approvedGroupGate);
+assert.ok(settingsHandler.includes("permitted = isMaster(m.userId)"),
+  "private settings must be restricted to the bot owner");
+assert.ok(settingsHandler.includes("permitted = await canManage(ctx.telegram, m.chatId, m.userId)"),
+  "group settings must be restricted to the bot owner or group creator");
+
 console.log("Borsa runtime surface and settings authorization test: OK");

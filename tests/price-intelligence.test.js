@@ -154,6 +154,21 @@ assert.equal(pearlListRows[3].consumer_price, 630);
 const unileverOctoberText = fs.readFileSync(path.join(__dirname, "fixtures-unilever-oct-2026.txt"), "utf8");
 const unileverRows = deterministicList(unileverOctoberText);
 assert.equal(unileverRows.length, 66, "the actual Unilever October source should preserve all 66 price rows");
+
+assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 57,
+  "clear per-piece and carton rows should be accepted deterministically");
+assert.equal(unileverRows.filter(row => row.decision === "review").length, 9,
+  "only eight rows with unknown unit pricing and one suspicious currency marker should require review");
+assert.equal(unileverRows.filter(row => row.decision === "skipped").length, 0,
+  "no priced Unilever row should be silently discarded");
+const unileverCurrencyTypo = unileverRows.find(row => row.raw_line.includes("تريزيمي بلسم 600 مل"));
+assert.equal(unileverCurrencyTypo?.decision, "review",
+  "a suspicious currency marker must remain reviewable rather than being auto-approved");
+const unileverUnclearUnitRows = unileverRows.filter(row => row.category === "منتجات جلو و فازلين");
+assert.equal(unileverUnclearUnitRows.length, 8);
+assert.ok(unileverUnclearUnitRows.every(row => row.decision === "review"),
+  "rows without a per-piece marker or carton context must remain reviewable");
+
 assert.ok(unileverRows.every(row => row.raw_line && row.product && row.package_sale_price > 0),
   "every Unilever source row must preserve its raw text, product identity, and positive price");
 assert.equal(parseListMetadata(unileverOctoberText).company, "شركة يونيليفر");

@@ -9,6 +9,11 @@ function identityKey(row) {
   // Reviewer memory follows the product and size, not a temporary carton count that may change in promotions.
   const productName = String(row.product_text || "").split(/\s+[—–-]\s+(?=(?:عرض|العرض|شراء))/u)[0];
   const parts = [normalizeArabic(productName), numberKey(row.weight_g), numberKey(row.volume_ml), row.brand_key || ""];
+  // Carton count may change across promotions, but package form and free-extra
+  // weight define distinct product offers and must not share reviewer memory.
+  const hasExtraWeight = row.offer_extra_weight_g != null && row.offer_extra_weight_g !== "";
+  const packageType = String(row.package_type || "").trim();
+  if (hasExtraWeight || packageType) parts.push(numberKey(row.offer_extra_weight_g), packageType);
   return crypto.createHash("sha256").update(parts.join("|")).digest("hex");
 }
 
@@ -35,17 +40,18 @@ async function resolveReview({ db, id, action, reviewerId }) {
       `UPDATE price_observations SET decision=$1, reviewed_by=$2, reviewed_at=NOW(),
        review_reason=CASE WHEN $3='new' THEN 'new_product_approved' ELSE review_reason END
        WHERE id=$4 AND decision='pending'
-       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, package_sale_price, price_kind`,
+       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, offer_extra_weight_g, package_type, package_sale_price, price_kind`,
       [decision, reviewerId, action, id]
     );
     if (!result.rowCount) return { ok: false, reason: "already_resolved" };
     const row = result.rows[0];
     if (action === "new") {
       await client.query(
-        `INSERT INTO reviewed_price_products(identity_key, product_text, weight_g, volume_ml, pack_count, brand_key, approved_by)
-         VALUES($1,$2,$3,$4,$5,$6,$7)
-         ON CONFLICT(identity_key) DO UPDATE SET approved_by=EXCLUDED.approved_by, approved_at=NOW()`,
-        [identityKey(row), row.product_text, row.weight_g, row.volume_ml, row.pack_count, row.brand_key, reviewerId]
+        `INSERT INTO reviewed_price_products(identity_key, product_text, weight_g, volume_ml, pack_count, brand_key, approved_by, offer_extra_weight_g, package_type)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+         ON CONFLICT(identity_key) DO UPDATE SET approved_by=EXCLUDED.approved_by, approved_at=NOW(),
+           offer_extra_weight_g=EXCLUDED.offer_extra_weight_g, package_type=EXCLUDED.package_type`,
+        [identityKey(row), row.product_text, row.weight_g, row.volume_ml, row.pack_count, row.brand_key, reviewerId, row.offer_extra_weight_g ?? null, row.package_type ?? null]
       );
     }
     const queued = await client.query(
@@ -85,10 +91,11 @@ async function saveEditedReview({ db, id, reviewerId, productText, price, weight
     // A human-reviewed correction is an approval decision too: remember the
     // corrected identity so future clear observations do not trigger review again.
     await client.query(
-      `INSERT INTO reviewed_price_products(identity_key, product_text, weight_g, volume_ml, pack_count, brand_key, approved_by)
-       VALUES($1,$2,$3,$4,$5,$6,$7)
-       ON CONFLICT(identity_key) DO UPDATE SET approved_by=EXCLUDED.approved_by, approved_at=NOW()`,
-      [identityKey(row), productText, weightG, volumeMl, packCount, row.brand_key || null, reviewerId]
+      `INSERT INTO reviewed_price_products(identity_key, product_text, weight_g, volume_ml, pack_count, brand_key, approved_by, offer_extra_weight_g, package_type)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       ON CONFLICT(identity_key) DO UPDATE SET approved_by=EXCLUDED.approved_by, approved_at=NOW(),
+         offer_extra_weight_g=EXCLUDED.offer_extra_weight_g, package_type=EXCLUDED.package_type`,
+      [identityKey(row), productText, weightG, volumeMl, packCount, row.brand_key || null, reviewerId, row.offer_extra_weight_g ?? null, row.package_type ?? null]
     );
     const queued = await client.query(
       "UPDATE price_review_queue SET status='accepted', reviewed_by=$1, reviewed_at=NOW(), notification_claim_token=NULL, notification_claimed_at=NULL WHERE observation_id=$2 AND status='pending' RETURNING id",

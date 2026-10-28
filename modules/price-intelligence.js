@@ -401,7 +401,10 @@ function productIdentityKey(row) {
   const stableName = doushVariant
     ? normalizedName
     : normalizeArabic(stripQuantityTokens(row?.product_text || ""));
-  return [String(row?.brand_key || ""), stableName, String(row?.price_kind || "")].join("|");
+  // Dimensions belong to identity: the same brand/name at 500 g and 1 kg, or in different carton counts, must not share one price history.
+  const dimensions = [row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g, row?.pack_count, row?.package_type]
+    .map(value => value == null || value === "" ? "" : String(value));
+  return [String(row?.brand_key || ""), stableName, String(row?.price_kind || ""), ...dimensions].join("|");
 }
 
 function classifyObservationChange(previous, current) {

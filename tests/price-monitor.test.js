@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { isOwnMessage, isEligibleMessage, isBulkPriceList, observe } = require("../modules/price-monitor");
 const registry = require("../data/product-registry.json");
-const { extractPriceCandidates } = require("../modules/price-intelligence");
+const { extractPriceCandidates, productIdentityKey } = require("../modules/price-intelligence");
 
 (async () => {
   const base = { chatType: "supergroup", text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" };
@@ -42,6 +42,11 @@ const { extractPriceCandidates } = require("../modules/price-intelligence");
     "the product-specific Doush shorthand must normalize to a 110-gram soap identity");
   assert.equal(invoiceAfterVatRows[1].weight_g, 110,
     "the Doush 110 shorthand must populate the weight field as 110 grams");
+  assert.notEqual(
+    productIdentityKey({ product_text: invoiceAfterVatRows[0].product_text, price_kind: invoiceAfterVatRows[0].price_kind }),
+    productIdentityKey({ product_text: invoiceAfterVatRows[1].product_text, price_kind: invoiceAfterVatRows[1].price_kind }),
+    "Doush 60 g and 110 g must have separate product identity keys and price histories"
+  );
   const arielPromoList = `اريال ٢ك يدوي ٤٩٠ج ٤ق
 اريال ١ك يدوي ٣٩٦ج ٦ق
 اريال ١.٥ك يدوي ٣٨٠ج ٤ق

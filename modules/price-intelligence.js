@@ -175,9 +175,20 @@ function extractPriceCandidates(text) {
     const normalizedCandidateName = normalizeArabic(candidateName);
     const meaningfulCandidateName = normalizedCandidateName.replace(/[^\p{L}\p{N}]/gu, "");
     const genericPackageOnly = /^(?:شكاره|شوال|كيس|ساشيه)$/iu.test(normalizedCandidateName);
-    const productText = meaningfulCandidateName.length >= 2 && !genericPackageOnly
+    let productText = meaningfulCandidateName.length >= 2 && !genericPackageOnly
       ? candidateName
       : [company, section, weightLabel].filter(Boolean).join(" ").trim();
+    let inferredWeightG = q?.grams ?? decimalAutomaticGrams;
+    // User-confirmed product-specific convention: in invoice rows, a bare
+    // number after "دوش" is the soap weight in grams (e.g. "دوش 60" => "دوش 60 جرام").
+    // Do not generalize this rule to other brands or products.
+    if (invoiceLabelledPrice != null) {
+      const doushWeight = productText.match(/^دوش\s+(\d{1,4})$/iu);
+      if (doushWeight) {
+        productText = `دوش ${doushWeight[1]} جرام`;
+        inferredWeightG = Number(doushWeight[1]);
+      }
+    }
     const normalizedProduct = normalizeArabic(productText);
     if (normalizedProduct.length < 2 || /^\d/.test(normalizedProduct)) continue;
 
@@ -194,7 +205,7 @@ function extractPriceCandidates(text) {
       explicit_wholesale_label_price: explicitWholesalePrice,
       consumer_price: consumerPrice,
       price_kind: priceKind,
-      weight_g: q?.grams ?? decimalAutomaticGrams,
+      weight_g: inferredWeightG,
       volume_ml: q?.milliliters ?? null,
       offer_extra_weight_g: extraWeightG,
       pack_count: packCount,

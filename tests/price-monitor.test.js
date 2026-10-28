@@ -47,8 +47,11 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 1,107.40
 كبسولات
 14 جرام 30 عبوة
-1,421.00`);
-  assert.equal(oxyInvoice.length, 4, "invoice parser should assemble multiline product descriptions and amount-only lines");
+1,421.00
+أوكسي منعم أقمشة
+1 لتر 6 زجاجة
+444.43`);
+  assert.equal(oxyInvoice.length, 5, "invoice parser should assemble multiline product descriptions and amount-only lines");
   assert.deepEqual(oxyInvoice.slice(0, 3).map(row => [row.product_text, row.pack_count, row.package_sale_price, row.weight_g, row.volume_ml]), [
     ["جوي 110 جرام 48 قطعة", 48, 628.64, 110, null],
     ["جوي هاندويش 250 ملل", null, 427.28, null, 250],
@@ -57,6 +60,10 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(oxyInvoice[3].product_text, "كبسولات 14 جرام 30 عبوة",
     "a row without a brand name must not inherit the previous row's brand");
   assert.equal(oxyInvoice[3].package_sale_price, 1421);
+  assert.equal(oxyInvoice[4].pack_count, 6, "bottle counts must be extracted, not confused with price or size");
+  assert.equal(oxyInvoice[4].volume_ml, 1000, "litre sizes must normalize to millilitres");
+  assert.equal(extractPriceCandidates("شاور جل ريفولي 1 لتر جملة 1,147.58")[0].package_sale_price, 1147.58,
+    "a thousands comma in a price must not be parsed as a decimal separator");
   assert.ok(oxyInvoice.every(row => row.needs_review && row.confidence < 0.8),
     "invoice-list rows must remain review candidates until validation rules are proven");
   assert.equal(extractPriceCandidates(`الصنف

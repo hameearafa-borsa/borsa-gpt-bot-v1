@@ -28,7 +28,7 @@ function normalizeArabic(value) {
 function parseNumber(value) {
   let s = toAsciiDigits(value).trim().replace(/جنيه|ج|egp/gi, "");
   // Distinguish thousands separators (1,147.58) from decimal commas (2,5).
-  s = /,\d{3}(?:\.|$)/.test(s) && s.includes(".") ? s.replace(/,/g, "") : s.replace(/,/g, ".");
+  s = /,\d{3}(?:\.|$)/.test(s) ? s.replace(/,/g, "") : s.replace(/,/g, ".");
   s = s.replace(/[^0-9.\-]/g, "");
   if (!s || (s.match(/\./g) || []).length > 1) return null;
   const n = Number(s);

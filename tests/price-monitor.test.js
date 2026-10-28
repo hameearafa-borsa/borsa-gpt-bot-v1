@@ -345,6 +345,42 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(pearlOctoberRows.every(row => row.price_kind === "wholesale" || row.context_inferred_price_kind),
     "the wholesale column context must be carried to rows whose wholesale label is absent without changing their amount");
 
+  // Verify the same full Pearl list persists every parsed field through the database write path.
+  const pearlPersistedParams = [];
+  const pearlDatabasePool = {
+    async query(sql, params) {
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) {
+        pearlPersistedParams.push(params);
+        return { rows: [{ id: 100 + pearlPersistedParams.length }], rowCount: 1 };
+      }
+      throw new Error("unexpected full Pearl persistence query");
+    }
+  };
+  const pearlPersisted = await observe({
+    pool: pearlDatabasePool,
+    message: { chatId: -100123, messageId: 464, userId: 789, text: pearlOctoberList },
+    registry
+  });
+  assert.equal(pearlPersisted.saved, 13, "all thirteen Pearl rows must reach persistence without losing rows for missing pack counts");
+  assert.deepEqual(pearlPersisted.savedRows.map(item => item.row.package_sale_price), [
+    487.40, 915.87, 716.63, 618.35, 432.84, 516.90, 395.85, 265.15,
+    176.29, 144.06, 135.49, 47.52, 75.95
+  ], "the database-bound observations must retain the selected wholesale price in every row");
+  assert.deepEqual(pearlPersisted.savedRows.map(item => item.row.consumer_price), [
+    525, 325, 200, 630, 450, 145, 110, 75, 25, 15, 10, 5, 5
+  ], "consumer prices must remain separately available on every persisted observation");
+  assert.deepEqual(pearlPersistedParams.map(params => params[22]), [
+    525, 325, 200, 630, 450, 145, 110, 75, 25, 15, 10, 5, 5
+  ], "consumer prices must be passed to the dedicated database column for every row");
+  assert.equal(pearlPersistedParams[3][15], "sack", "the 10 kg sack type must be persisted");
+  assert.equal(pearlPersistedParams[3][9], 10000, "the 10 kg sack weight must be persisted");
+  assert.equal(pearlPersistedParams[3][11], null, "unknown sack unit count must stay NULL in the database");
+  assert.ok(pearlPersistedParams.every(params => params[13] === "pending"),
+    "unreviewed catalog rows must remain pending rather than being silently auto-approved");
+
   // Re-processing the same Telegram message row must not create a second observation.
   let duplicateChecks = 0;
   let duplicateInserts = 0;

@@ -123,7 +123,8 @@ function formatEconomicBulletin(prices) {
     minimumFractionDigits: digits, maximumFractionDigits: digits
   }).format(value);
   return [
-    `🛢️ خام برنت: $${money(prices.brentUsd)} دولار`,
+    "🤖 الخدمة مقدمة بتقنيات GPT",
+    `🛢️ خام برنت: ${money(prices.brentUsd)} دولار`,
     `💵 الدولار: ${money(prices.usdEgp, 2)} جنيه مصري`,
     `🪙 الجنيه الذهب: ${money(prices.goldPoundEgp, 0)} جنيه مصري`,
     `🥇 جرام الذهب عيار 21: ${money(prices.gold21Egp, 2)} جنيه مصري`

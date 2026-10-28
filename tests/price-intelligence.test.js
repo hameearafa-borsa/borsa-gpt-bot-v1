@@ -1,5 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const { extractPriceCandidates, commercialMetrics, parsePackageType, productIdentityKey, classifyObservationChange } = require("../modules/price-intelligence");
 const { normalizeArabic, parseWeightGrams } = require("../core/normalization");
 
@@ -147,6 +149,38 @@ assert.equal(pearlListRows[0].consumer_price, 525);
 assert.equal(pearlListRows[0].weight_g, 9000);
 assert.equal(pearlListRows[3].package_sale_price, 618.35);
 assert.equal(pearlListRows[3].consumer_price, 630);
+
+
+const unileverOctoberText = fs.readFileSync(path.join(__dirname, "fixtures-unilever-oct-2026.txt"), "utf8");
+const unileverRows = deterministicList(unileverOctoberText);
+assert.equal(unileverRows.length, 66, "the actual Unilever October source should preserve all 66 price rows");
+assert.ok(unileverRows.every(row => row.raw_line && row.product && row.package_sale_price > 0),
+  "every Unilever source row must preserve its raw text, product identity, and positive price");
+assert.equal(parseListMetadata(unileverOctoberText).company, "شركة يونيليفر");
+assert.equal(parseListMetadata(unileverOctoberText).priceType, "أسعار جملة");
+assert.deepEqual(
+  [unileverRows[0].product, unileverRows[0].package_sale_price, unileverRows[0].unit_price_type],
+  ["سيجنال 120مل", 42.33, "بالقطعة"],
+  "a standalone ق marks a per-piece price and must not be part of the product name"
+);
+const unileverCartonRow = unileverRows.find(row => row.raw_line.includes("كلير أكياس 5 مل الكرتونة"));
+assert.ok(unileverCartonRow, "the explicit Clear carton row must be retained");
+assert.equal(unileverCartonRow.package_sale_price, 346);
+assert.equal(unileverCartonRow.unit_price_type, "بالكرتونة",
+  "the explicit carton price must not be misclassified as a per-piece price");
+const unileverSoapOffer = unileverRows.find(row => row.raw_line.includes("كامي 110جم 1104"));
+assert.ok(unileverSoapOffer, "the carton soap offer row must be retained");
+assert.equal(unileverSoapOffer.package_sale_price, 1104);
+assert.equal(unileverSoapOffer.unit_price_type, "بالكرتونة",
+  "the carton offer context must be carried to the soap price");
+assert.ok(unileverSoapOffer.raw_line.includes("قطعة صابون هدية"),
+  "the original source row must preserve the promotional gift wording");
+assert.doesNotMatch(unileverSoapOffer.product, /العرض على الكرتونة|قطعة صابون هدية/u,
+  "a carton promotion note should not contaminate the product identity");
+const unileverRowsThroughCommand = await extractList(null, unileverOctoberText);
+assert.equal(unileverRowsThroughCommand.items.length, 66,
+  "the /قائمة deterministic path must preserve the complete Unilever source list without an AI dependency");
+assert.equal(unileverRowsThroughCommand.method, "deterministic");
 
 // Historical comparison preserves product identity when only weight/offer changes.
 const historyBase = {

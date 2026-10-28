@@ -69,7 +69,12 @@ async function observe({ pool, message, merchantId = null, registry }) {
       );
       previouslyReviewed = known.rowCount > 0;
     }
-    row.confidence = Math.min(candidate.confidence, match.matched || previouslyReviewed ? 0.98 : 0.45);
+    // Rows parsed from the two explicitly recognized, pre-interpreted catalog formats
+    // have deterministic column semantics and are trusted as complete wholesale observations.
+    // Ordinary chat messages still require registry/reviewer evidence as before.
+    row.confidence = candidate.trusted_catalog_row
+      ? candidate.confidence
+      : Math.min(candidate.confidence, match.matched || previouslyReviewed ? 0.98 : 0.45);
     row.decision = row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
     const fp = fingerprint(row);
     if (seen.has(fp)) continue;

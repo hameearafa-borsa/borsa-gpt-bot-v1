@@ -108,6 +108,14 @@ assert.equal(
   "extra millilitres must not be compared as the base product even when the offer label is missing"
 );
 assert.equal(
+  compareReferencePrice(
+    { ...cartonReference, product_label: "كامي 110جم", raw_line: "كامي 110جم 1104 ج العرض على الكرتونة قطعة صابون هدية" },
+    cartonObservation
+  ).reason,
+  "reference_offer_needs_structured_metadata",
+  "a carton with a free soap gift must not be compared as the plain carton"
+);
+assert.equal(
   compareReferencePrice(cartonReference, { ...cartonObservation, offer_extra_weight_g: 300 }).reason,
   "observation_offer_mismatch",
   "an observed extra-weight offer must not be compared to a base reference"

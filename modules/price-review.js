@@ -6,7 +6,8 @@ const { normalizeArabic } = require("../core/normalization");
 function identityKey(row) {
   const numberKey = value => value == null || value === "" ? "" : (Number.isFinite(Number(value)) ? String(Number(value)) : "");
   // Reviewer memory follows the product and size, not a temporary carton count that may change in promotions.
-  const parts = [normalizeArabic(row.product_text || ""), numberKey(row.weight_g), numberKey(row.volume_ml), row.brand_key || ""];
+  const productName = String(row.product_text || "").split(/\s+[—–-]\s+(?=(?:عرض|العرض|شراء))/u)[0];
+  const parts = [normalizeArabic(productName), numberKey(row.weight_g), numberKey(row.volume_ml), row.brand_key || ""];
   return crypto.createHash("sha256").update(parts.join("|")).digest("hex");
 }
 

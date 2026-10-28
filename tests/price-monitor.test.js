@@ -162,6 +162,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const pool = {
     async query(sql, params) {
       savedQueries.push({ sql, params });
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 91 }], rowCount: 1 };
@@ -224,7 +225,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(uncertain.saved, 1);
   assert.equal(uncertain.savedRows[0].row.decision, "pending");
   assert.ok(uncertain.savedRows[0].row.confidence < 0.8);
-  assert.equal(savedQueries.length, 5);
+  assert.equal(savedQueries.length, 6);
 
   const noDb = await observe({ message: { text: base.text }, registry });
   assert.equal(noDb.saved, 0);

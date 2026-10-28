@@ -57,7 +57,7 @@ assert.equal(fieldRows[5].confidence, 0.72);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
 assert.equal(fieldRows[6].product_text, "سيجنال", "standalone ق is a per-piece marker, not part of the product name");
 assert.deepEqual(extractPriceCandidates("شهر أكتوبر 2026"), [], "catalog month headers must not become price candidates");
-const { deterministicList, buildListPrompt, parseListMetadata } = require("../modules/price-list");
+const { deterministicList, buildListPrompt, parseListMetadata, extractList } = require("../modules/price-list");
 const conversationalComment = "برضو فيه ب 10 و برضو في ب 25";
 assert.deepEqual(deterministicList(conversationalComment), [], "conversation-only comments must be silently ignored");
 assert.deepEqual(deterministicList("برضو فيه ب 10 جنيه و برضو في ب 25 جنيه"), [], "currency words do not turn commentary into price rows");
@@ -173,4 +173,42 @@ assert.equal(parsePackageType("كيس 50 جم"), "sachet");
 assert.equal(parsePackageType("9 ك"), null);
 assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 5 ك" }), productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 9 ك" }), "weight should not change stable product identity");
 
-console.log("price intelligence tests: OK");
+(async () => {
+  const aiReturnsWrongNumbers = {
+    async generate() {
+      return {
+        provider: "test-ai",
+        text: JSON.stringify({
+          company: "بيرل",
+          items: [{
+            raw_line: pearlOctober.split(/\r?\n/).find(line => line.includes("9 ك:")),
+            product: "بيرل أوتوماتيك 9 ك",
+            weight_g: 1,
+            volume_ml: 2,
+            pack_count: 99,
+            package_sale_price: 525,
+            wholesale_carton_price: 999,
+            consumer_price: 1,
+            unit_price_type: null,
+            decision: "accepted"
+          }]
+        })
+      };
+    }
+  };
+  const protectedPearlList = await extractList(aiReturnsWrongNumbers, pearlOctober);
+  assert.equal(protectedPearlList.items.length, 1);
+  assert.equal(protectedPearlList.items[0].package_sale_price, 505.31,
+    "AI output must not overwrite the locally extracted package price");
+  assert.equal(protectedPearlList.items[0].wholesale_carton_price, 487.40,
+    "AI output must not overwrite the explicitly labelled wholesale price");
+  assert.equal(protectedPearlList.items[0].consumer_price, 525,
+    "AI output must not overwrite the consumer price");
+  assert.equal(protectedPearlList.items[0].weight_g, 9000,
+    "AI output must not overwrite the source-derived product weight");
+  assert.equal(protectedPearlList.items[0].pack_count, null,
+    "AI must not invent a carton count absent from the source");
+  assert.equal(protectedPearlList.items[0].decision, "review",
+    "AI must not auto-approve a row the deterministic parser marked for review");
+  console.log("price intelligence tests: OK");
+})().catch(error => { console.error(error); process.exitCode = 1; });

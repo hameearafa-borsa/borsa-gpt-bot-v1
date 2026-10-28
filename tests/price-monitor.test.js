@@ -28,10 +28,10 @@ const { extractPriceCandidates } = require("../modules/price-intelligence");
     "Bahi 5 g with 24 sachets must preserve the pack count");
   assert.equal(invoiceAfterVatRows[2].product_text.includes("قيمة العرض"), false,
     "offer metadata must not contaminate the normalized product identity");
-  assert.equal(invoiceAfterVatRows[0].product_text, "دوش 60",
-    "an invoice variant number without a unit must be preserved rather than discarded");
-  assert.equal(invoiceAfterVatRows[1].product_text, "دوش 110",
-    "different unqualified invoice variant numbers must remain separate product identities");
+  assert.equal(invoiceAfterVatRows[0].product_text, "دوش 60 جرام",
+    "the Doush product-specific convention must preserve and normalize its bare gram weight");
+  assert.equal(invoiceAfterVatRows[1].product_text, "دوش 110 جرام",
+    "different Doush gram weights must remain separate normalized product identities");
   assert.notEqual(invoiceAfterVatRows[0].product_text, invoiceAfterVatRows[1].product_text,
     "Doush 60 and Doush 110 must not be merged just because the unit is omitted");
   assert.equal(invoiceAfterVatRows[0].product_text, "دوش 60 جرام",

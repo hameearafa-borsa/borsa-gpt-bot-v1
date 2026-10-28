@@ -115,7 +115,7 @@ function parseStructuredPriceTable(text) {
   let company = null;
   let section = null;
   let offerContext = null;
-  const amount = "[\d,]+(?:\\.\d{1,2})?";
+  const amount = "[\d,]+(?:\.\d{1,2})?";
   const rowPattern = new RegExp("^(.*?)\s+(\d+)\s+(" + amount + ")\s+(" + amount + ")$");
   for (const line of lines.slice(0, headerIndex)) {
     if (/^تصفية اسعار|^اسعار شركة|^أسعار شركة/u.test(line)) company = line.trim();

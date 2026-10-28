@@ -109,8 +109,8 @@ assert.equal(
 );
 assert.equal(
   compareReferencePrice(
-    { ...cartonReference, product_label: "كامي 110جم", raw_line: "كامي 110جم 1104 ج العرض على الكرتونة قطعة صابون هدية" },
-    cartonObservation
+    { ...cartonReference, product_label: "كامي 110جم", weight_g: 110, raw_line: "كامي 110جم 1104 ج العرض على الكرتونة قطعة صابون هدية" },
+    { ...cartonObservation, product_text: "كامي", weight_g: 110 }
   ).reason,
   "reference_offer_needs_structured_metadata",
   "a carton with a free soap gift must not be compared as the plain carton"

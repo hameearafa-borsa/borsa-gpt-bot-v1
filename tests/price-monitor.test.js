@@ -53,11 +53,11 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 444.43`);
   assert.equal(oxyInvoice.length, 5, "invoice parser should assemble multiline product descriptions and amount-only lines");
   assert.deepEqual(oxyInvoice.slice(0, 3).map(row => [row.product_text, row.pack_count, row.package_sale_price, row.weight_g, row.volume_ml]), [
-    ["جوي 110 جرام 48 قطعة", 48, 628.64, 110, null],
+    ["جوي 110 جرام", 48, 628.64, 110, null],
     ["جوي هاندويش 250 ملل", null, 427.28, null, 250],
-    ["أوكسي كبسولات 14 جرام 20 عبوة", 20, 1107.4, 14, null]
+    ["أوكسي كبسولات 14 جرام", 20, 1107.4, 14, null]
   ], "invoice total, product size, and package count must be stored separately");
-  assert.equal(oxyInvoice[3].product_text, "كبسولات 14 جرام 30 عبوة",
+  assert.equal(oxyInvoice[3].product_text, "كبسولات 14 جرام",
     "a row without a brand name must not inherit the previous row's brand");
   assert.equal(oxyInvoice[3].package_sale_price, 1421);
   assert.equal(oxyInvoice[4].pack_count, 6, "bottle counts must be extracted, not confused with price or size");

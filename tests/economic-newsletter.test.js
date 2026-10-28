@@ -36,7 +36,7 @@ const {
   assert.throws(() => parseLocalMarketHtml("<html>لا توجد أسعار</html>"), /incomplete/);
 
   const message = formatEconomicBulletin({ brentUsd: 88.13, usdEgp: 56.25, goldPoundEgp: 50468, gold21Egp: 6305 });
-  assert.equal(message.split("\n").length, 4);
+  assert.equal(message.split("\n").length, 5, "the GPT service attribution is included before the four economic indicators");
   assert.ok(message.includes("خام برنت"));
   assert.ok(message.includes("الدولار"));
   assert.ok(message.includes("الجنيه الذهب"));

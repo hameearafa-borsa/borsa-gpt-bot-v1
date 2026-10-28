@@ -36,6 +36,23 @@ const registry = require("../data/product-registry.json");
     "a full catalog pasted as one long Telegram paragraph must not trigger per-product monitoring");
   assert.equal(isBulkPriceList("أريال مسحوق 2 كجم ١٥٠ ج"), false,
     "a single product observation must remain eligible even when its price is written inline");
+  const unileverSeptemberNoCurrency = \`أسعار شركة يونيليفر
+أسعار الشامبو
+صنسيلك 90 عرض 30
+صنسيلك 180 عرض 47
+صنسيلك 350 عرض 76.25
+صنسيلك 350 مل+170 مل عرض 237.65
+صنسيلك 600 مل عرض 114
+كلير 180 رجالي عرض 81
+دوف 180 مل 75.5
+تريزيمي شامبو 600 مل 202.5
+سيجنال 25 مل 12.37
+لوكس 75 جرام 14.20ج
+كمفورت لتر عرض 87.15\`;
+  assert.equal(isBulkPriceList(unileverSeptemberNoCurrency), true,
+    "a company list with many numeric prices but no currency suffix on most rows must be detected as bulk");
+  assert.equal(isEligibleMessage({ ...base, text: unileverSeptemberNoCurrency, isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "a September-style Unilever catalog must not become many individual monitor observations");
   assert.equal(isOwnMessage({ botUserId: 123, fromId: "123" }), true);
   assert.equal(isOwnMessage({ botUserId: 123, fromId: 456 }), false);
 

@@ -20,6 +20,7 @@ const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { renderPriceListImages } = require("./modules/price-list-image");
 const priceMonitor = require("./modules/price-monitor");
+const priceReferenceComparison = require("./modules/price-reference-comparison");
 const priceReview = require("./modules/price-review");
 const priceReviewRecovery = require("./modules/price-review-recovery");
 const { saveMerchant } = require("./modules/merchant-intelligence");
@@ -587,6 +588,40 @@ bot.on("text", async ctx => {
   try {
     const result = await priceMonitor.observe({ pool: db.pool, message: m, merchantId, registry });
     if (result.saved > 0) {
+      // Match each accepted live observation to the latest compatible official company reference.
+      // Comparison failures are logged but must never discard an already-saved group observation.
+      for (const item of result.savedRows) {
+        if (item.row.decision !== "accepted") continue;
+        try {
+          const comparison = await priceReferenceComparison.persistObservationReferenceComparison(db.pool, item.id, item.row);
+          if (comparison.comparable) {
+            await sendLog({
+              module: "price-monitor",
+              stage: "reference_comparison",
+              status: "ok",
+              details: {
+                observationId: item.id,
+                referenceObservationId: comparison.referenceObservationId,
+                company: comparison.companyLabel,
+                sourcePeriod: comparison.sourcePeriod,
+                referencePrice: comparison.referencePrice,
+                observedPrice: comparison.observedPrice,
+                difference: comparison.difference,
+                differencePercent: comparison.differencePercent,
+                direction: comparison.direction
+              }
+            });
+          }
+        } catch (comparisonError) {
+          await sendLog({
+            module: "price-monitor",
+            stage: "reference_comparison",
+            severity: "warn",
+            status: "failed",
+            details: { observationId: item.id, error: redactString(comparisonError?.message || "reference comparison failed") }
+          }).catch(() => {});
+        }
+      }
       const pendingRows = result.savedRows.filter(item => item.row.decision === "pending");
       for (const item of pendingRows) {
         if (isTelegramRateLimitedNow()) break;

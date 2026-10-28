@@ -15,7 +15,7 @@ const { formatTelegramStartupError } = require("./core/telegram-startup-error");
 const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
 const { markTelegramRateLimited, isTelegramRateLimit, isTelegramRateLimitedNow } = require("./core/telegram-rate-limit");
-const { MASTER_ID, isMaster, canManage } = require("./core/permissions");
+const { MASTER_ID, isMaster, isChatOwner, canManage } = require("./core/permissions");
 const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { renderPriceListImages } = require("./modules/price-list-image");
@@ -122,6 +122,20 @@ async function isAuthorizedChat(chatId) {
   if (!db.pool) return false;
   const r = await db.query(`SELECT active FROM authorized_chats WHERE chat_id=$1`, [chatId]);
   return Boolean(r.rows[0]?.active);
+}
+
+async function isPriceReviewer(telegram, userId) {
+  if (isMaster(userId)) return true;
+  if (!db.pool || !telegram || !userId) return false;
+  try {
+    const groups = await db.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE");
+    for (const row of groups.rows || []) {
+      if (await isChatOwner(telegram, row.chat_id, userId)) return true;
+    }
+  } catch (error) {
+    console.warn(`[PRICE_REVIEW_AUTH_CHECK_FAILED] code=${error?.code || "unknown"} message=${redactString(error?.message || "authorization lookup failed")}`);
+  }
+  return false;
 }
 
 async function configureCommandMenus() {
@@ -255,7 +269,7 @@ bot.on("text", async ctx => {
   const cmd = commandName(text);
   const args = commandText(text);
   if (cmd === "priceedit" && m.chatType === "private") {
-    if (!isMaster(m.userId)) { await ctx.reply("هذا الإجراء متاح للمسؤولين المخوّلين لمراجعة الأسعار فقط."); return; }
+    if (!(await isPriceReviewer(ctx.telegram, m.userId))) { await ctx.reply("هذا الإجراء متاح لمالك البوت أو منشئي المجموعات المعتمدة فقط."); return; }
     const fields = args.split("|").map(value => value.trim());
     if (fields.length !== 6) { await ctx.reply("صيغة غير صحيحة. استخدم: /priceedit ID | اسم الصنف | السعر | الوزن_جرام أو - | الحجم_مللي أو - | عدد العبوات أو -"); return; }
     const [idText, productText, priceText, weightText, volumeText, packText] = fields;
@@ -571,7 +585,7 @@ bot.on("text", async ctx => {
 
 
 bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
-  if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !isMaster(ctx.from?.id)) {
+  if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !(await isPriceReviewer(ctx.telegram, ctx.from?.id))) {
     await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
     return;
   }
@@ -597,7 +611,7 @@ bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
 });
 
 bot.action(/^prv:edit:(\d+)$/, async ctx => {
-  if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !isMaster(ctx.from?.id)) {
+  if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !(await isPriceReviewer(ctx.telegram, ctx.from?.id))) {
     await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
     return;
   }

@@ -13,7 +13,7 @@ assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
 (async () => {
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: [{ product: "أ", package_sale_price: 10 }] }), /three_valid_products/);
-  await assert.rejects(() => renderPriceListImage({ company: "شركة", items: Array.from({length: 501}, (_, i) => ({ product: `منتج ${i}`, package_sale_price: 10 })) }), /exceeds_500_products/);
+  await assert.rejects(() => renderPriceListImage({ company: "شركة", items: Array.from({length: 101}, (_, i) => ({ product: `منتج ${i}`, package_sale_price: 10 })) }), /exceeds_100_products/);
   const originalLoad = Module._load;
   let capturedSvg = "";
   try {

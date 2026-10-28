@@ -18,10 +18,10 @@ const { extractPriceCandidates } = require("../modules/price-intelligence");
   assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
     "bulk price lists must not generate dozens of individual review messages");
   assert.equal(isBulkPriceList(base.text), false, "a single product price remains eligible");
-  const invoiceAfterVatRows = extractPriceCandidates(\`- **دوش** **60** - سعر الفاتورة بعد 14%: 329.28
+  const invoiceAfterVatRows = extractPriceCandidates(`- **دوش** **60** - سعر الفاتورة بعد 14%: 329.28
 - **دوش** **110** - سعر الفاتورة بعد 14%: 612.50
 - **باهي** **5** **جم** **24** **كيس** - قيمة العرض: 2 - سعر الفاتورة بعد 14%: 92.54
-- **باهي** **10** **جم** **20** **كيس** - قيمة العرض: 10 - سعر الفاتورة بعد 14%: 152.26\`);
+- **باهي** **10** **جم** **20** **كيس** - قيمة العرض: 10 - سعر الفاتورة بعد 14%: 152.26`);
   assert.deepEqual(invoiceAfterVatRows.map(row => row.package_sale_price), [329.28, 612.5, 92.54, 152.26],
     "invoice total after 14% must win over product size and offer-value numbers");
   assert.equal(invoiceAfterVatRows[2].pack_count, 24,

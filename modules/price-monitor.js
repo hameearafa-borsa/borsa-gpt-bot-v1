@@ -47,8 +47,24 @@ async function observe({ pool, message, merchantId = null, registry }) {
   const candidates = extractPriceCandidates(text);
   const accepted = [];
   const seen = new Set();
+  // Infer the commercial context from the whole post, not only from the line
+  // containing the amount. Sellers often put "جملة" in a heading or on just
+  // one line while listing several products. Explicit consumer wording wins.
+  const hasExplicitWholesaleContext = /(?:جمله|جملة|كرتونه|كرتونة|فاتوره|فاتورة|تاجر|السعر الصافي بعد الخصم|صافي سعر القطعه|عدد القطع)/iu.test(text);
+  const hasExplicitRetailContext = /(?:مستهلك|قطاعي|تجزئه|تجزئة|للمستهلك)/iu.test(text);
+  const hasMultiProductContext = candidates.length >= 2 && !hasExplicitRetailContext;
   for (const candidate of candidates) {
     if (candidate.price_kind === "retail") continue;
+    if (candidate.price_kind === "wholesale_candidate" &&
+        !/(?:مستهلك|قطاعي|تجزئه|تجزئة|للمستهلك)/iu.test(candidate.raw_line || "") &&
+        (hasExplicitWholesaleContext || hasMultiProductContext)) {
+      candidate.price_kind = "wholesale";
+      candidate.context_inferred_wholesale = true;
+      candidate.price_selection_reason = [candidate.price_selection_reason, "message_level_wholesale_context"].filter(Boolean).join(";");
+      // Context raises the classification quality, but does not by itself
+      // approve a never-seen product identity.
+      candidate.confidence = Math.max(candidate.confidence || 0, 0.68);
+    }
     const match = resolve(candidate.product_text, registry);
     const row = {
       ...candidate,
@@ -62,19 +78,29 @@ async function observe({ pool, message, merchantId = null, registry }) {
     // An explicitly approved product identity prevents repeat review based on the name alone.
     // Other ambiguities (multiple prices, unknown price kind) still remain pending.
     let previouslyReviewed = false;
-    if (pool && !match.matched && candidate.confidence >= 0.8 && candidate.price_kind === "wholesale") {
+    // Look up identity memory even when today's wording omits "جملة". The old
+    // confidence gate made first observations pending (correctly), but also
+    // prevented already-approved products from ever benefiting from memory.
+    if (pool && !match.matched) {
       const known = await pool.query(
         "SELECT 1 FROM reviewed_price_products WHERE identity_key=$1 LIMIT 1",
         [identityKey(row)]
       );
       previouslyReviewed = known.rowCount > 0;
     }
+    if (previouslyReviewed && candidate.price_kind === "wholesale_candidate") {
+      row.price_kind = "wholesale";
+      row.context_inferred_wholesale = true;
+      row.price_selection_reason = [row.price_selection_reason, "previously_approved_product_identity"].filter(Boolean).join(";");
+    }
     // Rows parsed from the two explicitly recognized, pre-interpreted catalog formats
     // have deterministic column semantics and are trusted as complete wholesale observations.
     // Ordinary chat messages still require registry/reviewer evidence as before.
     row.confidence = candidate.trusted_catalog_row
       ? candidate.confidence
-      : Math.min(candidate.confidence, match.matched || previouslyReviewed ? 0.98 : 0.45);
+      : previouslyReviewed
+        ? Math.max(candidate.confidence, 0.9)
+        : Math.min(candidate.confidence, match.matched ? 0.98 : 0.45);
     row.decision = row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
     const fp = fingerprint(row);
     if (seen.has(fp)) continue;

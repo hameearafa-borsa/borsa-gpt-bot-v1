@@ -416,14 +416,16 @@ function parsePackageType(text) {
 }
 
 function productIdentityKey(row) {
-  const normalizedName = normalizeArabic(row?.product_text || "");
+  // Offer headings describe the price condition, not a different product identity.
+  const identityText = String(row?.product_text || "").split(/\\s+[—–-]\\s+(?=(?:عرض|العرض|شراء)\\b?)/u)[0];
+  const normalizedName = normalizeArabic(identityText);
   // Doush soap variants use a bare number as grams in invoice exports.
   // Preserve that product-specific size in the identity so 60 g and 110 g
   // occupy separate price histories instead of appearing as a weight change.
   const doushVariant = normalizedName.match(/^دوش\s+(\d{1,4})\s+جرام$/u);
   const stableName = doushVariant
     ? normalizedName
-    : normalizeArabic(stripQuantityTokens(row?.product_text || ""));
+    : normalizeArabic(stripQuantityTokens(identityText));
   // Product identity describes the item itself, not the supplier's temporary carton configuration.
   // Keep size, extra free weight and package type in identity, but track carton count per observation:
   // promotions and carton-merging can change count without changing the underlying product.

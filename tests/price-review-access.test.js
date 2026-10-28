@@ -16,4 +16,6 @@ assert.match(source, /await isChatOwner\(telegram, row\.chat_id, userId\)/,
   "owners of approved groups must be allowed to review prices");
 const reviewGuard = 'if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !(await isPriceReviewer(ctx.telegram, ctx.from?.id))) {';
 assert.equal(source.split(reviewGuard).length - 1, 2, "both review callbacks must require the log channel and an authorized reviewer");
+assert.match(source, /Promise\.all\(\(groups\.rows \|\| \[\]\)\.map\(row =>\s*isChatOwner\(telegram, row\.chat_id, userId\)\s*\)\)/,
+  "reviewer authorization should check active group owners concurrently to keep callbacks responsive");
 console.log("price review authorization is restricted to configured bot owners: OK");

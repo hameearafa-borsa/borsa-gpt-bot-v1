@@ -250,6 +250,7 @@ function parseInvoiceTable(text) {
     // Invoice exports may put all column headings on one line or split them across lines.
     if (
       (normalized.includes("الصنف") && normalized.includes("سعر الفاتوره") && normalized.includes("العرض الترويجي")) ||
+      (normalized.includes("الصنف") && normalized.includes("سعر الفاتوره")) ||
       normalized.startsWith("سعر الفاتوره") ||
       normalized.startsWith("العرض الترويجي") ||
       normalized === "الصنف"

@@ -124,7 +124,7 @@ function compareReferencePrice(reference, observation) {
   // A promotion's extra quantity changes the effective offer. The reference
   // schema does not yet store it as a dedicated column, so do not compare a
   // promotional reference row as if it were the base product.
-  if (/[+]\s*\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g|kg)/iu.test(String(reference.raw_line || ""))) {
+  if (/[+]\s*\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|ml|مل)/iu.test(String(reference.raw_line || ""))) {
     return result("not_comparable", "reference_offer_needs_structured_metadata");
   }
   if (numberOrNull(observation.offer_extra_weight_g) != null) {

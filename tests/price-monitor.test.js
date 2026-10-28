@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { isOwnMessage, isEligibleMessage, isBulkPriceList, observe } = require("../modules/price-monitor");
 const registry = require("../data/product-registry.json");
-const { extractPriceCandidates, productIdentityKey } = require("../modules/price-intelligence");
+const { extractPriceCandidates, parseStructuredPriceTable, productIdentityKey } = require("../modules/price-intelligence");
 
 (async () => {
   const base = { chatType: "supergroup", text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" };
@@ -18,6 +18,22 @@ const { extractPriceCandidates, productIdentityKey } = require("../modules/price
   assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
     "bulk price lists must not generate dozens of individual review messages");
   assert.equal(isBulkPriceList(base.text), false, "a single product price remains eligible");
+  const asc2September = parseStructuredPriceTable("تصفية اسعار سبتمبر ASC2 2026\nالاصناف\tعدد القطع\tالسعر الصافي بعد الخصم 2%\tصافي سعر القطعة\nالصابون الريحة\nدوش 60 جرام 48 313.60 6.50\nدوش 110 جرام 48 570.27 11.90\nعرض التوفير على شراء 2 كرتونه\nباهي 1000جرام 6 367.34 61.20\nعرض التوفير على شراء 3 كرتونه\nباهي  جرام 4 468.83 117.20\nالهاند ووش والشاور جل ريفولي\nشاور جل ريفولي 1 لتر 12 1,147.58 95.60");
+  assert.equal(asc2September.length, 5, "structured price table should retain each complete product row");
+  assert.deepEqual(asc2September.slice(0, 2).map(row => [row.product_text, row.pack_count, row.package_sale_price, row.listed_base_price, row.weight_g]),
+    [["دوش 60 جرام", 48, 313.6, 6.5, 60], ["دوش 110 جرام", 48, 570.27, 11.9, 110]],
+    "carton count, carton total, unit price, and product weight must remain distinct");
+  assert.equal(asc2September[2].package_sale_price, 367.34);
+  assert.match(asc2September[2].product_text, /شراء 2 كرتونه/);
+  assert.match(asc2September[3].product_text, /باهي 2000 جرام/);
+  assert.equal(asc2September[3].weight_g, 2000);
+  assert.match(asc2September[3].product_text, /شراء 3 كرتونه/);
+  assert.equal(asc2September[4].package_sale_price, 1147.58);
+  assert.equal(asc2September[4].listed_base_price, 95.6);
+  assert.equal(asc2September[4].volume_ml, 1000);
+  assert.ok(asc2September.every(row => row.needs_review && row.confidence < 0.8),
+    "catalog rows should remain pending review rather than be auto-accepted");
+
   const invoiceAfterVatRows = extractPriceCandidates(`- **دوش** **60** - سعر الفاتورة بعد 14%: 329.28
 - **دوش** **110** - سعر الفاتورة بعد 14%: 612.50
 - **باهي** **5** **جم** **24** **كيس** - قيمة العرض: 2 - سعر الفاتورة بعد 14%: 92.54

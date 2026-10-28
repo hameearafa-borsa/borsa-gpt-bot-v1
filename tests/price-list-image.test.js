@@ -6,6 +6,9 @@ const Module = require("node:module");
 const { escapeXml, renderPriceListImage } = require("../modules/price-list-image");
 const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-image.js"), "utf8");
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
+assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
+const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
+assert.match(dockerSource, /apk add --no-cache font-noto fontconfig/, "production image must install Arabic-capable fonts for SVG rasterization");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
 (async () => {

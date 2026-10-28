@@ -131,9 +131,12 @@ async function isPriceReviewer(telegram, userId) {
   if (!db.pool || !telegram || !userId) return false;
   try {
     const groups = await db.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE");
-    for (const row of groups.rows || []) {
-      if (await isChatOwner(telegram, row.chat_id, userId)) return true;
-    }
+    // Check active group creators concurrently. Serial Telegram admin lookups can
+    // outlive Telegram's callback spinner and make review buttons appear unresponsive.
+    const ownerChecks = await Promise.all((groups.rows || []).map(row =>
+      isChatOwner(telegram, row.chat_id, userId)
+    ));
+    return ownerChecks.some(Boolean);
   } catch (error) {
     console.warn(`[PRICE_REVIEW_AUTH_CHECK_FAILED] code=${error?.code || "unknown"} message=${redactString(error?.message || "authorization lookup failed")}`);
   }

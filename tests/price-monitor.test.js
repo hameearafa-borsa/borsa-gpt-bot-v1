@@ -34,6 +34,14 @@ const { extractPriceCandidates } = require("../modules/price-intelligence");
     "different unqualified invoice variant numbers must remain separate product identities");
   assert.notEqual(invoiceAfterVatRows[0].product_text, invoiceAfterVatRows[1].product_text,
     "Doush 60 and Doush 110 must not be merged just because the unit is omitted");
+  assert.equal(invoiceAfterVatRows[0].product_text, "دوش 60 جرام",
+    "the product-specific Doush shorthand must normalize to a 60-gram soap identity");
+  assert.equal(invoiceAfterVatRows[0].weight_g, 60,
+    "the Doush 60 shorthand must populate the weight field as 60 grams");
+  assert.equal(invoiceAfterVatRows[1].product_text, "دوش 110 جرام",
+    "the product-specific Doush shorthand must normalize to a 110-gram soap identity");
+  assert.equal(invoiceAfterVatRows[1].weight_g, 110,
+    "the Doush 110 shorthand must populate the weight field as 110 grams");
   const arielPromoList = `اريال ٢ك يدوي ٤٩٠ج ٤ق
 اريال ١ك يدوي ٣٩٦ج ٦ق
 اريال ١.٥ك يدوي ٣٨٠ج ٤ق

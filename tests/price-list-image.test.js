@@ -13,7 +13,7 @@ assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
 (async () => {
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: [{ product: "أ", package_sale_price: 10 }] }), /three_valid_products/);
-  await assert.rejects(() => renderPriceListImage({ company: "شركة", items: Array.from({length: 81}, (_, i) => ({ product: `منتج ${i}`, package_sale_price: 10 })) }), /exceeds_80_products/);
+  await assert.rejects(() => renderPriceListImage({ company: "شركة", items: Array.from({length: 501}, (_, i) => ({ product: `منتج ${i}`, package_sale_price: 10 })) }), /exceeds_500_products/);
   const originalLoad = Module._load;
   let capturedSvg = "";
   try {
@@ -28,7 +28,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
       { product: "منتج أول", package_sale_price: 10 },
       { product: "منتج ثان", package_sale_price: 20 },
       { product: "منتج ثالث", package_sale_price: 30 },
-      { product: "A".repeat(149) + "&end", package_sale_price: 40 }
+      { product: "A".repeat(149) + "&end", package_sale_price: 40, unit_price_type: "بالكرتونة" }
     ] });
     assert.equal(png.toString(), "mock-png");
     assert.match(capturedSvg, /شركة اختبار/);
@@ -36,6 +36,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);
+    assert.match(capturedSvg, /بالكرتونة/, "carton price type should be visible on rendered list rows");
   } finally { Module._load = originalLoad; }
   console.log("price list image validation tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

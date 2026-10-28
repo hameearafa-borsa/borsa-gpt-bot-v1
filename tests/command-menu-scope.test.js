@@ -27,7 +27,7 @@ assert.match(body, /for \(const \[name, commands, scope\] of menus\)/, "each Tel
 assert.match(body, /COMMAND_MENU_SETUP_FAILED/, "scope failures must be reported instead of silently hiding menu setup problems");
 assert.match(body, /COMMAND_MENU_SETUP\] scope=\$\{name\} status=ok/, "successful menu updates must be visible in startup logs");
 
-assert.match(source, /async function clearLegacyCommandScopesForAddedGroup\\(chatId, creatorId\\)/, "adding Borsa to a group must clear its stale menu overrides");
-assert.match(source, /clearLegacyCommandScopesForAddedGroup\\(chat.id, creatorId\\)/, "group-add event must clean Borsa's legacy scopes immediately");
-assert.match(source, /GroupHelpBot has its own bot token and command scopes/, "cleanup must explicitly remain isolated from GroupHelpBot");
+assert.ok(source.includes("async function clearLegacyCommandScopesForAddedGroup(chatId, creatorId)"), "adding Borsa to a group must clear its stale menu overrides");
+assert.ok(source.includes("clearLegacyCommandScopesForAddedGroup(chat.id, creatorId)"), "group-add event must clean Borsa's legacy scopes immediately");
+assert.ok(source.includes("GroupHelpBot has its own bot token and command scopes"), "cleanup must explicitly remain isolated from GroupHelpBot");
 console.log("scoped Telegram command menu test: OK");

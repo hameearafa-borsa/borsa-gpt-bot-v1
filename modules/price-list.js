@@ -120,7 +120,7 @@ function removeNonPriceComments(text) {
 function hasContextualCurrencyTypo(lines, index) {
   // Treat a trailing ح as a likely typo for ج only when an immediately adjacent
   // priced row uses an unambiguous Egyptian-pound marker. Never globally rewrite ح.
-  const currencyPrice = /\\d+(?:[.,]\\d+)?\\s*(?:جنيه|ج|EGP)\\s*$/iu;
+  const currencyPrice = /\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)\s*$/iu;
   return [index - 1, index + 1].some(neighborIndex =>
     neighborIndex >= 0 && neighborIndex < lines.length &&
     currencyPrice.test(toAsciiDigits(lines[neighborIndex]))
@@ -184,7 +184,7 @@ function deterministicList(text) {
     const normalizedLine = normalizeArabic(line);
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
     const hasIdentity = metadata.company ? Boolean(productPrefix && /[\u0600-\u06ff]/u.test(productPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
-    const suspiciousCurrency = metadata.company && /\\b\\d+(?:[.,]\\d+)?\\s+ح(?:\\s|$)/u.test(toAsciiDigits(line));
+    const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
     const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
     const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";
     out.push({

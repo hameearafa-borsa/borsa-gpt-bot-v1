@@ -2,11 +2,18 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { extractPriceCandidates, commercialMetrics, parsePackageType, productIdentityKey, classifyObservationChange } = require("../modules/price-intelligence");
+const { extractPriceCandidates, detectUnitPriceType, commercialMetrics, parsePackageType, productIdentityKey, classifyObservationChange } = require("../modules/price-intelligence");
 const { normalizeArabic, parseWeightGrams } = require("../core/normalization");
 
 assert.equal(normalizeArabic("أوكسي ٢ كجم"), "اوكسي 2 كجم");
 assert.equal(parseWeightGrams("٢.٥ كيلو"), 2500);
+assert.equal(detectUnitPriceType("سيجنال 120مل ق 42,33 ج"), "بالقطعة");
+assert.equal(detectUnitPriceType("كلير أكياس 5 مل الكرتونة 346 ج"), "بالكرتونة");
+assert.equal(detectUnitPriceType("كامي 110جم 1104 ج — عرض على الكرتونة: قطعة صابون هدية"), "بالكرتونة",
+  "gift wording containing قطعة must not override explicit carton context");
+assert.equal(detectUnitPriceType("قطعة صابون هدية 1104 ج"), null,
+  "promotional gift wording alone must not imply that the listed price is per piece");
+assert.equal(detectUnitPriceType("أريال 2ك 490ج 4ق", 4), "بالكرتونة");
 
 const rows = extractPriceCandidates(`أريال ٢ك يدوي ٤٩٠ج ٤ق\nبريكس ارضيات ٢٥ جم ١٨.٧٥ ج\nبريكس 1 لتر مستهلك 55 ج`);
 assert.ok(rows.length >= 2);

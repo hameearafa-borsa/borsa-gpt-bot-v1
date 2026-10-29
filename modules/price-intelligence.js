@@ -98,7 +98,8 @@ function extractExplicitWholesalePrice(text) {
 
 function extractProductText(line) {
   return stripQuantityTokens(line)
-    // ح is a common adjacent-key typo for ج in Egyptian price lists; consume it only after a numeric token.\n    .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|ح|EGP)?/gi, " ")
+    // ح is a common adjacent-key typo for ج in Egyptian price lists; consume it only after a numeric token.
+    .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|ح|EGP)?/gi, " ")
     .replace(/\|/g, " ")
     .replace(/[+]/g, " ")
     .replace(/\s+/g, " ")

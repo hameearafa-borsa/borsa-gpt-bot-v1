@@ -3,6 +3,7 @@
 const crypto = require("node:crypto");
 const { normalizeArabic } = require("../core/normalization");
 const { productIdentityKey } = require("./price-intelligence");
+const { resolve } = require("../core/product-registry");
 
 function identityKey(row) {
   const numberKey = value => value == null || value === "" ? "" : (Number.isFinite(Number(value)) ? String(Number(value)) : "");
@@ -66,22 +67,25 @@ async function resolveReview({ db, id, action, reviewerId }) {
 }
 
 async function saveEditedReview({ db, id, reviewerId, productText, price, weightG = null, volumeMl = null, packCount = null }) {
+  const productMatch = resolve(productText);
+  const brandKey = productMatch.matched ? productMatch.brand?.key || null : null;
   return db.withTransaction(async client => {
     const result = await client.query(
       `UPDATE price_observations SET product_text=$1, package_sale_price=$2, price_kind='wholesale',
-       weight_g=$3, volume_ml=$4, pack_count=$5, confidence=1, decision='accepted',
-       explicit_wholesale_label_price=$2, reviewed_by=$6, reviewed_at=NOW(), review_reason='manually_corrected',
+       weight_g=$3, volume_ml=$4, pack_count=$5, brand_key=$6, confidence=1, decision='accepted',
+       explicit_wholesale_label_price=$2, reviewed_by=$7, reviewed_at=NOW(), review_reason='manually_corrected',
        price_selection_reason='manually_corrected', needs_review=FALSE
-       WHERE id=$7 AND decision='pending'
+       WHERE id=$8 AND decision='pending'
        RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, package_type, offer_extra_weight_g, price_kind`,
-      [productText, price, weightG, volumeMl, packCount, reviewerId, id]
+      [productText, price, weightG, volumeMl, packCount, brandKey, reviewerId, id]
     );
     if (!result.rowCount) return { ok: false, reason: "already_resolved" };
     // Rebuild the canonical history identity from the corrected fields. Otherwise
     // future prices could be attached to the pre-edit product/weight identity.
     const row = {
       ...result.rows[0], product_text: productText, package_sale_price: price,
-      price_kind: "wholesale", weight_g: weightG, volume_ml: volumeMl, pack_count: packCount
+      price_kind: "wholesale", weight_g: weightG, volume_ml: volumeMl, pack_count: packCount,
+      brand_key: brandKey
     };
     const productKey = productIdentityKey(row);
     await client.query(

@@ -12,11 +12,11 @@ function splitPages(rows, pageSize) {
   for (let i = 0; i < rows.length; i += pageSize) pages.push(rows.slice(i, i + pageSize));
   return pages;
 }
-async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 17 }) {
+async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 16 }) {
   const rows = (Array.isArray(items) ? items : []).filter(x => x && String(x.product || x.product_label || "").trim() && Number.isFinite(Number(x.package_sale_price)) && Number(x.package_sale_price) > 0);
   if (rows.length < 3) throw new Error("price_list_image_requires_three_valid_products");
   if (rows.length > 100) throw new Error("price_list_image_exceeds_100_products_split_list_first");
-  const safePageSize = Math.max(6, Math.min(17, Math.trunc(Number(pageSize) || 17)));
+  const safePageSize = Math.max(6, Math.min(16, Math.trunc(Number(pageSize) || 16)));
   // Load lazily so parser/static tests can run before native dependencies are installed.
   let sharp;
   try { sharp = require("sharp"); }
@@ -25,7 +25,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
   const buffers = [];
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
     const pageRows = pages[pageIndex];
-    const width = 1200, rowHeight = 58, headerHeight = 240, columnHeaderHeight = 42, footerHeight = 85;
+    const width = 1200, rowHeight = 52, headerHeight = 240, columnHeaderHeight = 42, footerHeight = 85;
     const rowsTop = headerHeight + columnHeaderHeight;
     const height = rowsTop + pageRows.length * rowHeight + footerHeight;
     const rowSvg = pageRows.map((item, i) => {
@@ -40,7 +40,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
       const packageSize = size && !rawName.includes(size) ? escapeXml(size) : "";
       const unitLabel = item.unit_price_type === "بالقطعة" ? "بالقطعة" : item.unit_price_type === "بالكرتونة" ? "بالكرتونة" : "";
       const fill = i % 2 ? "#f3f7f5" : "#ffffff";
-      return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><text x="850" y="${y+14}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="12" font-weight="700" fill="#25805e">${category}</text><text x="850" y="${y+36}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="18" font-weight="700" fill="#172b26">${name}</text>${productNote ? `<text x="850" y="${y+51}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" fill="#61716b">${productNote}</text>` : ""}<text x="600" y="${y+35}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="17" font-weight="700" fill="#334e44">${packageSize || "—"}</text><text x="72" y="${y+29}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="21" font-weight="700" fill="#176b50">${escapeXml(priceText(item.package_sale_price))}</text>${unitLabel ? `<text x="72" y="${y+47}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="11" fill="#61716b">${escapeXml(unitLabel)}</text>` : ""}`;
+      return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><text x="850" y="${y+14}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="12" font-weight="700" fill="#25805e">${category}</text><text x="850" y="${y+32}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="18" font-weight="700" fill="#172b26">${name}</text>${productNote ? `<text x="850" y="${y+45}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" fill="#61716b">${productNote}</text>` : ""}<text x="600" y="${y+31}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="17" font-weight="700" fill="#334e44">${packageSize || "—"}</text><text x="72" y="${y+27}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="21" font-weight="700" fill="#176b50">${escapeXml(priceText(item.package_sale_price))}</text>${unitLabel ? `<text x="72" y="${y+43}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="11" fill="#61716b">${escapeXml(unitLabel)}</text>` : ""}`;
     }).join("");
     const listTitle = `${escapeXml(company || "قائمة المنتجات").slice(0, 100)}`;
     const dateLine = [month ? `الفترة: ${month}` : null, priceType || "أسعار جملة", `صفحة ${pageIndex + 1} من ${pages.length}`].filter(Boolean).map(escapeXml).join(" • ");
@@ -50,7 +50,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
   return buffers;
 }
 async function renderPriceListImage(options) {
-  const images = await renderPriceListImages({ ...options, pageSize: 16 });
+  const images = await renderPriceListImages({ ...options, pageSize: 15 });
   if (images.length > 1) throw new Error("price_list_requires_multiple_images_use_renderPriceListImages");
   return images[0];
 }

@@ -708,7 +708,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|h
     } else if (section === "lists") {
       body = "📋 قوائم الشركات\n\nأرسل /قائمة متبوعًا بنص قائمة الأسعار. تحفظ الصفوف المقبولة كمرجع شركة منفصل، وتُبقى الصفوف غير الواضحة خارج المرجع المعتمد.";
     } else if (section === "deals") {
-      body = `🛍️ العروض والنشرات\n\nالنشرات المجدولة: ${String(process.env.DEALS_SCHEDULER_ENABLED || "false").toLowerCase() === "true" ? "مفعلة حسب إعداد البيئة" : "متوقفة حسب إعداد البيئة"}. لا يطلق هذا الزر عملية scraping مدفوعة.`;
+      body = `🛍️ العروض والنشرات\n\nالنشرات المجدولة: ${String(process.env.DEALS_SCHEDULER_ENABLED ?? "true").toLowerCase() !== "false" ? "مفعلة حسب إعداد البيئة" : "متوقفة حسب إعداد البيئة"}. لا يطلق هذا الزر عملية scraping مدفوعة.`;
     } else if (section === "weather") {
       body = `🌦️ الطقس\n\nخدمة الطقس متاحة عبر /weather. النشرة المجدولة: ${String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() === "false" ? "متوقفة" : "مفعلة حسب إعداد البيئة"}.`;
     } else if (section === "reports") {
@@ -818,15 +818,15 @@ installFatalProcessHandlers({
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
   console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
   // Scheduled deal newsletters stay disabled by default to protect paid ScraperAPI credits.
-  // Set DEALS_SCHEDULER_ENABLED=true only after intentionally approving scheduled paid scraping.
-  if (String(process.env.DEALS_SCHEDULER_ENABLED || "false").toLowerCase() === "true") {
+  // Scheduled newsletters are enabled by default; set DEALS_SCHEDULER_ENABLED=false to pause them.
+  if (String(process.env.DEALS_SCHEDULER_ENABLED ?? "true").toLowerCase() !== "false") {
     stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
       const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
       await emitReport({ bot, db, report });
     } });
-    console.log("[DEALS_SCHEDULER] Enabled explicitly by DEALS_SCHEDULER_ENABLED=true. Scheduled scraping may consume paid credits.");
+    console.log("[DEALS_SCHEDULER] Enabled by default unless DEALS_SCHEDULER_ENABLED=false. Scheduled scraping may consume paid credits.");
   } else {
-    console.log("[DEALS_SCHEDULER] Disabled by default; set DEALS_SCHEDULER_ENABLED=true only after approving paid scraping.");
+    console.log("[DEALS_SCHEDULER] Disabled explicitly by DEALS_SCHEDULER_ENABLED=false.");
   }
   // Catalog notices target every active, approved group from authorized_chats.
   stopCatalogs = startCatalogNewsletterScheduler({

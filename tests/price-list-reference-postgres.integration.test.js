@@ -7,6 +7,7 @@ const { Pool } = require("pg");
 const { runMigrations } = require("../core/migrations");
 const { deterministicList, parseListMetadata } = require("../modules/price-list");
 const { persistPriceList } = require("../modules/price-list-persistence");
+const { compareObservationToLatestReference, compareReferencePrice } = require("../modules/price-reference-comparison");
 
 const connectionString = process.env.TEST_DATABASE_URL;
 if (!connectionString) {
@@ -106,7 +107,53 @@ if (!connectionString) {
     assert.ok(cartonGift && /العرض على الكرتونة قطعة صابون هدية/.test(cartonGift.raw_line));
     assert.equal(cartonGift.unit_price_type, "بالكرتونة");
 
-    console.log("UNILEVER PRICE-LIST POSTGRESQL INTEGRATION TEST: OK (66 catalog rows, 66 official references, no live observations)");
+    // Exercise the actual PostgreSQL reference lookup and strict comparison path,
+    // not just the pure comparator with mocked reference rows.
+    const signalComparison = await compareObservationToLatestReference(pool, {
+      price_kind: "wholesale",
+      product_text: "سيجنال",
+      weight_g: null,
+      volume_ml: 120,
+      package_sale_price: 45,
+      pack_count: null,
+      offer_extra_weight_g: null,
+      unit_price_type: "بالقطعة"
+    });
+    assert.equal(signalComparison.comparable, true,
+      "a matching Signal 120 ml per-piece wholesale observation should match the real saved reference");
+    assert.equal(signalComparison.referencePrice, 42.33);
+    assert.equal(signalComparison.observedPrice, 45);
+    assert.equal(signalComparison.difference, 2.67);
+    assert.equal(signalComparison.sourcePeriod, "أكتوبر 2026");
+
+    const bonusReference = references.rows.find(row => /سيجنال قرنفل 100مل \+25مل هدية/.test(row.raw_line || ""));
+    assert.equal(compareReferencePrice(bonusReference, {
+      price_kind: "wholesale",
+      product_text: bonusReference.product_label,
+      weight_g: bonusReference.weight_g == null ? null : Number(bonusReference.weight_g),
+      volume_ml: bonusReference.volume_ml == null ? null : Number(bonusReference.volume_ml),
+      package_sale_price: Number(bonusReference.package_sale_price),
+      pack_count: bonusReference.pack_count == null ? null : Number(bonusReference.pack_count),
+      offer_extra_weight_g: null,
+      unit_price_type: bonusReference.unit_price_type
+    }).reason, "reference_offer_needs_structured_metadata",
+    "the real saved +25 ml promotion must not be treated as a base product price");
+
+    const cartonComparison = await compareObservationToLatestReference(pool, {
+      price_kind: "wholesale",
+      product_text: "كلير أكياس 5 مل",
+      weight_g: null,
+      volume_ml: 5,
+      package_sale_price: 360,
+      pack_count: null,
+      offer_extra_weight_g: null,
+      unit_price_type: "بالكرتونة"
+    });
+    assert.equal(cartonComparison.comparable, false,
+      "a carton observation with unknown pack count must not compare with a company carton reference");
+    assert.equal(cartonComparison.reason, "carton_count_mismatch_or_unknown");
+
+    console.log("UNILEVER PRICE-LIST POSTGRESQL INTEGRATION TEST: OK (66 catalog rows, 66 official references, real comparison lookup, no live observations)");
   } finally {
     if (pool) await pool.end().catch(() => {});
     await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`).catch(() => {});

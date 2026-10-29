@@ -141,7 +141,7 @@ if (!connectionString) {
 
     const cartonComparison = await compareObservationToLatestReference(pool, {
       price_kind: "wholesale",
-      product_text: "كلير أكياس 5 مل",
+      product_text: carton.product_label,
       weight_g: carton.weight_g == null ? null : Number(carton.weight_g),
       volume_ml: carton.volume_ml == null ? null : Number(carton.volume_ml),
       package_sale_price: 360,

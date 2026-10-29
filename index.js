@@ -18,6 +18,7 @@ const { markTelegramRateLimited, isTelegramRateLimit, isTelegramRateLimitedNow }
 const { MASTER_ID, isMaster, isChatOwner, canManage } = require("./core/permissions");
 const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
+const { persistPriceList } = require("./modules/price-list-persistence");
 const { renderPriceListImages } = require("./modules/price-list-image");
 const priceMonitor = require("./modules/price-monitor");
 const priceReferenceComparison = require("./modules/price-reference-comparison");
@@ -489,37 +490,9 @@ bot.on("text", async ctx => {
     const rows = Array.isArray(parsedList.items) ? parsedList.items : deterministicList(sourceText);
     const accepted = rows.filter(r => r.decision === "accepted");
     if (db.pool) {
-      await db.withTransaction(async client => {
-        const run = await client.query(`INSERT INTO price_list_runs(source_chat_id,source_message_id,raw_text,status,extracted_count,accepted_count,skipped_count)
-          VALUES($1,$2,$3,'processed',$4,$5,$6) RETURNING id`, [m.chatId, m.messageId, sourceText, rows.length, accepted.length, rows.length - accepted.length]);
-        const runId = run.rows[0].id;
-        const declaredPriceType = String(parsedList.priceType || "").trim();
-        const referencePriceKind = /جملة|جمله/iu.test(declaredPriceType)
-          ? "wholesale"
-          : /قطاعي|مستهلك|تجزئة/iu.test(declaredPriceType)
-            ? "retail"
-            : "unknown";
-        for (const row of rows) {
-          const productLabel = row.product || row.product_text || null;
-          const companyLabel = row.company || parsedList.company || null;
-          const rawLine = row.raw_line || row.rawLine || null;
-          const decision = row.decision || "review";
-          await client.query(`INSERT INTO price_list_items(run_id,product_label,variant_label,company_label,weight_g,volume_ml,package_sale_price,wholesale_carton_price,consumer_price,pack_count,confidence,raw_line,decision,unit_price_type,list_price)
-            VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, [runId, productLabel, row.variant || null, companyLabel, row.weight_g ?? null, row.volume_ml ?? null, row.package_sale_price ?? null, row.wholesale_carton_price ?? null, row.consumer_price ?? null, row.pack_count ?? null, row.confidence ?? null, rawLine, decision, row.unit_price_type || null, row.list_price ?? null]);
-          // Keep official catalog observations in a separate, provenance-rich reference table.
-          // They can support later comparisons without being mistaken for group/merchant sightings.
-          if (decision === "accepted") {
-            await client.query(`INSERT INTO price_reference_observations
-              (run_id,source_kind,company_label,source_period,declared_price_type,price_kind,product_label,variant_label,weight_g,volume_ml,
-               package_sale_price,wholesale_carton_price,consumer_price,pack_count,unit_price_type,list_price,confidence,raw_line,decision)
-              VALUES($1,'company_catalog',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'accepted')`,
-            [runId, companyLabel, parsedList.month || null, declaredPriceType || null, referencePriceKind, productLabel,
-             row.variant || null, row.weight_g ?? null, row.volume_ml ?? null, row.package_sale_price ?? null,
-             row.wholesale_carton_price ?? null, row.consumer_price ?? null, row.pack_count ?? null,
-             row.unit_price_type || null, row.list_price ?? null, row.confidence ?? null, rawLine]);
-          }
-        }
-      });
+      await db.withTransaction(client => persistPriceList(client, {
+        message: m, sourceText, parsedList, rows
+      }));
     }
     await sendLog({ module: "price-list", stage: "processed", status: "ok", details: { actor: m.userId, extracted: rows.length, accepted: accepted.length, method: parsedList.method, company: parsedList.company || null } });
     const companyNames = [...new Set(accepted.map(row => String(row.company || parsedList.company || "").trim()).filter(Boolean))];

@@ -208,6 +208,19 @@ assert.ok(unileverSoapOffer.raw_line.includes("قطعة صابون هدية"),
   "the original source row must preserve the promotional gift wording");
 assert.doesNotMatch(unileverSoapOffer.product, /العرض على الكرتونة|قطعة صابون هدية/u,
   "a carton promotion note should not contaminate the product identity");
+// Full-list unit audit: expected units are derived from the actual October source text.
+const unileverPieceRows = unileverRows.filter(row => row.unit_price_type === "بالقطعة");
+const unileverCartonRows = unileverRows.filter(row => row.unit_price_type === "بالكرتونة");
+assert.equal(unileverPieceRows.length, 51, "all explicitly marked ق rows and the known per-piece sections should remain per-piece");
+assert.equal(unileverCartonRows.length, 15, "the unmarked wholesale sections plus explicit carton rows should remain carton-priced");
+assert.ok(unileverRows.every(row => ["بالقطعة", "بالكرتونة"].includes(row.unit_price_type)), "every accepted Unilever row must have an explicit resolved unit");
+for (const row of unileverRows.filter(row => row.category === "منتجات جلو و فازلين" || row.category === "صابون الحمام")) {
+  assert.equal(row.unit_price_type, "بالكرتونة", `wholesale section row should be carton-priced: ${row.raw_line}`);
+}
+for (const row of unileverRows.filter(row => row.raw_line.startsWith("سيجنال") || row.raw_line.startsWith("كلوز أب") || row.raw_line.startsWith("أكس") || row.raw_line.startsWith("ريكسونا") || row.raw_line.startsWith("دوف") || row.raw_line.startsWith("صانسيلك") || row.raw_line.startsWith("تريزيمي") || row.raw_line.startsWith("تريمي") || row.raw_line.startsWith("كامي شاور") || row.raw_line.startsWith("لايف هاند") || row.raw_line.startsWith("لوكس هاند") || row.raw_line.startsWith("سيف ") || row.raw_line.startsWith("كمفورت"))) {
+  assert.equal(row.unit_price_type, "بالقطعة", `explicit piece-price row should remain per-piece: ${row.raw_line}`);
+}
+
 // Historical comparison preserves product identity when only weight/offer changes.
 const historyBase = {
   brand_key: "pearl",

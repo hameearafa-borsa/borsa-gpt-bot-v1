@@ -10,7 +10,9 @@ assert.ok(
 );
 assert.match(source, /async function isPriceReviewer\(telegram, userId\)/,
   "price review authorization must be centralized");
-assert.match(source, /ADDITIONAL_PRICE_REVIEWER_IDS/,\n  "the designated shared-group reviewer must be explicitly authorized before the future group is approved");\nassert.match(source, /SELECT chat_id FROM authorized_chats WHERE active=TRUE/,
+assert.match(source, /ADDITIONAL_PRICE_REVIEWER_IDS/,
+  "the designated shared-group reviewer must be explicitly authorized before the future group is approved");
+assert.match(source, /SELECT chat_id FROM authorized_chats WHERE active=TRUE/,
   "reviewer access must be limited to owners of active approved groups");
 assert.match(source, /Promise\.all\(\(groups\.rows \|\| \[\]\)\.map\(row =>\s*isChatOwner\(telegram, row\.chat_id, userId\)\s*\)\)/,
   "owners of approved groups must be checked concurrently to keep review callbacks responsive");

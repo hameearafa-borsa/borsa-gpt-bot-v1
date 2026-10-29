@@ -314,7 +314,7 @@ bot.on("text", async ctx => {
   const cmd = commandName(text);
   const args = commandText(text);
   if (cmd === "priceedit" && m.chatType === "private") {
-    if (!(await isPriceReviewer(ctx.telegram, m.userId))) { await ctx.reply("هذا الإجراء متاح لمالك البوت أو منشئي المجموعات المعتمدة فقط."); return; }
+    if (!(await isPriceReviewer(ctx.telegram, m.userId))) { await ctx.reply("هذا الإجراء متاح للمراجعين المعتمدين ومالكي المجموعات النشطة المعتمدة فقط."); return; }
     const fields = args.split("|").map(value => value.trim());
     if (fields.length !== 6) { await ctx.reply("صيغة غير صحيحة. استخدم: /priceedit ID | اسم الصنف | السعر | الوزن_جرام أو - | الحجم_مللي أو - | عدد العبوات أو -"); return; }
     const [idText, productText, priceText, weightText, volumeText, packText] = fields;

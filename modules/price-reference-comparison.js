@@ -126,7 +126,7 @@ function compareReferencePrice(reference, observation) {
   // promotional reference row as if it were the base product.
   const referenceRawLine = String(reference.raw_line || "");
   if (/[+]\s*\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|ml|مل)/iu.test(referenceRawLine) ||
-      /(?:العرض\\s+على\\s+الكرتونه|العرض\\s+على\\s+الكرتونة|قطعه\\s+صابون\\s+هديه|قطعة\\s+صابون\\s+هدية|هديه|هدية|بونص|مجانا|مجانيه?)/iu.test(referenceRawLine)) {
+      /(?:العرض\s+على\s+الكرتونه|العرض\s+على\s+الكرتونة|قطعه\s+صابون\s+هديه|قطعة\s+صابون\s+هدية|هديه|هدية|بونص|مجانا|مجانيه?)/iu.test(referenceRawLine)) {
     return result("not_comparable", "reference_offer_needs_structured_metadata");
   }
   if (numberOrNull(observation.offer_extra_weight_g) != null) {

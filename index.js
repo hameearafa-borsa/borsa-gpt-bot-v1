@@ -759,7 +759,17 @@ bot.action(/^prv:edit:(\d+)$/, async ctx => {
     return;
   }
   const id = Number(ctx.match[1]);
-  const prompt = `✏️ تعديل سجل السعر #${id}\n\nأرسل الأمر التالي في الخاص بعد استبدال القيم، مع الفصل بعلامة | :\n/priceedit ${id} | اسم الصنف | السعر | الوزن_بالجرام أو - | الحجم_بالمللي أو - | عدد العبوات أو -\n\nسيُحفظ السعر المعدل كسعر جملة معتمد. لا تستخدمه إذا لم تتأكد أن السعر سعر جملة.`;
+  let current = null;
+  try {
+    const found = await db.query(
+      "SELECT product_text, package_sale_price, weight_g, volume_ml, pack_count FROM price_observations WHERE id=$1 AND decision='pending'",
+      [id]
+    );
+    current = found.rows?.[0] || null;
+  } catch (error) {
+    await sendLog({ module: "price-monitor", stage: "review_edit_prefill_failed", severity: "warn", status: "fallback", details: { observationId: id, error: redactString(error?.message || "could not load current price fields") } }).catch(() => {});
+  }
+  const prompt = priceReview.formatPriceEditPrompt(id, current);
   try { await ctx.telegram.sendMessage(ctx.from.id, prompt); }
   catch (error) { await sendLog({ module: "price-monitor", stage: "review_edit_dm_failed", severity: "warn", status: "failed", details: { userId: ctx.from?.id, observationId: id, error: redactString(error?.message || "could not send private edit instructions") } }).catch(() => {}); }
 });

@@ -109,4 +109,23 @@ async function saveEditedReview({ db, id, reviewerId, productText, price, weight
     return { ok: true, product_identity_key: productKey };
   });
 }
-module.exports = { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEditedReview };
+
+function formatPriceEditPrompt(id, row = null) {
+  const clean = value => {
+    if (value == null || value === "") return "-";
+    return String(value).replace(/[|]/g, " ").trim() || "-";
+  };
+  const fallback = ["اسم الصنف", "السعر", "الوزن_بالجرام أو -", "الحجم_بالمللي أو -", "عدد العبوات أو -"];
+  const fields = row
+    ? [
+        clean(row.product_text),
+        row.package_sale_price == null ? "السعر" : Number(row.package_sale_price).toFixed(2),
+        clean(row.weight_g),
+        clean(row.volume_ml),
+        clean(row.pack_count)
+      ]
+    : fallback;
+  return `✏️ تعديل سجل السعر #${id}\n\nعدّل القيم التي تحتاج تغييرها فقط، واترك باقي القيم كما هي. انسخ الأمر التالي في الخاص، مع الفصل بعلامة | :\n/priceedit ${id} | ${fields.join(" | ")}\n\nاستخدم - إذا كانت قيمة الوزن أو الحجم أو عدد العبوات غير معروفة. سيُحفظ السعر المعدل كسعر جملة معتمد؛ لا تعتمد السعر إلا إذا تأكدت أنه سعر جملة.`;
+}
+
+module.exports = { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard, resolveReview, saveEditedReview };

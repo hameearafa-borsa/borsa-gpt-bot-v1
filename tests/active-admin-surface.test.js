@@ -20,6 +20,8 @@ const settingsHandlerStart = source.indexOf('if (cmd === "settings" && ["private
 const approvedGroupGate = source.indexOf('if (m.chatType !== "private" && !(await isAuthorizedChat(m.chatId))) return;', settingsHandlerStart);
 assert.ok(settingsHandlerStart >= 0 && approvedGroupGate > settingsHandlerStart, "/settings must be handled before the general approved-group service gate");
 const settingsHandler = source.slice(settingsHandlerStart, approvedGroupGate);
-assert.ok(settingsHandler.includes("permitted = isMaster(m.userId)"), "private settings must be restricted to the bot owner");
+assert.ok(settingsHandler.includes("permitted = await isPriceReviewer(ctx.telegram, m.userId)"), "private settings must be available to the bot owner and creators of active approved groups");
 assert.ok(settingsHandler.includes("permitted = await canManage(ctx.telegram, m.chatId, m.userId)"), "group settings must be restricted to the bot owner or group creator");
+assert.match(source, /bot\.action\(\/\^prv:\(approve\|new\|ignore\):\(\\d\+\)\$\/, async ctx => \{\s*\/\/ Stop Telegram's callback spinner before database and administrator API checks\.\s*await ctx\.answerCbQuery\(/, "review callbacks must acknowledge Telegram immediately before slow authorization checks");
+assert.match(source, /bot\.action\(\/\^prv:edit:\(\\d\+\)\$\/, async ctx => \{\s*\/\/ Acknowledge immediately so Telegram does not leave the button spinning while access is checked\.\s*await ctx\.answerCbQuery\(/, "edit callback must acknowledge Telegram immediately before slow authorization checks");
 console.log("Borsa runtime surface and settings authorization test: OK");

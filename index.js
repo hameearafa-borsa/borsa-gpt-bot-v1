@@ -355,7 +355,7 @@ bot.on("text", async ctx => {
   if (m.chatType === "private" && priceEditSessions.has(Number(m.userId))) {
     const session = priceEditSessions.get(Number(m.userId));
     const value = String(text || "").trim();
-    if (/^\\/(?:cancel|إلغاء)(?:\\s|$)/i.test(value) || value === "إلغاء") {
+    if (/^\/(?:cancel|إلغاء)(?:\s|$)/i.test(value) || value === "إلغاء") {
       priceEditSessions.delete(Number(m.userId));
       await ctx.reply("تم إلغاء تعديل السعر. لم تتغير البيانات.");
       return;
@@ -400,7 +400,7 @@ bot.on("text", async ctx => {
   if (cmd === "priceedit" && m.chatType === "private") {
     if (!(await isPriceReviewer(ctx.telegram, m.userId))) { await ctx.reply("هذا الإجراء متاح لمالك البوت أو منشئي المجموعات المعتمدة فقط."); return; }
     const raw = args.trim();
-    const firstToken = raw.split(/\\s+/)[0];
+    const firstToken = raw.split(/\s+/)[0];
     const id = Number(firstToken);
     if (Number.isSafeInteger(id) && id > 0 && !raw.includes("|")) {
       try { await startPriceEdit(ctx, id); }

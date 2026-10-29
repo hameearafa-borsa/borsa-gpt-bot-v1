@@ -37,6 +37,10 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);
     assert.match(capturedSvg, /بالكرتونة/, "carton price type should be visible on rendered list rows");
+    assert.match(capturedSvg, /العبوة \/ السعة/, "package size should have its own labeled middle column");
+    assert.match(capturedSvg, /الصنف/, "product name should have a separate column heading");
+    assert.match(capturedSvg, /السعر/, "price should have a separate column heading");
+    assert.match(capturedSvg, /text-anchor="middle"[^>]*>350 مل</, "package capacity should be centered in its own column");
     const unileverLikeImages = await renderPriceListImages({
       company: "شركة اختبار",
       items: Array.from({ length: 66 }, (_, i) => ({

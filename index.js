@@ -438,13 +438,14 @@ bot.on("text", async ctx => {
   if (cmd === "settings" && ["private", "group", "supergroup"].includes(m.chatType)) {
     let permitted = false;
     if (m.chatType === "private") {
-      permitted = isMaster(m.userId);
+      // The bot owner and creators of active, approved groups can inspect settings in private.
+      permitted = await isPriceReviewer(ctx.telegram, m.userId);
     } else {
       permitted = await canManage(ctx.telegram, m.chatId, m.userId);
     }
     if (!permitted) {
       await ctx.reply(m.chatType === "private"
-        ? "إعدادات البوت في الخاص متاحة لمالك البوت فقط. يمكن لمنشئ المجموعة استخدام /settings داخل مجموعته."
+        ? "إعدادات البوت في الخاص متاحة لمالك البوت ومنشئي المجموعات المعتمدة فقط."
         : "هذا الأمر متاح لمالك البوت أو منشئ هذه المجموعة فقط.");
       return;
     }
@@ -726,8 +727,10 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|h
 });
 
 bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
+  // Stop Telegram's callback spinner before database and administrator API checks.
+  await ctx.answerCbQuery("جارٍ التحقق من الصلاحية...").catch(() => {});
   if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !(await isPriceReviewer(ctx.telegram, ctx.from?.id))) {
-    await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
+    await sendLog({ module: "price-monitor", stage: "review_action_unauthorized", severity: "warn", status: "blocked", details: { userId: ctx.from?.id, action: ctx.match?.[1], observationId: ctx.match?.[2] } }).catch(() => {});
     return;
   }
   const action = ctx.match[1], id = Number(ctx.match[2]);
@@ -736,30 +739,29 @@ bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
     const result = await priceReview.resolveReview({ db, id, action, reviewerId: ctx.from.id });
     if (!result.ok) {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
-      await ctx.answerCbQuery("تمت معالجة هذا السجل سابقًا أو لم يعد معلّقًا.", { show_alert: true }).catch(() => {});
       return;
     }
     resolved = true;
-    await ctx.answerCbQuery(action === "ignore" ? "تم تجاهل السجل." : "تم اعتماد السجل.").catch(() => {});
     const status = action === "ignore" ? "🚫 تم التجاهل" : action === "new" ? "🆕 تم اعتماد السعر والصنف الجديد" : "✅ تم اعتماد السعر";
     const original = ctx.callbackQuery.message?.text || `مراجعة السعر #${id}`;
     await ctx.editMessageText(`${original}\n\n${status} — بواسطة المسؤول ${ctx.from.id}`, { reply_markup: { inline_keyboard: [] } });
   } catch (error) {
     if (resolved) await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
-    await ctx.answerCbQuery(resolved ? "تم الحفظ، وحاول البوت إزالة الأزرار مرة أخرى." : "تعذر حفظ القرار. لم تُزل أزرار المراجعة؛ حاول مرة أخرى.", { show_alert: true }).catch(() => {});
     await sendLog({ module: "price-monitor", stage: "review_action", severity: "error", status: "failed", details: { observationId: id, action, error: redactString(error?.message || "review action failed") } });
   }
 });
 
 bot.action(/^prv:edit:(\d+)$/, async ctx => {
+  // Acknowledge immediately so Telegram does not leave the button spinning while access is checked.
+  await ctx.answerCbQuery("جارٍ التحقق من الصلاحية...").catch(() => {});
   if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !(await isPriceReviewer(ctx.telegram, ctx.from?.id))) {
-    await ctx.answerCbQuery("غير مصرح بمراجعة الأسعار من هذه المحادثة.", { show_alert: true }).catch(() => {});
+    await sendLog({ module: "price-monitor", stage: "review_edit_unauthorized", severity: "warn", status: "blocked", details: { userId: ctx.from?.id, observationId: ctx.match?.[1] } }).catch(() => {});
     return;
   }
   const id = Number(ctx.match[1]);
   const prompt = `✏️ تعديل سجل السعر #${id}\n\nأرسل الأمر التالي في الخاص بعد استبدال القيم، مع الفصل بعلامة | :\n/priceedit ${id} | اسم الصنف | السعر | الوزن_بالجرام أو - | الحجم_بالمللي أو - | عدد العبوات أو -\n\nسيُحفظ السعر المعدل كسعر جملة معتمد. لا تستخدمه إذا لم تتأكد أن السعر سعر جملة.`;
-  try { await ctx.telegram.sendMessage(ctx.from.id, prompt); await ctx.answerCbQuery("أرسلت تعليمات التعديل إلى الخاص."); }
-  catch { await ctx.answerCbQuery("تعذر مراسلتك على الخاص. افتح محادثة البوت أولًا ثم أعد المحاولة.", { show_alert: true }).catch(() => {}); }
+  try { await ctx.telegram.sendMessage(ctx.from.id, prompt); }
+  catch (error) { await sendLog({ module: "price-monitor", stage: "review_edit_dm_failed", severity: "warn", status: "failed", details: { userId: ctx.from?.id, observationId: id, error: redactString(error?.message || "could not send private edit instructions") } }).catch(() => {}); }
 });
 
 bot.catch(async (err, ctx) => {

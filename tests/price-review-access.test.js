@@ -12,8 +12,8 @@ assert.match(source, /async function isPriceReviewer\(telegram, userId\)/,
   "price review authorization must be centralized");
 assert.match(source, /SELECT chat_id FROM authorized_chats WHERE active=TRUE/,
   "reviewer access must be limited to owners of active approved groups");
-assert.match(source, /await isChatOwner\(telegram, row\.chat_id, userId\)/,
-  "owners of approved groups must be allowed to review prices");
+assert.match(source, /Promise\.all\(\(groups\.rows \|\| \[\]\)\.map\(row =>\s*isChatOwner\(telegram, row\.chat_id, userId\)\s*\)\)/,
+  "owners of approved groups must be checked concurrently to keep review callbacks responsive");
 const reviewGuard = 'if (!isLogChat(ctx.chat?.id ?? ctx.callbackQuery?.message?.chat?.id) || !(await isPriceReviewer(ctx.telegram, ctx.from?.id))) {';
 assert.equal(source.split(reviewGuard).length - 1, 2, "both review callbacks must require the log channel and an authorized reviewer");
 assert.match(source, /Promise\.all\(\(groups\.rows \|\| \[\]\)\.map\(row =>\s*isChatOwner\(telegram, row\.chat_id, userId\)\s*\)\)/,

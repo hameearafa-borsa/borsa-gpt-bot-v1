@@ -14,6 +14,21 @@ assert.equal(detectUnitPriceType("كامي 110جم 1104 ج — عرض على ا�
 assert.equal(detectUnitPriceType("قطعة صابون هدية 1104 ج"), null,
   "promotional gift wording alone must not imply that the listed price is per piece");
 assert.equal(detectUnitPriceType("أريال 2ك 490ج 4ق", 4), "بالكرتونة");
+// Mixed-unit Unilever monitoring regressions: piece, carton, and ambiguous currency.
+const signalPiece = extractPriceCandidates("سيجنال 120مل ق 42,33 ج");
+assert.equal(signalPiece.length, 1);
+assert.equal(signalPiece[0].package_sale_price, 42.33);
+assert.equal(signalPiece[0].unit_price_type, "بالقطعة");
+
+const clearCarton = extractPriceCandidates("كلير أكياس 5 مل الكرتونة 346 ج");
+assert.equal(clearCarton.length, 1);
+assert.equal(clearCarton[0].package_sale_price, 346);
+assert.equal(clearCarton[0].unit_price_type, "بالكرتونة");
+
+const ambiguousCurrency = extractPriceCandidates("تريزيمي بلسم 600 مل ق 205 ح");
+assert.equal(ambiguousCurrency.length, 1);
+assert.equal(ambiguousCurrency[0].package_sale_price, 205);
+
 
 const rows = extractPriceCandidates(`أريال ٢ك يدوي ٤٩٠ج ٤ق\nبريكس ارضيات ٢٥ جم ١٨.٧٥ ج\nبريكس 1 لتر مستهلك 55 ج`);
 assert.ok(rows.length >= 2);

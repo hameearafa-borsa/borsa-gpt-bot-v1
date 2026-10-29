@@ -32,7 +32,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
     logoDataUri = `data:${logoMime};base64,${logoBase64}`;
   }
   const watermarkLogoSvg = logoDataUri && (logoPlacement === "watermark" || logoPlacement === "both")
-    ? `<image href="${logoDataUri}" x="150" y="300" width="900" height="900" preserveAspectRatio="xMidYMid meet" opacity="0.105"/>`
+    ? `<image href="${logoDataUri}" x="150" y="300" width="900" height="900" preserveAspectRatio="xMidYMid meet" opacity="0.05"/>`
     : "";
   const sideLogoSvg = logoDataUri && (logoPlacement === "side" || logoPlacement === "both")
     ? `<image href="${logoDataUri}" x="58" y="45" width="86" height="86" preserveAspectRatio="xMidYMid meet"/>`

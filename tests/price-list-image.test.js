@@ -49,10 +49,10 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
         unit_price_type: i % 3 === 0 ? "بالقطعة" : "بالكرتونة"
       }))
     });
-    assert.equal(unileverLikeImages.length, 4,
-      "66 products should render as four images at the default 17 products per image");
-    assert.match(capturedSvg, /صفحة 4 من 4/,
-      "the final image should identify itself as page 4 of 4");
+    assert.equal(unileverLikeImages.length, 5,
+      "66 products should render as five images at the default 16 products per image");
+    assert.match(capturedSvg, /صفحة 5 من 5/,
+      "the final image should identify itself as page 5 of 5");
     await assert.doesNotReject(() => renderPriceListImages({
       company: "شركة اختبار",
       items: Array.from({ length: 100 }, (_, i) => ({ product: `منتج ${i + 1}`, package_sale_price: 20 }))

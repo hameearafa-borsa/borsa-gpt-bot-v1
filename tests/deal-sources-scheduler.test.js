@@ -50,6 +50,33 @@ assert.equal(carrefourCards[0].price, 79.99);
 assert.equal(carrefourCards[0].category, "detergent");
 assert.equal(safeProductUrl("https://evil.example/mafegy/ar/p/velvet-gel", "carrefour"), null);
 assert.equal(extractCards(carrefourFixture.replace('"price":"79.99"', '"price":"0"'), "carrefour").length, 0, "invalid prices must be rejected");
+
+const irrelevantProductFixtures = [
+  { source: "amazon", title: "شاشة تلفزيون ذكية مع كريم", url: "https://www.amazon.eg/dp/B0ABCDEF14" },
+  { source: "jumia", title: "فستان نسائي كريم اللون", url: "https://www.jumia.com.eg/product-dress" },
+  { source: "noon", title: "كريم طبخ 500 مل", url: "https://www.noon.com/egypt-ar/product/COOK123" },
+  { source: "carrefour", title: "شامبو سيارات لتنظيف الهيكل", url: "https://www.carrefouregypt.com/mafegy/ar/p/car-shampoo" }
+];
+for (const item of irrelevantProductFixtures) {
+  const fixture = `<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: item.title,
+    url: item.url,
+    offers: { "@type": "Offer", price: "99", priceCurrency: "EGP" }
+  })}</script>`;
+  assert.equal(extractCards(fixture, item.source).length, 0,
+    `out-of-domain product must be excluded: ${item.title}`);
+}
+const relevantPersonalCareFixture = `<script type="application/ld+json">${JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: "كريم مرطب نيفيا للعناية بالبشرة",
+  url: "https://www.amazon.eg/dp/B0ABCDEF15",
+  offers: { "@type": "Offer", price: "99", priceCurrency: "EGP" }
+})}</script>`;
+assert.equal(extractCards(relevantPersonalCareFixture, "amazon").length, 1,
+  "relevant personal-care products must remain eligible after tightening exclusions");
 const newsletterFixture = [
   { title: "منظف أول", merchant: "متجر", price: 25, url: "https://www.amazon.eg/dp/B0ABCDEF12" },
   { title: "رابط طويل", merchant: "متجر", price: 35, url: "https://www.amazon.eg/" + "x".repeat(500) }

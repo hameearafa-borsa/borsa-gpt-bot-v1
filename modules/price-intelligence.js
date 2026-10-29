@@ -286,6 +286,13 @@ function parseInvoiceTable(text) {
   return rows.length ? rows : null;
 }
 
+function isConversationalNumericNoise(line) {
+  const source = String(line || "").trim();
+  const conversational = /(?:هههه|😂|🤣|فيلم|سمعته|مره|مرة|بعده|قبله|بضحك|بهزر|يا عم)/iu.test(source);
+  const productOrCommerceCue = /(?:جنيه|\bج\b|egp|جمله|جملة|مستهلك|قطاعي|كرتونه|كرتونة|كيلو|كجم|جم|جرام|لتر|مل|قطعة|عبوة|مسحوق|صابون|شامبو|منظف|اريال|أريال|دوف|كمفورت|سيجنال|كلير|بيرل)/iu.test(source);
+  return conversational && !productOrCommerceCue && /\d/.test(toAsciiDigits(source));
+}
+
 function extractPriceCandidates(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const invoiceRows = parseInvoiceTable(text);
@@ -299,6 +306,7 @@ function extractPriceCandidates(text) {
   let listUnitPriceType = "بالكرتونة";
 
   for (const line of lines) {
+    if (isConversationalNumericNoise(line)) continue;
     if (/^\/|^[-_=.*]+$/.test(line)) continue;
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
 

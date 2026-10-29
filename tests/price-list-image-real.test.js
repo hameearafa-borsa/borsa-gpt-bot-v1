@@ -47,5 +47,23 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     assert.equal(m.channels, 4);
     assert.ok(png.length > 1000, "rasterized image should not be an empty/mock buffer");
   }
+  if (outputDir) {
+    for (const placement of ["watermark", "side"]) {
+      const variantImages = await renderPriceListImages({
+        company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات",
+        month: metadata.month, priceType: metadata.priceType, logoPlacement: placement
+      });
+      const variantDir = path.join(outputDir, placement === "watermark" ? "logo-watermark" : "logo-side");
+      fs.mkdirSync(variantDir, { recursive: true });
+      for (const [index, png] of variantImages.entries()) {
+        fs.writeFileSync(path.join(variantDir, `unilever-oct-2026-${placement}-page-${index + 1}.png`), png);
+        const meta = await sharp(png).metadata();
+        assert.equal(meta.format, "png");
+        assert.equal(meta.width, 1200);
+        assert.ok(png.length > 1000, "logo variant must remain a real, non-empty PNG");
+      }
+      console.log(`Rendered ${placement} logo variant: ${variantImages.length} pages`);
+    }
+  }
   console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

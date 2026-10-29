@@ -46,6 +46,10 @@ const { persistPriceList } = require("../modules/price-list-persistence");
   const findRow = text => rows.find(row => row.raw_line === text);
   assert.equal(findRow("صانسيلك 350 + بلسم  ق 159 ج")?.package_sale_price, 159,
     "bundle size must not be mistaken for the explicitly currency-marked price");
+  assert.match(findRow("صانسيلك 350 + بلسم  ق 159 ج")?.product || "", /350.*بلسم/,
+    "normalized product identity must retain the bundle size and bonus product");
+  assert.doesNotMatch(findRow("صانسيلك 350 + بلسم  ق 159 ج")?.product || "", /159/,
+    "normalized product identity must not retain the price as part of the product name");
   assert.equal(findRow("تريزيمي 400 + بلسم ق 276 ج")?.package_sale_price, 276,
     "bundle size must not be mistaken for the explicitly currency-marked price");
   assert.equal(findRow("كلير أكياس 5 مل الكرتونة 346 ج")?.package_sale_price, 346,

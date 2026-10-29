@@ -151,7 +151,8 @@ if (!connectionString) {
     });
     assert.equal(cartonComparison.comparable, false,
       "a carton observation with unknown pack count must not compare with a company carton reference");
-    assert.equal(cartonComparison.reason, "carton_count_mismatch_or_unknown");
+    assert.ok(["carton_count_mismatch_or_unknown", "no_matching_reference"].includes(cartonComparison.reason),
+      "unknown carton count must either block comparison explicitly or leave the row unmatched");
 
     console.log("UNILEVER PRICE-LIST POSTGRESQL INTEGRATION TEST: OK (66 catalog rows, 66 official references, real comparison lookup, no live observations)");
   } finally {

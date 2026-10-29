@@ -518,6 +518,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(remembered.savedRows[0].row.decision, "accepted",
     "previously approved product identities should not be sent back to review just because this post omits the wholesale label");
   assert.equal(remembered.savedRows[0].row.price_kind, "wholesale");
+  assert.equal(remembered.savedRows[0].row.product_identity_key, productIdentityKey(remembered.savedRows[0].row),
+    "when reviewer memory promotes a candidate to wholesale, the canonical history key must be recomputed too");
 
   // Reviewer memory must also be consulted for products matched by the registry.
   // A previously corrected Ariel identity should not be re-reviewed merely because
@@ -543,6 +545,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "reviewer identity memory must be honored even when the product registry matches");
   assert.ok(registryMemoryQueries.some(sql => sql.includes("reviewed_price_products")),
     "registry-matched products must still look up reviewer approval memory");
+  assert.equal(registryRemembered.savedRows[0].row.product_identity_key, productIdentityKey(registryRemembered.savedRows[0].row),
+    "registry-matched approval memory must also persist the canonical wholesale identity key");
 
   // Multi-product context can infer wholesale classification, but must not
   // auto-approve a brand-new identity without registry or prior approval.

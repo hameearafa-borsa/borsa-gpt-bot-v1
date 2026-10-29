@@ -90,6 +90,9 @@ async function observe({ pool, message, merchantId = null, registry }) {
     }
     if (previouslyReviewed && candidate.price_kind === "wholesale_candidate") {
       row.price_kind = "wholesale";
+      // product_identity_key includes price_kind; rebuild it after the memory-based
+      // promotion or history lookup will keep using the pre-approval candidate key.
+      row.product_identity_key = productIdentityKey(row);
       row.context_inferred_wholesale = true;
       row.price_selection_reason = [row.price_selection_reason, "previously_approved_product_identity"].filter(Boolean).join(";");
     }

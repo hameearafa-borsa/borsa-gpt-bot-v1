@@ -24,11 +24,12 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
   try { sharp = require("sharp"); }
   catch (cause) { const error = new Error("sharp_dependency_missing_run_npm_install"); error.code = "SHARP_NOT_INSTALLED"; error.cause = cause; throw error; }
   const pages = splitPages(rows, safePageSize);
-  const resolvedLogoPath = logoPath || path.join(__dirname, "..", "1781536050450.png");
+  const resolvedLogoPath = logoPath || path.join(__dirname, "..", "1793300250521.jpg");
   let logoDataUri = "";
   if (logoPlacement !== "none" && fs.existsSync(resolvedLogoPath)) {
     const logoBase64 = fs.readFileSync(resolvedLogoPath).toString("base64");
-    logoDataUri = `data:image/png;base64,${logoBase64}`;
+    const logoMime = /\.jpe?g$/i.test(resolvedLogoPath) ? "image/jpeg" : "image/png";
+    logoDataUri = `data:${logoMime};base64,${logoBase64}`;
   }
   const watermarkLogoSvg = logoDataUri && (logoPlacement === "watermark" || logoPlacement === "both")
     ? `<image href="${logoDataUri}" x="150" y="300" width="900" height="900" preserveAspectRatio="xMidYMid meet" opacity="0.105"/>`

@@ -510,6 +510,27 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 
   // Multi-product context can infer wholesale classification, but must not
   // auto-approve a brand-new identity without registry or prior approval.
+  // Egyptian list context: default to carton; explicit piece/carton headings persist until changed.
+  const unitContextRows = extractPriceCandidates(`الأسعار بالقطعة
+شامبو ألف 500 مل 22
+بلسم باء 600 مل 35
+الأسعار بالكرتونة
+شامبو جيم 500 مل 350
+بلسم دال 600 مل 420`);
+  assert.deepEqual(unitContextRows.map(row => row.unit_price_type),
+    ["بالقطعة", "بالقطعة", "بالكرتونة", "بالكرتونة"],
+    "list unit headings must carry forward until a later heading changes the unit");
+
+  const defaultCartonRows = extractPriceCandidates("شامبو ألف 500 مل 350\nبلسم باء 600 مل 420");
+  assert.deepEqual(defaultCartonRows.map(row => row.unit_price_type), ["بالكرتونة", "بالكرتونة"],
+    "Egyptian trade lists default to carton prices when no piece marker is present");
+
+  const typoCurrencyRow = extractPriceCandidates("تريزيمي بلسم 600 مل ق 205 ح")[0];
+  assert.equal(typoCurrencyRow.package_sale_price, 205, "ح after a price must not change its numeric value");
+  assert.equal(typoCurrencyRow.unit_price_type, "بالقطعة", "standalone ق marks a piece price");
+  assert.equal(typoCurrencyRow.product_text, "تريزيمي بلسم", "currency typo must not leak into product identity");
+  assert.equal(typoCurrencyRow.raw_line, "تريزيمي بلسم 600 مل ق 205 ح", "retain the exact source line for audit");
+
   const contextual = extractPriceCandidates("منظف ألف 500 جم 22 ج\nمنظف باء 1 لتر 35 ج");
   assert.ok(contextual.length >= 2);
   const contextPool = {

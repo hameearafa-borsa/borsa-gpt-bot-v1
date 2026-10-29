@@ -55,15 +55,20 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   const editedDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
     editedCalls.push({ sql, params }); return { rowCount: 1, rows: [{ id: 42 }] };
   } }); } };
-  const edited = await saveEditedReview({ db: editedDb, id: 42, reviewerId: 7, productText: "منظف مصحح", price: 23, weightG: 500 });
+  const edited = await saveEditedReview({ db: editedDb, id: 42, reviewerId: 7, productText: "أريال مسحوق", price: 23, weightG: 500 });
   assert.equal(edited.ok, true);
   assert.match(editedCalls[0].sql, /decision='accepted'/);
   assert.match(editedCalls[0].sql, /needs_review=FALSE/);
   assert.match(editedCalls[0].sql, /explicit_wholesale_label_price=\$2/,
     "a manually corrected wholesale price must update its dedicated field too");
+  assert.match(editedCalls[0].sql, /brand_key=\$6/,
+    "manual correction must refresh the brand key from the corrected product name");
+  assert.equal(editedCalls[0].params[5], "arial",
+    "correcting a product to a known brand must persist the registry brand key");
   assert.match(editedCalls[1].sql, /product_identity_key/);
   assert.match(editedCalls[2].sql, /reviewed_price_products/);
-  assert.equal(editedCalls[2].params[1], "منظف مصحح", "manual correction must be remembered under the corrected product identity");
+  assert.equal(editedCalls[2].params[1], "أريال مسحوق", "manual correction must be remembered under the corrected product identity");
+  assert.equal(editedCalls[2].params[5], "arial", "reviewer memory must use the corrected brand identity");
   assert.match(editedCalls[3].sql, /status='accepted'/);
   assert.match(editedCalls[3].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);
 

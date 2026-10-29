@@ -188,9 +188,9 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(result.accepted[0].decision, "accepted");
   assert.equal(savedQueries.length, 4);
   assert.ok(savedQueries[3].sql.includes("INSERT INTO price_observations"));
-  assert.ok(savedQueries[2].sql.includes("product_text"));
-  assert.ok(savedQueries[2].sql.includes("offer_extra_weight_g"));
-  assert.equal(savedQueries[2].params[13], "accepted");
+  assert.ok(savedQueries[3].sql.includes("product_text"));
+  assert.ok(savedQueries[3].sql.includes("offer_extra_weight_g"));
+  assert.equal(savedQueries[3].params[13], "accepted");
 
   // Unit type must survive the full monitor -> database INSERT path.
   let pieceInsertParams = null;

@@ -34,7 +34,10 @@ const { renderPriceListImages } = require("../modules/price-list-image");
 
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
   assert.equal(images.length, Math.ceil(accepted.length / 22), "long lists should be split into readable pages");
-  for (const png of images) {
+  const outputDir = process.env.PRICE_LIST_TEST_OUTPUT_DIR;
+  if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
+  for (const [index, png] of images.entries()) {
+    if (outputDir) fs.writeFileSync(path.join(outputDir, `unilever-oct-2026-page-${index + 1}.png`), png);
     assert.ok(Buffer.isBuffer(png));
     assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "output must have a real PNG signature");
     const m = await sharp(png).metadata();

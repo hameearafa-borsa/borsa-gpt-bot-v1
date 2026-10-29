@@ -115,6 +115,17 @@ assert.equal(
   "reference_offer_needs_structured_metadata",
   "a carton with a free soap gift must not be compared as the plain carton"
 );
+
+for (const promotionalLine of [
+  "بيرل أوتوماتيك 9 ك 1104 ج العرض على الكرتونة",
+  "بيرل أوتوماتيك 9 ك 1104 ج قطعة صابون هدية"
+]) {
+  assert.equal(
+    compareReferencePrice({ ...cartonReference, raw_line: promotionalLine }, cartonObservation).reason,
+    "reference_offer_needs_structured_metadata",
+    "promotional wording must be detected and excluded from base-product comparisons: " + promotionalLine
+  );
+}
 assert.equal(
   compareReferencePrice(cartonReference, { ...cartonObservation, offer_extra_weight_g: 300 }).reason,
   "observation_offer_mismatch",

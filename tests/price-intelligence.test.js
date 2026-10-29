@@ -84,6 +84,13 @@ assert.ok(!buildListPrompt(`أريال ٢ك يدوي ٤٩٠ج ٤ق
 ${conversationalComment}`).includes(conversationalComment), "commentary must be removed before optional AI extraction");
 
 
+// A number embedded in obvious casual conversation must not become a price review.
+assert.deepEqual(
+  extractPriceCandidates("هههههه الفيلم دا سمعته 600 مره مفيش فيلم بعده ولا قبله 😂"),
+  [],
+  "a conversational number with laughter and film/story wording is not a product price"
+);
+
 // A bare number such as 503 is not a product or a price observation by itself.
 assert.deepEqual(extractPriceCandidates("503"), []);
 assert.deepEqual(extractPriceCandidates("503\n"), []);

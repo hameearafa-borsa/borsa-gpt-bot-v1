@@ -51,7 +51,16 @@ async function answer(ai, question, onError = null) {
   }
   try {
     const result = await ai.generate(buildPrompt(question), { temperature: 0.3 });
-    return String(result?.text || "").trim() || SAFE_FALLBACK;
+    const answerText = String(result?.text || "").trim();
+    if (!answerText) return SAFE_FALLBACK;
+    // Identify the engine that actually returned this answer; never label it GPT by default.
+    const provider = String(result?.provider || "").toLowerCase();
+    const providerLabel = provider.includes("groq") ? "Groq"
+      : provider.includes("gemini") ? "Gemini"
+      : provider.includes("openai") ? "OpenAI"
+      : provider.includes("openrouter") ? "OpenRouter"
+      : "";
+    return providerLabel ? `🤖 الخدمة مقدمة بتقنيات ${providerLabel}\n\n${answerText}` : answerText;
   } catch (error) {
     if (typeof onError === "function") { try { onError(error); } catch {} }
     return SAFE_FALLBACK;

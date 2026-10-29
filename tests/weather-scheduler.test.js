@@ -29,6 +29,8 @@ function fakeForecast(url) {
   assert.equal(report.cities.length, 4);
   for (const city of ["الإسكندرية", "القاهرة", "المنيا", "الأقصر"]) assert.ok(report.message.includes(city));
   assert.ok(!report.message.includes("https://"));
+  assert.ok(!report.message.includes("📍"), "the bulletin must not use the red location pin");
+  assert.ok(report.message.includes("🌤️ الإسكندرية"), "city headings should use the matching weather icon");
   await assert.rejects(() => getDailyWeatherReport({
     fetchJson: async url => {
       if (url.includes("latitude=25.6872")) return { timezone: "Africa/Cairo", current: { temperature_2m: null } };

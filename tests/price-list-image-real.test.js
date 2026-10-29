@@ -16,9 +16,21 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.equal(metadata.month, "أكتوبر 2026");
   assert.equal(metadata.priceType, "أسعار جملة");
   assert.equal(new Set(accepted.map(row => row.company)).size, 1, "sections must not be mistaken for different companies");
-  assert.ok(accepted.length >= 60, "the long fixture should retain the clear product rows");
-  assert.ok(accepted.some(row => row.unit_price_type === "بالقطعة"), "explicit per-piece markers should be retained");
-  assert.ok(review.some(row => /205 ح/.test(row.raw_line)), "ambiguous currency suffix must be sent to review, not silently accepted");
+  assert.equal(parsed.length, 66, "every readable row in the current Unilever fixture must be retained");
+  assert.equal(accepted.length, 66, "wholesale catalog rows should infer carton pricing when no per-piece marker exists, including the contextually corrected currency suffix");
+  assert.equal(review.length, 0, "the only suspicious currency suffix is resolved by adjacent rows that use ج");
+  assert.equal(parsed.filter(row => row.decision === "skipped").length, 0, "no priced row should be silently skipped");
+  assert.ok(accepted.every(row => row.unit_price_type === "بالقطعة" || row.unit_price_type === "بالكرتونة"),
+    "accepted rows must have a verified per-piece or carton sale unit");
+  assert.ok(accepted.some(row => /سيجنال 120مل/.test(row.raw_line) && row.unit_price_type === "بالقطعة"),
+    "explicit per-piece markers should be retained");
+  assert.ok(accepted.some(row => /كلير أكياس 5 مل الكرتونة/.test(row.raw_line) && row.unit_price_type === "بالكرتونة"),
+    "explicit carton wording should be retained as carton pricing");
+  assert.ok(accepted.some(row => /جلو 40جم/.test(row.raw_line) && row.unit_price_type === "بالكرتونة"),
+    "unmarked rows in a named wholesale catalog must be recorded as carton prices");
+  assert.ok(accepted.some(row => /لوكس 115جم/.test(row.raw_line) && row.unit_price_type === "بالكرتونة"),
+    "the carton offer note in the soap section should establish carton pricing for following soap rows");
+  assert.ok(accepted.some(row => /205 ح/.test(row.raw_line) && row.package_sale_price === 205), "the contextual currency typo should retain its source text and numeric price");
 
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
   assert.equal(images.length, Math.ceil(accepted.length / 22), "long lists should be split into readable pages");

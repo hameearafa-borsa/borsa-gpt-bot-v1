@@ -33,6 +33,16 @@ assert.equal(cards[0].category,"paper");
 assert.equal(cards[0].price,25);
 assert.equal(cards[0].old_price,35);
 const carrefourFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"فلفيتا جل منظف للملابس السوداء - 1 كيلو","url":"https://www.carrefouregypt.com/mafegy/ar/p/velvet-gel","offers":{"@type":"Offer","price":"79.99","priceCurrency":"EGP"}}</script>`;
+const amazonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"اريال مسحوق غسيل 2 كيلو","url":"https://www.amazon.eg/dp/B0ABCDEF12","offers":{"@type":"Offer","price":"99.50","priceCurrency":"EGP"}}</script>`;
+const amazonStructuredCards = extractCards(amazonStructuredFixture, "amazon", "اريال");
+assert.equal(amazonStructuredCards.length, 1, "Amazon JSON-LD should be parsed when retailer HTML selectors change");
+assert.equal(amazonStructuredCards[0].price, 99.5);
+const noonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"شامبو نيفيا للعناية بالشعر","url":"https://www.noon.com/egypt-ar/product/N1234567","offers":{"@type":"Offer","price":"145","priceCurrency":"EGP"}}</script>`;
+const noonStructuredCards = extractCards(noonStructuredFixture, "noon", "نيفيا");
+assert.equal(noonStructuredCards.length, 1, "Noon JSON-LD should be parsed when retailer HTML selectors change");
+assert.equal(noonStructuredCards[0].merchant, "Noon Egypt");
+assert.equal(noonStructuredCards[0].price, 145);
+
 const carrefourCards = extractCards(carrefourFixture, "carrefour");
 assert.equal(carrefourCards.length, 1, "Carrefour Product JSON-LD should produce a validated deal");
 assert.equal(carrefourCards[0].merchant, "Carrefour Egypt");
@@ -55,6 +65,10 @@ assert.equal(isNewsletterWindow(new Date("2026-10-12T13:59:00.000Z")),false);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T14:00:00.000Z")),true);
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:00:00.000Z")),"amazon"); // 5 PM Cairo
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:00:00.000Z")),"other_sites"); // 6 PM Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-12T15:04:00.000Z")),"other_sites", "allow brief startup/timer jitter after 6 PM");
+assert.equal(newsletterKindAt(new Date("2026-10-12T15:05:00.000Z")),null, "close the scheduled window after five minutes");
+assert.equal(newsletterKindAt(new Date("2026-10-12T15:45:00.000Z")),null, "a late boot must not publish the 6 PM newsletter at 6:45 PM");
+assert.equal(newsletterKindAt(new Date("2026-10-12T14:05:00.000Z")),null, "close the Amazon window after five minutes");
 assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),null); // no third newsletter
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
   Array.from({length: 6}, (_,i) => ({
@@ -182,6 +196,10 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(requestCount, 10, "all source queries should still be attempted");
  assert.ok(peakRequests <= 2, "ScraperAPI requests must be bounded to two concurrent requests");
  assert.equal(collected.sourceCount, 10);
+ assert.equal(collected.sourceStats.length, 10, "each source request should report a safe extraction summary");
+ assert.ok(collected.sourceStats.every(stat => stat.ok && stat.extractedCount === 0 && stat.reason === "no_products_extracted"),
+   "successful HTTP responses with empty parser results must be distinguishable from request failures");
+ assert.equal(collected.errors.length, 10, "empty extraction should be visible in diagnostics even when HTTP requests succeeded");
  const amazonTargets = [];
  const amazonOnly = await collectDealCandidates({
    edition: "amazon",

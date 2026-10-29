@@ -38,11 +38,39 @@ function safeProductUrl(raw, sourceName) {
     return u.toString();
   } catch { return null; }
 }
+function extractStructuredCards(html, sourceName, query = "") {
+  const source = SOURCES[sourceName];
+  if (!source || typeof html !== "string") return [];
+  const products = [];
+  const visit = value => {
+    if (!value || typeof value !== "object") return;
+    const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
+    if (types.some(type => String(type || "").toLowerCase() === "product")) products.push(value);
+    if (Array.isArray(value)) value.forEach(visit); else Object.values(value).forEach(visit);
+  };
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(match => /\btype\s*=\s*(["\x27])application\/ld\+json\1/i.test(match[1])).map(match => match[2]);
+  for (const script of scripts) { try { visit(JSON.parse(script.trim())); } catch { /* Ignore malformed structured data. */ } }
+  const merchant = sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "noon" ? "Noon Egypt" : "Carrefour Egypt";
+  const cards = [];
+  for (const product of products) {
+    const title = htmlText(product.name || product.title || "");
+    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
+    const url = safeProductUrl(product.url || product.offers?.url || product.mainEntityOfPage?.["@id"] || "", sourceName);
+    const offerList = Array.isArray(product.offers) ? product.offers : [product.offers || {}];
+    const prices = offerList.filter(offer => !offer.priceCurrency || String(offer.priceCurrency).toUpperCase() === "EGP").map(offer => money(offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price)).filter(value => value !== null);
+    const price = prices.length ? Math.min(...prices) : null;
+    const oldPrice = money(product.offers?.highPrice || product.highPrice);
+    if (!url || !price) continue;
+    const deal = { merchant, title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
+    if (validateDeal(deal).ok) cards.push(deal);
+  }
+  return cards;
+}
 function extractCards(html, sourceName, query = "") {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
-  const cards = [];
   if (sourceName === "carrefour") {
+    const cards = [];
     const products = [];
     // Match script elements first, then inspect the type attribute. This avoids
     // depending on attribute order or whitespace in retailer-generated HTML.
@@ -73,9 +101,11 @@ function extractCards(html, sourceName, query = "") {
     }
     return cards;
   }
+  let cards = extractStructuredCards(html, sourceName, query);
+  const structuredKeys = new Set(cards.map(deal => deal.url + "|" + deal.price));
   let chunks = [];
-  if (sourceName === "amazon") chunks = [...html.matchAll(/<div[^>]+data-component-type=["']s-search-result["'][\s\S]*?<\/div>\s*<\/div>/gi)].map(m=>m[0]);
-  else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["'][^"']*prd[^"']*["'][\s\S]*?<\/article>/gi)].map(m=>m[0]);
+  if (sourceName === "amazon") chunks = [...html.matchAll(/<div[^>]+data-component-type=["\x27]s-search-result["\x27][\s\S]*?<\/div>\s*<\/div>/gi)].map(m=>m[0]);
+  else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["\x27][^"\x27]*prd[^"\x27]*["\x27][\s\S]*?<\/article>/gi)].map(m=>m[0]);
   else chunks = [...html.matchAll(/<article[\s\S]*?<\/article>/gi)].map(m=>m[0]);
   for (const chunk of chunks) {
     const titleMatch = chunk.match(/<h2[^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/h2>/i) || chunk.match(/(?:data-qa=["']product-name["'][^>]*>|class=["']name["'][^>]*>)([\s\S]*?)<\//i);
@@ -91,7 +121,11 @@ function extractCards(html, sourceName, query = "") {
     const oldPrice = money(htmlText(oldMatch?.[1] || ""));
     if (!url || !price) continue;
     const deal = { merchant: sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : "Noon Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
-    if (validateDeal(deal).ok) cards.push(deal);
+    if (validateDeal(deal).ok) {
+      const key = deal.url + "|" + deal.price;
+      if (!structuredKeys.has(key)) cards.push(deal);
+      structuredKeys.add(key);
+    }
   }
   return cards;
 }
@@ -161,16 +195,36 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   }
   if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
-  const deals = [], errors = [];
+  const deals = [], errors = [], sourceStats = [];
   const seen = new Set();
-  for (const r of results) {
-    if (r.status !== "fulfilled") { errors.push({ reason: "task_rejected" }); continue; }
-    if (!r.value.ok) { errors.push({ source: r.value.source, reason: r.value.reason }); continue; }
+  for (let index = 0; index < results.length; index++) {
+    const r = results[index];
+    const task = tasks[index];
+    if (r.status !== "fulfilled") {
+      errors.push({ source: task.source, reason: "task_rejected" });
+      sourceStats.push({ source: task.source, ok: false, extractedCount: 0, reason: "task_rejected" });
+      continue;
+    }
+    if (!r.value.ok) {
+      errors.push({ source: r.value.source, reason: r.value.reason });
+      sourceStats.push({ source: r.value.source, ok: false, extractedCount: 0, reason: r.value.reason });
+      continue;
+    }
+    const extractedCount = r.value.deals.length;
+    sourceStats.push({
+      source: r.value.source,
+      ok: true,
+      extractedCount,
+      ...(extractedCount === 0 ? { reason: "no_products_extracted" } : {})
+    });
+    // A successful HTTP response with no parsed products is diagnostically
+    // different from a source that failed to load. Record it without logging HTML.
+    if (extractedCount === 0) errors.push({ source: r.value.source, reason: "no_products_extracted" });
     for (const d of r.value.deals) {
       const key = `${d.url}|${d.price}`;
       if (!seen.has(key)) { seen.add(key); deals.push(d); }
     }
   }
-  return { deals, errors, sourceCount: tasks.length };
+  return { deals, errors, sourceStats, sourceCount: tasks.length };
 }
 module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, getScraperKeys, fetchSearch, collectDealCandidates };

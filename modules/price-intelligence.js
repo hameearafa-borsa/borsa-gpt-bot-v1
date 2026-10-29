@@ -350,6 +350,8 @@ function extractPriceCandidates(text) {
       ? extractInvoiceProductText(parsedLine)
       : extractProductText(parsedLine))
       .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى|قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة|بعد)/giu, " ")
+      // Standalone "ق" denotes a per-piece price; it is not part of the product name.
+      .replace(/(?:^|\s)ق(?=\s|$)/giu, " ")
       .replace(/\s+/g, " ").trim();
     const weightLabel = quantity?.[0]?.trim() || (decimalAutomaticWeight ? decimalAutomaticWeight[1] : null);
     // Generic package words describe packaging, not the product identity.

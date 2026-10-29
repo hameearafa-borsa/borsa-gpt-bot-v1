@@ -144,6 +144,48 @@ async function isPriceReviewer(telegram, userId) {
   return false;
 }
 
+const priceEditSessions = new Map();
+
+async function startPriceEdit(ctx, id) {
+  if (!Number.isSafeInteger(id) || id < 1) { await ctx.reply("رقم طلب المراجعة غير صحيح."); return false; }
+  priceEditSessions.set(Number(ctx.from.id), { id, step: "product" });
+  await ctx.telegram.sendMessage(ctx.from.id,
+    `✏️ تعديل سجل السعر #${id}\n\nسنكمل التعديل خطوة بخطوة، دون رموز خاصة أو تنسيق معقد.\n\n1 من 5: اكتب اسم الصنف الصحيح.\nيمكنك إرسال /cancel في أي وقت للإلغاء.`);
+  return true;
+}
+
+async function completePriceEdit(ctx, values) {
+  const { id, productText, price, weightG, volumeMl, packCount } = values;
+  const reviewerId = Number(ctx.from?.id || ctx.message?.from?.id);
+  try {
+    const result = await priceReview.saveEditedReview({ db, id, reviewerId, productText, price, weightG, volumeMl, packCount });
+    if (!result.ok) { await ctx.reply("لم يتم التعديل: طلب المراجعة غير موجود أو تمت مراجعته مسبقًا."); return; }
+    let buttonsRemoved = false;
+    try {
+      const queue = await db.query("SELECT log_chat_id, log_message_id FROM price_review_queue WHERE observation_id=$1", [id]);
+      const target = queue.rows[0];
+      if (target?.log_chat_id && target?.log_message_id) {
+        try {
+          await ctx.telegram.editMessageText(target.log_chat_id, target.log_message_id, undefined,
+            `✏️ تم تعديل واعتماد سجل السعر #${id}\nالصنف: ${productText}\nالسعر: ${price.toFixed(2)} ج.م\nنوع السعر: جملة\nالمراجع: ${reviewerId}`,
+            { reply_markup: { inline_keyboard: [] } });
+          buttonsRemoved = true;
+        } catch (editError) {
+          await sendLog({ module: "price-monitor", stage: "review_edit_clear_buttons", severity: "warn", status: "failed", details: { observationId: id, error: redactString(editError?.message || "could not clear review buttons") } }).catch(() => {});
+        }
+      }
+    } catch (postSaveError) {
+      await sendLog({ module: "price-monitor", stage: "review_edit_refresh_message", severity: "warn", status: "failed", details: { observationId: id, error: redactString(postSaveError?.message || "could not refresh review message") } }).catch(() => {});
+    }
+    await ctx.reply(buttonsRemoved
+      ? "تم حفظ التعديل واعتماد السعر، وأزيلت أزرار المراجعة من رسالة السجل."
+      : "تم حفظ التعديل واعتماد السعر، لكن تعذر تحديث رسالة المراجعة أو إزالة أزرارها. يرجى مراجعة قناة السجل.");
+  } catch (error) {
+    await ctx.reply("تعذر حفظ التعديل. لم يتم تأكيد نجاح العملية؛ راجع لوحة الأسعار وحاول لاحقًا.");
+    await sendLog({ module: "price-monitor", stage: "review_edit", severity: "error", status: "failed", details: { observationId: id, error: redactString(error?.message || "review edit failed") } }).catch(() => {});
+  }
+}
+
 async function configureCommandMenus() {
   // Old builds installed narrower scopes that override all_private_chats/all_group_chats.
   // Clear those legacy scopes first so Telegram can display the new service-only menus.
@@ -310,53 +352,77 @@ bot.on("text", async ctx => {
   const text = m.text;
   const cmd = commandName(text);
   const args = commandText(text);
+  if (m.chatType === "private" && priceEditSessions.has(Number(m.userId))) {
+    const session = priceEditSessions.get(Number(m.userId));
+    const value = String(text || "").trim();
+    if (/^\/(?:cancel|إلغاء)(?:\s|$)/i.test(value) || value === "إلغاء") {
+      priceEditSessions.delete(Number(m.userId));
+      await ctx.reply("تم إلغاء تعديل السعر. لم تتغير البيانات.");
+      return;
+    }
+    if (!(await isPriceReviewer(ctx.telegram, m.userId))) {
+      priceEditSessions.delete(Number(m.userId));
+      await ctx.reply("انتهت صلاحية جلسة التعديل؛ هذا الإجراء متاح لمالك البوت أو منشئي المجموعات المعتمدة فقط.");
+      return;
+    }
+    if (session.step === "product") {
+      if (!value || value.length > 160 || value.startsWith("/")) { await ctx.reply("اكتب اسم الصنف فقط (حتى 160 حرفًا)، أو أرسل /cancel للإلغاء."); return; }
+      session.productText = value; session.step = "price";
+      await ctx.reply("2 من 5: اكتب السعر بالجنيه، مثال: 121 أو 121.50"); return;
+    }
+    if (session.step === "price") {
+      const price = Number(value.replace(",", "."));
+      if (!Number.isFinite(price) || price <= 0 || price >= 100000) { await ctx.reply("السعر غير صحيح. اكتب رقمًا أكبر من صفر وأقل من 100000، مثال: 121.50"); return; }
+      session.price = price; session.step = "weight";
+      await ctx.reply("3 من 5: اكتب الوزن بالجرام إن وجد، أو أرسل - إذا كان الصنف بالملليلتر أو لا ينطبق."); return;
+    }
+    if (session.step === "weight") {
+      const weightG = value === "-" ? null : Number(value.replace(",", "."));
+      if (weightG !== null && (!Number.isFinite(weightG) || weightG <= 0)) { await ctx.reply("الوزن غير صحيح. اكتب رقمًا بالجرام مثل 350، أو - إذا لم ينطبق."); return; }
+      session.weightG = weightG; session.step = "volume";
+      await ctx.reply("4 من 5: اكتب الحجم بالملليلتر إن وجد، مثل 350، أو - إذا لم ينطبق."); return;
+    }
+    if (session.step === "volume") {
+      const volumeMl = value === "-" ? null : Number(value.replace(",", "."));
+      if (volumeMl !== null && (!Number.isFinite(volumeMl) || volumeMl <= 0)) { await ctx.reply("الحجم غير صحيح. اكتب رقمًا بالملليلتر مثل 350، أو - إذا لم ينطبق."); return; }
+      session.volumeMl = volumeMl; session.step = "packs";
+      await ctx.reply("5 من 5: اكتب عدد العبوات إن كان السعر لعدة عبوات، أو - إذا كان لعبوة واحدة/لا ينطبق."); return;
+    }
+    if (session.step === "packs") {
+      const packCount = value === "-" ? null : Number(value.replace(",", "."));
+      if (packCount !== null && (!Number.isInteger(packCount) || packCount <= 0 || packCount > 1000)) { await ctx.reply("عدد العبوات غير صحيح. اكتب عددًا صحيحًا مثل 12، أو - إذا لم ينطبق."); return; }
+      priceEditSessions.delete(Number(m.userId));
+      await completePriceEdit(ctx, { id: session.id, productText: session.productText, price: session.price, weightG: session.weightG, volumeMl: session.volumeMl, packCount });
+      return;
+    }
+  }
+
   if (cmd === "priceedit" && m.chatType === "private") {
     if (!(await isPriceReviewer(ctx.telegram, m.userId))) { await ctx.reply("هذا الإجراء متاح لمالك البوت أو منشئي المجموعات المعتمدة فقط."); return; }
-    const fields = args.split("|").map(value => value.trim());
-    if (fields.length !== 6) { await ctx.reply("صيغة غير صحيحة. استخدم: /priceedit ID | اسم الصنف | السعر | الوزن_جرام أو - | الحجم_مللي أو - | عدد العبوات أو -"); return; }
+    const raw = args.trim();
+    const firstToken = raw.split(/\s+/)[0];
+    const id = Number(firstToken);
+    if (Number.isSafeInteger(id) && id > 0 && !raw.includes("|")) {
+      try { await startPriceEdit(ctx, id); }
+      catch (error) { priceEditSessions.delete(Number(m.userId)); await ctx.reply("تعذر بدء التعديل. افتح طلب المراجعة واضغط «تعديل في الخاص» مرة أخرى."); }
+      return;
+    }
+    const fields = raw.split("|").map(value => value.trim());
+    if (fields.length !== 6) { await ctx.reply("للتعديل السهل استخدم: /priceedit 23 ثم أجب عن الأسئلة واحدًا واحدًا. ويمكنك الإلغاء بإرسال /cancel."); return; }
     const [idText, productText, priceText, weightText, volumeText, packText] = fields;
-    const id = Number(idText), price = Number(priceText.replace(",", "."));
+    const editId = Number(idText), price = Number(priceText.replace(",", "."));
     const parseOptional = value => value === "-" || value === "" ? null : Number(value.replace(",", "."));
     const weightG = parseOptional(weightText), volumeMl = parseOptional(volumeText), packCount = parseOptional(packText);
-    if (!Number.isSafeInteger(id) || id < 1 || !productText || productText.length > 160 ||
+    if (!Number.isSafeInteger(editId) || editId < 1 || !productText || productText.length > 160 ||
         !Number.isFinite(price) || price <= 0 || price >= 100000 ||
         (weightG !== null && (!Number.isFinite(weightG) || weightG <= 0)) ||
         (volumeMl !== null && (!Number.isFinite(volumeMl) || volumeMl <= 0)) ||
         (packCount !== null && (!Number.isInteger(packCount) || packCount <= 0 || packCount > 1000))) {
       await ctx.reply("القيم غير صالحة. راجع رقم السجل واسم الصنف والسعر والوزن والحجم والعدد."); return;
     }
-    try {
-      const result = await priceReview.saveEditedReview({ db, id, reviewerId: m.userId, productText, price, weightG, volumeMl, packCount });
-      if (!result.ok) { await ctx.reply("لم يتم التعديل: السجل غير موجود أو تمت مراجعته مسبقًا."); return; }
-      // The database transaction has committed. Failures while refreshing the Telegram
-      // log message must not be reported as if saving the price itself had failed.
-      let buttonsRemoved = false;
-      try {
-        const queue = await db.query("SELECT log_chat_id, log_message_id FROM price_review_queue WHERE observation_id=$1", [id]);
-        const target = queue.rows[0];
-        if (target?.log_chat_id && target?.log_message_id) {
-          try {
-            await ctx.telegram.editMessageText(target.log_chat_id, target.log_message_id, undefined,
-              `✏️ تم تعديل واعتماد سجل السعر #${id}\nالصنف: ${productText}\nالسعر: ${price.toFixed(2)} ج.م\nنوع السعر: جملة\nالمراجع: ${m.userId}`,
-              { reply_markup: { inline_keyboard: [] } });
-            buttonsRemoved = true;
-          } catch (editError) {
-            await sendLog({ module: "price-monitor", stage: "review_edit_clear_buttons", severity: "warn", status: "failed", details: { observationId: id, error: redactString(editError?.message || "could not clear review buttons") } }).catch(() => {});
-          }
-        }
-      } catch (postSaveError) {
-        await sendLog({ module: "price-monitor", stage: "review_edit_refresh_message", severity: "warn", status: "failed", details: { observationId: id, error: redactString(postSaveError?.message || "could not refresh review message") } }).catch(() => {});
-      }
-      await ctx.reply(buttonsRemoved
-        ? "تم حفظ التعديل واعتماد السعر، وأزيلت أزرار المراجعة من رسالة السجل."
-        : "تم حفظ التعديل واعتماد السعر، لكن تعذر تحديث رسالة المراجعة أو إزالة أزرارها. يرجى مراجعة قناة السجل.");
-    } catch (error) {
-      await ctx.reply("تعذر حفظ التعديل. لم يتم تأكيد نجاح العملية؛ راجع لوحة الأسعار وحاول لاحقًا.");
-      await sendLog({ module: "price-monitor", stage: "review_edit", severity: "error", status: "failed", details: { observationId: id, error: redactString(error?.message || "review edit failed") } });
-    }
+    await completePriceEdit(ctx, { id: editId, productText, price, weightG, volumeMl, packCount });
     return;
   }
-
 
   // /claim submits a request only; it never grants group access.
   if (cmd === "claim" && ["group", "supergroup"].includes(m.chatType)) {
@@ -759,9 +825,12 @@ bot.action(/^prv:edit:(\d+)$/, async ctx => {
     return;
   }
   const id = Number(ctx.match[1]);
-  const prompt = `✏️ تعديل سجل السعر #${id}\n\nأرسل الأمر التالي في الخاص بعد استبدال القيم، مع الفصل بعلامة | :\n/priceedit ${id} | اسم الصنف | السعر | الوزن_بالجرام أو - | الحجم_بالمللي أو - | عدد العبوات أو -\n\nسيُحفظ السعر المعدل كسعر جملة معتمد. لا تستخدمه إذا لم تتأكد أن السعر سعر جملة.`;
-  try { await ctx.telegram.sendMessage(ctx.from.id, prompt); }
-  catch (error) { await sendLog({ module: "price-monitor", stage: "review_edit_dm_failed", severity: "warn", status: "failed", details: { userId: ctx.from?.id, observationId: id, error: redactString(error?.message || "could not send private edit instructions") } }).catch(() => {}); }
+  try {
+    await startPriceEdit(ctx, id);
+  } catch (error) {
+    priceEditSessions.delete(Number(ctx.from?.id));
+    await sendLog({ module: "price-monitor", stage: "review_edit_dm_failed", severity: "warn", status: "failed", details: { userId: ctx.from?.id, observationId: id, error: redactString(error?.message || "could not start private edit flow") } }).catch(() => {});
+  }
 });
 
 bot.catch(async (err, ctx) => {

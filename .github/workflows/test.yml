@@ -67,3 +67,15 @@ jobs:
           echo "$font_match"
           test -n "$font_match"
           echo "$font_match" | grep -qi 'Noto'
+
+      - name: Render Unilever fixture pages for visual QA
+        env:
+          PRICE_LIST_TEST_OUTPUT_DIR: artifacts/unilever-oct-2026
+        run: node tests/price-list-image-real.test.js
+      - name: Upload Unilever PNG visual QA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unilever-oct-2026-price-list-pngs
+          path: artifacts/unilever-oct-2026/*.png
+          if-no-files-found: error
+          retention-days: 7

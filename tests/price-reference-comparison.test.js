@@ -30,6 +30,8 @@ const signalObservation = {
 };
 
 assert.equal(comparableName("سيجنال ١٢٠مل"), "سيجنال");
+assert.equal(comparableName("كلير أكياس 5 مل الكرتونة"), comparableName("كلير أكياس 5 مل"),
+  "definite-article carton wording must not prevent matching the same product identity");
 const pieceComparison = compareReferencePrice(signalReference, signalObservation);
 assert.equal(pieceComparison.comparable, true);
 assert.equal(pieceComparison.referencePrice, 42.33);

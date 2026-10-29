@@ -108,7 +108,7 @@ function extractCards(html, sourceName, query = "") {
     // Amazon result cards contain nested divs, so matching a fixed number of
     // closing divs can truncate cards when retailer markup changes. Split at
     // each result-card opening tag so nested title, link, and price remain intact.
-    const starts = [...html.matchAll(/<div\\b(?=[^>]*\\bdata-component-type=["']s-search-result["'])[^>]*>/gi)];
+    const starts = [...html.matchAll(/<div\b(?=[^>]*\bdata-component-type=["']s-search-result["'])[^>]*>/gi)];
     chunks = starts.map((match, index) => html.slice(match.index, starts[index + 1]?.index ?? html.length));
   }
   else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["\x27][^"\x27]*prd[^"\x27]*["\x27][\s\S]*?<\/article>/gi)].map(m=>m[0]);
@@ -163,7 +163,7 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
       const deals = extractCards(html, sourceName, query);
       const pageSignal = /captcha|robot check|automated access|validatecaptcha|enter the characters you see/i.test(html)
         ? "captcha_or_block_page"
-        : /data-component-type=["']s-search-result["']|application\\/ld\\+json/i.test(html)
+        : /data-component-type=["']s-search-result["']|application\/ld\+json/i.test(html)
           ? "product_markup_present"
           : html.trim().length === 0 ? "empty_response" : "no_product_markers";
       return { source: sourceName, ok: true, deals, ...(deals.length === 0 ? { pageSignal } : {}) };

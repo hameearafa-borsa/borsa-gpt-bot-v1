@@ -35,7 +35,7 @@ const { persistPriceList } = require("../modules/price-list-persistence");
   assert.equal(queries.filter(q => q.sql.includes("INSERT INTO price_list_items")).length, 66);
   const references = queries.filter(q => q.sql.includes("INSERT INTO price_reference_observations"));
   assert.equal(references.length, 66);
-  assert.ok(references.every(q => q.params[4] === "أسعار جملة" && q.params[5] === "wholesale" && q.params[17] === "accepted"));
+  assert.ok(references.every(q => q.params[3] === "أسعار جملة" && q.params[4] === "wholesale" && q.params[16] === "accepted"));
   assert.ok(references.some(q => /سيجنال 120مل/.test(q.params[16]) && q.params[13] === "بالقطعة"),
     "per-piece toothpaste row and its raw source line must be persisted");
   assert.ok(references.some(q => /كلير أكياس 5 مل الكرتونة/.test(q.params[16]) && q.params[13] === "بالكرتونة"),

@@ -11,19 +11,27 @@ function isListLike(text) {
   const s = toAsciiDigits(String(text || ""));
   const lines = s.split(/\r?\n/).filter(Boolean).length;
   const priceHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\s*(?:ج|جنيه|EGP)(?=\s|\||$)/gi) || []).length;
-  return lines >= 5 && (priceHits >= 3 || (s.match(/\|/g) || []).length >= 3);
+  const pipeCount = (s.match(/\|/g) || []).length;
+  const numericHits = (s.match(/[0-9]+(?:[.,][0-9]+)?/g) || []).length;
+  const quantityHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\s*(?:كيلو|كجم|جرام|جم|liter|kg|ml|g|لتر|مل|ك|ل)(?=\s|[|•,;:]|$)/giu) || []).length;
+  // Some Telegram clients paste a whole catalog as one long line. Accept only
+  // strong multi-row evidence here; ordinary conversational price mentions stay excluded.
+  const singleLineCatalog = lines === 1 && numericHits >= 12 &&
+    (priceHits >= 8 || pipeCount >= 8 || quantityHits >= 8);
+  return singleLineCatalog || (lines >= 5 && (priceHits >= 3 || pipeCount >= 3));
 }
 function buildListPrompt(text) {
   return [
     "استخرج قائمة أسعار تجارية للمنظفات ومنتجات الورق والعناية الشخصية.",
-    "أعد JSON فقط بالشكل: {\"company\":null,\"items\":[{\"product\":null,\"variant\":null,\"weight_g\":null,\"volume_ml\":null,\"pack_count\":null,\"package_sale_price\":null,\"wholesale_carton_price\":null,\"consumer_price\":null,\"list_price\":null,\"decision\":\"accepted|review|skipped\"}]}.",
+    "أعد JSON فقط بالشكل: {\"company\":null,\"items\":[{\"raw_line\":null,\"product\":null,\"variant\":null,\"weight_g\":null,\"volume_ml\":null,\"pack_count\":null,\"package_sale_price\":null,\"unit_price_type\":\"بالقطعة|بالكرتونة|null\",\"wholesale_carton_price\":null,\"consumer_price\":null,\"list_price\":null,\"decision\":\"accepted|review|skipped\"}]}.",
     "السعر الأول بعد الوزن هو سعر العبوة إذا كان واضحًا. قيمة جملة المنفصلة تحفظ في wholesale_carton_price ولا تستبدل سعر العبوة. قيمة مستهلك تحفظ في consumer_price.",
+    "عنوان الأسعار بالقطعة يجعل كل الأسطر التالية بالقطعة حتى يظهر عنوان الأسعار بالكرتونة؛ وعنوان الكرتونة يظل ساريًا حتى يتغير. في قائمة شركة معلن أنها أسعار جملة، اعتبر السعر غير المعلّم سعر كرتونة ما لم توجد علامة قطعة صريحة أو سياق مخالف. احفظ ذلك في unit_price_type.",
     "لا تستنتج عدد قطع الكرتونة من قسمة الأسعار؛ سجّل pack_count فقط إذا ذُكر صراحة مثل 4ق.",
     "أسماء الأقسام مثل أوتوماتيك وأوزان وشكاير والعبوات الصغيرة تصف النوع ولا تستبدل اسم الشركة/العلامة.",
     "كلمة شكارة هي نوع العبوة وليست اسم منتج. لا تعتبر الأرقام وحدها اسم منتج.",
     "إذا كان اسم الشركة/العلامة غير موجود في السطر، استخدم company + section + weight كتعريف مؤقت، واجعل القرار review إذا لم تكن الهوية واضحة.",
     "إذا كان السطر غير واضح، decision=skipped. ممنوع اختراع بيانات.",
-    String(text || "").slice(0, 18000)
+    removeNonPriceComments(text).slice(0, 18000)
   ].join("\n");
 }
 function parseAIJson(text) {
@@ -62,6 +70,8 @@ function parseListMetadata(text) {
     if (companyMatch) company = companyMatch[1].trim().replace(/[:：]+$/, "");
     const monthMatch = line.match(/^(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+(20\d{2})$/iu);
     if (monthMatch) month = `${monthMatch[1]} ${monthMatch[2]}`;
+    const titleMonthMatch = line.match(/^(?:أسعار|اسعار)\s+.+?[–—-]\s*(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)(?:\s+(20\d{2}))?$/iu);
+    if (titleMonthMatch) month = titleMonthMatch[2] ? `${titleMonthMatch[1]} ${titleMonthMatch[2]}` : titleMonthMatch[1];
     if (/الأسعار?\s*(?:هي\s*)?جملة|اسعار\s*جمله/iu.test(line)) priceType = "أسعار جملة";
     else if (/(?:قطاعي|مستهلك|تجزئة)/iu.test(line)) priceType = "أسعار قطاعي";
   }
@@ -77,23 +87,58 @@ function cleanExplicitProductLine(line) {
   if (!token) return cleanProductName(line);
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
     .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
+    // Keep carton promotion wording in raw_line, not in the normalized product identity.
+    .replace(/\s+(?:العرض|عرض)\s+على\s+(?:الكرتونة|الكرتونه)[\s\S]*$/iu, "")
     .replace(/\s+/g, " ").trim().replace(/^[\s•*._-]+/, "");
+}
+function detectUnitPriceHeading(line) {
+  const s = normalizeArabic(line);
+  if (/(?:الاسعار|اسعار|سعر).*(?:بالكرتونه|بالكرتون|للكرتونه|سعر الكرتونه|كرتونه)/u.test(s)) return "بالكرتونة";
+  if (/(?:الاسعار|اسعار|سعر).*(?:بالقطعه|للقطعه|سعر القطعه)/u.test(s)) return "بالقطعة";
+  return null;
 }
 function detectUnitPriceType(line) {
   const s = String(line || "");
-  // Explicit wording wins; standalone Arabic ق is a common shorthand for per-piece pricing.
-  if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|قطعة|بالقطعه|للقطعه)/iu.test(s) || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
+  // Explicit row-level carton wording takes precedence over a section heading.
+  if (/(?:بالكرتونة|بالكرتونه|للكرتونة|للكرتونه|سعر\s*الكرتونة|سعر\s*الكرتونه|الكرتونة|الكرتونه)/iu.test(s)) return "بالكرتونة";
+  // Explicit wording or standalone Arabic ق identifies per-piece pricing.
+  if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|بالقطعه|سعر\s*القطعه|للقطعه)/iu.test(s) || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
   return null;
+}
+function isNonPriceCommentLine(line) {
+  const raw = String(line || "").trim();
+  if (!raw) return false;
+  // Conversation-style notes are not price observations. Do not treat amounts
+  // mentioned in prose (e.g. "برضو فيه ب 10 و برضو في ب 25") as prices.
+  // A conversational lead marks the whole line as commentary, even if it mentions currency.
+  const s = normalizeArabic(raw).trim();
+  return /^(?:برضو|برضه|برده|كمان|وكمان|وفيه|فيه|موجود|متوفر|متاح|لسه|باقي|على فكره|للعلم|معلش)(?:\s|$)/u.test(s);
+}
+function removeNonPriceComments(text) {
+  return String(text || "").split(/\r?\n/).filter(line => !isNonPriceCommentLine(line)).join("\n");
+}
+function hasContextualCurrencyTypo(lines, index) {
+  // Treat a trailing ح as a likely typo for ج only when an immediately adjacent
+  // priced row uses an unambiguous Egyptian-pound marker. Never globally rewrite ح.
+  const currencyPrice = /\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)\s*$/iu;
+  return [index - 1, index + 1].some(neighborIndex =>
+    neighborIndex >= 0 && neighborIndex < lines.length &&
+    currencyPrice.test(toAsciiDigits(lines[neighborIndex]))
+  );
 }
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const metadata = parseListMetadata(text);
-  let company = metadata.company, section = null;
+  let company = metadata.company, section = null, sectionUnitPriceType = null;
   const out = [];
-  for (const line of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const line = lines[lineIndex];
+    if (isNonPriceCommentLine(line)) continue;
     if (/^[-_=.*.]{3,}$/.test(line) || /^\/(?:قائمة|pricelist)(?:\s|$)/iu.test(line)) continue;
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
     const normalized = normalizeArabic(line);
+    const unitHeading = detectUnitPriceHeading(line);
+    if (unitHeading && !getPriceTokens(line).length) { sectionUnitPriceType = unitHeading; continue; }
     if (!getPriceTokens(line).length && !line.includes("|")) {
       if (/^(?:الأسعار?|اسعار)\s*(?:هي\s*)?(?:جملة|جمله|قطاعي|مستهلك)$/iu.test(line)) continue;
       if (/[:：]$/.test(line) && line.length <= 70) { section = line.replace(/[:：]+$/, "").trim(); continue; }
@@ -120,11 +165,19 @@ function deterministicList(text) {
     const afterConsumer = consumerIndex >= 0 ? getPriceTokens(line.slice(consumerIndex + line.slice(consumerIndex).match(RETAIL_LABEL)[0].length))[0]?.value ?? null : null;
     const beforeLabel = priceTokens.find(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
     const packagePrice = beforeLabel?.value ?? null;
-    const unitPriceType = detectUnitPriceType(line);
+    const rowUnitPriceType = detectUnitPriceType(line);
+    // A carton-specific offer note establishes the unit for following rows in the same product section.
+    if (rowUnitPriceType === "بالكرتونة" && /العرض\s+على\s+الكرتونة|العرض\s+على\s+الكرتونه/iu.test(line)) {
+      sectionUnitPriceType = "بالكرتونة";
+    }
+    const unitPriceType = rowUnitPriceType || sectionUnitPriceType ||
+      // In a named company wholesale catalog, an unmarked price is a carton price.
+      // Explicit per-piece markers and section headings take precedence above.
+      (metadata.company && metadata.priceType === "أسعار جملة" ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(productPrefix);
-    const isNumericOnly = !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));
+    const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));
     const product = metadata.company
       ? productPrefix
       : [company, section, productPrefix, weightLabel].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
@@ -132,7 +185,8 @@ function deterministicList(text) {
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
     const hasIdentity = metadata.company ? Boolean(productPrefix && /[\u0600-\u06ff]/u.test(productPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
     const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
-    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : suspiciousCurrency ? "review" : "accepted";
+    const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
+    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";
     out.push({
       raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company,
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
@@ -159,6 +213,29 @@ async function extractList(ai, text) {
     const parsed = parseAIJson(result.text);
     // Guard AI output against missing identity and non-positive prices; preserve skipped rows for audit.
     parsed.items = parsed.items.map(item => {
+      const rawLine = String(item.raw_line || "").trim();
+      const localMatch = rawLine ? localItems.find(row => row.raw_line === rawLine) : null;
+      // The deterministic parser owns numeric facts from a recognized source row.
+      // AI may improve the wording of the product identity, but must not replace
+      // the source-derived package, wholesale, consumer, weight, volume or count values.
+      if (localMatch) {
+        item = {
+          ...item,
+          raw_line: rawLine,
+          package_sale_price: localMatch.package_sale_price,
+          wholesale_carton_price: localMatch.wholesale_carton_price ?? null,
+          consumer_price: localMatch.consumer_price ?? null,
+          weight_g: localMatch.weight_g ?? null,
+          volume_ml: localMatch.volume_ml ?? null,
+          pack_count: localMatch.pack_count ?? null,
+          unit_price_type: localMatch.unit_price_type ?? null,
+          list_price: localMatch.list_price ?? null,
+          company: localMatch.company ?? item.company ?? null,
+        };
+        // A model cannot auto-approve a row the deterministic parser marked ambiguous.
+        if (localMatch.decision === "skipped") item.decision = "skipped";
+        else if (localMatch.decision === "review") item.decision = "review";
+      }
       const price = Number(item.package_sale_price);
       const product = String(item.product || "").trim();
       if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };
@@ -176,4 +253,4 @@ async function extractList(ai, text) {
     return { ...metadata, ...parsed, company: parsed.company || metadata.company || null, method: result.provider || "ai" };
   } catch (error) { return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: error.message }; }
 }
-module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType };
+module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType, detectUnitPriceHeading };

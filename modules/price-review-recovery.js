@@ -1,6 +1,7 @@
 "use strict";
 const crypto = require("node:crypto");
 const { formatReviewMessage, reviewKeyboard } = require("./price-review");
+const { markTelegramRateLimited, isTelegramRateLimit, isTelegramRateLimitedNow } = require("../core/telegram-rate-limit");
 const CLAIM_LEASE_SECONDS = 120;
 
 async function recoverPendingNotifications({ db, telegram, defaultLogChatId = null, onError = async () => {}, limit = 100 }) {
@@ -37,6 +38,7 @@ async function recoverPendingNotifications({ db, telegram, defaultLogChatId = nu
     [defaultLogChatId, batchSize, CLAIM_LEASE_SECONDS, token]);
   const stats = { found: result.rows.length, sent: 0, failed: 0 };
   for (const row of result.rows) {
+    if (isTelegramRateLimitedNow()) break;
     let sentMessage = null;
     try {
       // A batch may take longer than one lease to process. Renew this row's
@@ -61,10 +63,13 @@ async function recoverPendingNotifications({ db, telegram, defaultLogChatId = nu
       stats.sent += 1;
     } catch (error) {
       stats.failed += 1;
+      const hitTelegramRateLimit = isTelegramRateLimit(error);
+      if (hitTelegramRateLimit) markTelegramRateLimited(error);
       if (sentMessage?.message_id != null && row.target_log_chat_id != null) {
         try { await telegram.deleteMessage?.(row.target_log_chat_id, sentMessage.message_id); } catch {}
       }
       try { await onError(error, { observationId: row.observation_id, logChatId: row.target_log_chat_id ?? null }); } catch {}
+      if (hitTelegramRateLimit) break;
     }
   }
   return stats;

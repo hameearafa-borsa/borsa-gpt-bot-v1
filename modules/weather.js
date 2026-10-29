@@ -35,6 +35,14 @@ const WEATHER_CODES_AR = {
   80: "زخات مطر خفيفة", 81: "زخات مطر متوسطة", 82: "زخات مطر قوية", 85: "زخات ثلج خفيفة", 86: "زخات ثلج غزيرة", 95: "عواصف رعدية", 96: "عواصف رعدية مع برد", 99: "عواصف رعدية قوية مع برد"
 };
 
+// Weather icons are selected from the live Open-Meteo weather code.
+const WEATHER_ICONS = {
+  0: "☀️", 1: "🌤️", 2: "⛅", 3: "☁️",
+  45: "🌫️", 48: "🌫️", 51: "🌦️", 53: "🌦️", 55: "🌧️",
+  61: "🌧️", 63: "🌧️", 65: "🌧️", 71: "🌨️", 73: "🌨️", 75: "❄️", 77: "🌨️",
+  80: "🌦️", 81: "🌧️", 82: "🌧️", 85: "🌨️", 86: "❄️", 95: "⛈️", 96: "⛈️", 99: "⛈️"
+};
+
 // Fixed Egyptian coordinates avoid geocoding a same-named city outside Egypt.
 const EGYPT_CITIES = Object.freeze([
   { name: "الإسكندرية", latitude: 31.2001, longitude: 29.9187 },
@@ -62,6 +70,7 @@ function validateCurrentWeather(forecast, cityName) {
     wind: c.wind_speed_10m,
     precipitation: c.precipitation,
     condition: WEATHER_CODES_AR[c.weather_code],
+    icon: WEATHER_ICONS[c.weather_code],
     time: c.time,
     timezone: forecast.timezone,
     source: "Open-Meteo"
@@ -83,12 +92,13 @@ async function getDailyWeatherReport({ fetchJson = getJson, now = new Date() } =
   }).format(now);
   const lines = [
     "🌦️ نشرة الطقس الحية — بورصة المنظفات",
+    "🤖 الخدمة مقدمة بتقنيات GPT",
     `🕒 تحديث النشرة: ${stamp} بتوقيت القاهرة`,
     ""
   ];
   for (const w of weather) {
     lines.push(
-      `📍 ${w.city}`,
+      `${w.icon} ${w.city}`,
       `• الحالة: ${w.condition}`,
       `• الحرارة: ${w.temperature}°م (المحسوسة ${w.feelsLike}°م)`,
       `• الرطوبة: ${w.humidity}%`,
@@ -131,6 +141,7 @@ async function getWeatherSummary(_ai, city = "القاهرة", options = {}) {
     const w = await getLiveWeather(city, options);
     const details = [
       `🌦️ الطقس الحالي في ${w.city}`,
+      "🤖 الخدمة مقدمة بتقنيات GPT",
       `الحالة: ${w.condition}`,
       `الحرارة: ${w.temperature}°م${w.feelsLike == null ? "" : `, المحسوسة ${w.feelsLike}°م`}`,
       w.humidity == null ? null : `الرطوبة: ${w.humidity}%`,

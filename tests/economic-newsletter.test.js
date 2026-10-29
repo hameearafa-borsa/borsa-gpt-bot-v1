@@ -36,7 +36,7 @@ const {
   assert.throws(() => parseLocalMarketHtml("<html>لا توجد أسعار</html>"), /incomplete/);
 
   const message = formatEconomicBulletin({ brentUsd: 88.13, usdEgp: 56.25, goldPoundEgp: 50468, gold21Egp: 6305 });
-  assert.equal(message.split("\n").length, 4);
+  assert.equal(message.split("\n").length, 5, "the GPT service attribution is included before the four economic indicators");
   assert.ok(message.includes("خام برنت"));
   assert.ok(message.includes("الدولار"));
   assert.ok(message.includes("الجنيه الذهب"));
@@ -65,6 +65,30 @@ const {
   assert.equal(result.sent, 2);
   assert.equal(sent.length, 2);
   assert.ok(sent.every(item => item.text === message));
+
+  // If another scheduler instance already reserved the slot for every active
+  // group, skip fetching external sources again (and avoid a false timeout alert).
+  let duplicateFetches = 0;
+  const alreadyPublishedPool = {
+    async query(sql) {
+      if (sql.includes("SELECT chat_id FROM authorized_chats")) {
+        return { rows: [{ chat_id: "-1001" }, { chat_id: "-1002" }], rowCount: 2 };
+      }
+      if (sql.includes("SELECT COUNT(*)::int AS handled_count")) {
+        return { rows: [{ handled_count: 2 }], rowCount: 1 };
+      }
+      throw new Error("already-published slot must not reserve or publish again");
+    }
+  };
+  const duplicateSlot = await publishEconomicSlot({
+    pool: alreadyPublishedPool,
+    telegram: { async sendMessage() { throw new Error("duplicate publication"); } },
+    now,
+    getPrices: async () => { duplicateFetches++; throw new Error("should not fetch"); }
+  });
+  assert.equal(duplicateSlot.skipped, true);
+  assert.equal(duplicateSlot.reason, "all_groups_already_handled");
+  assert.equal(duplicateFetches, 0);
 
   let partialSends = 0;
   const incomplete = await publishEconomicSlot({

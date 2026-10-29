@@ -215,6 +215,13 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(pieceInsertParams[23], "بالقطعة",
     "unit_price_type must be persisted in the new final INSERT parameter");
 
+  // A standalone "ق" is a piece-price marker, not part of the product name.
+  const dovePiece = extractPriceCandidates("دوف 350مل ق 121 ج")[0];
+  assert.equal(dovePiece.product_text, "دوف");
+  assert.equal(dovePiece.volume_ml, 350);
+  assert.equal(dovePiece.package_sale_price, 121);
+  assert.equal(dovePiece.unit_price_type, "بالقطعة");
+
   // Historical accepted observations are compared before insertion, without posting a chat message.
   let historyInsertParams = null;
   const historyPool = {
@@ -507,6 +514,31 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(remembered.savedRows[0].row.decision, "accepted",
     "previously approved product identities should not be sent back to review just because this post omits the wholesale label");
   assert.equal(remembered.savedRows[0].row.price_kind, "wholesale");
+
+  // Reviewer memory must also be consulted for products matched by the registry.
+  // A previously corrected Ariel identity should not be re-reviewed merely because
+  // its next post omits the explicit wholesale word.
+  const registryMemoryQueries = [];
+  const registryRememberedPool = {
+    async query(sql) {
+      registryMemoryQueries.push(sql);
+      if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 101 }], rowCount: 1 };
+      throw new Error("unexpected registry-memory query");
+    }
+  };
+  const registryRemembered = await observe({
+    pool: registryRememberedPool,
+    message: { chatId: -100123, messageId: 466, text: "أريال مسحوق 2 كجم 150 ج" },
+    registry
+  });
+  assert.equal(registryRemembered.saved, 1);
+  assert.equal(registryRemembered.savedRows[0].row.decision, "accepted",
+    "reviewer identity memory must be honored even when the product registry matches");
+  assert.ok(registryMemoryQueries.some(sql => sql.includes("reviewed_price_products")),
+    "registry-matched products must still look up reviewer approval memory");
 
   // Multi-product context can infer wholesale classification, but must not
   // auto-approve a brand-new identity without registry or prior approval.

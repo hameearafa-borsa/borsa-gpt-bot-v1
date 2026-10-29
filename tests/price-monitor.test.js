@@ -186,7 +186,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(result.accepted[0].price_kind, "wholesale");
   assert.equal(result.accepted[0].package_sale_price, 18.75);
   assert.equal(result.accepted[0].decision, "accepted");
-  assert.equal(savedQueries.length, 3);
+  assert.equal(savedQueries.length, 4);
   assert.ok(savedQueries[2].sql.includes("INSERT INTO price_observations"));
   assert.ok(savedQueries[2].sql.includes("product_text"));
   assert.ok(savedQueries[2].sql.includes("offer_extra_weight_g"));
@@ -226,6 +226,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   let historyInsertParams = null;
   const historyPool = {
     async query(sql, params) {
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) {
         return { rows: [{
@@ -286,7 +287,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(uncertain.saved, 1);
   assert.equal(uncertain.savedRows[0].row.decision, "pending");
   assert.ok(uncertain.savedRows[0].row.confidence < 0.8);
-  assert.equal(savedQueries.length, 6);
+  assert.equal(savedQueries.length, 7);
 
   const noDb = await observe({ message: { text: base.text }, registry });
   assert.equal(noDb.saved, 0);
@@ -308,6 +309,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const pearlPool = {
     async query(sql, params) {
       pearlQueries.push({ sql, params });
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 92 }], rowCount: 1 };
@@ -325,16 +327,16 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(pearl.saved, 1);
   assert.equal(pearl.savedRows[0].row.package_sale_price, 487.40, "the monitor must save the explicitly labelled wholesale amount");
   assert.equal(pearl.savedRows[0].row.listed_base_price, 505.31, "the unlabelled amount must remain available for review");
-  assert.equal(pearlQueries[1].params[18], 505.31, "the unlabelled amount must be persisted separately");
-  assert.equal(pearlQueries[1].params[19], 487.4, "the explicit wholesale amount must be persisted separately");
-  assert.match(pearlQueries[1].params[20], /explicit_wholesale_selected/);
-  assert.equal(pearlQueries[1].params[21], true, "ambiguous companion columns must remain flagged for review");
-  assert.equal(pearlQueries[1].params[22], 525, "consumer price must be persisted separately from the wholesale price");
-  assert.match(pearlQueries[1].sql, /needs_review,consumer_price/, "observation insert must store the consumer price in its own column");
+  assert.equal(pearlQueries[2].params[18], 505.31, "the unlabelled amount must be persisted separately");
+  assert.equal(pearlQueries[2].params[19], 487.4, "the explicit wholesale amount must be persisted separately");
+  assert.match(pearlQueries[2].params[20], /explicit_wholesale_selected/);
+  assert.equal(pearlQueries[2].params[21], true, "ambiguous companion columns must remain flagged for review");
+  assert.equal(pearlQueries[2].params[22], 525, "consumer price must be persisted separately from the wholesale price");
+  assert.match(pearlQueries[2].sql, /needs_review,consumer_price/, "observation insert must store the consumer price in its own column");
   assert.equal(pearl.savedRows[0].row.price_kind, "wholesale");
   assert.equal(pearl.savedRows[0].row.decision, "pending");
   assert.ok(pearl.savedRows[0].row.confidence < 0.8);
-  assert.equal(pearlQueries.length, 2);
+  assert.equal(pearlQueries.length, 3);
 
   // Full Pearl October catalog: test field-level correctness, not merely parser success.
   const pearlOctoberList = `أسعار بيرل – أكتوبر
@@ -416,6 +418,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   let duplicateInserts = 0;
   const duplicatePool = {
     async query(sql) {
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) {
         duplicateChecks += 1;
         return { rows: [{ "?column?": 1 }], rowCount: 1 };
@@ -455,6 +458,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const captionPool = {
     async query(sql) {
       captionQueries.push(sql);
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 94 }], rowCount: 1 };
@@ -471,7 +475,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   });
   assert.equal(caption.saved, 1);
   assert.equal(caption.savedRows[0].row.package_sale_price, 18.75);
-  assert.equal(captionQueries.length, 3);
+  assert.equal(captionQueries.length, 4);
 
   // An explicitly approved identity prevents repeated review for the same clear wholesale product.
   const { identityKey } = require("../modules/price-review");

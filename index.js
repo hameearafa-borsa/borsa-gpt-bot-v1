@@ -127,8 +127,11 @@ async function isAuthorizedChat(chatId) {
   return Boolean(r.rows[0]?.active);
 }
 
+// Explicitly trusted review operator for the shared board/admin group.
+const ADDITIONAL_PRICE_REVIEWER_IDS = new Set([831621854]);
+
 async function isPriceReviewer(telegram, userId) {
-  if (isMaster(userId)) return true;
+  if (isMaster(userId) || ADDITIONAL_PRICE_REVIEWER_IDS.has(Number(userId))) return true;
   if (!db.pool || !telegram || !userId) return false;
   try {
     const groups = await db.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE");

@@ -19,7 +19,7 @@ function comparableName(value) {
   return normalizeArabic(toAsciiDigits(String(value || "")))
     .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|غرام|g|لتر|ل|liter|ml|مل)(?=\s|$)/giu, " ")
     .replace(/(?:^|\s)ق(?=\s|$)/giu, " ")
-    .replace(/(?:^|\s)(?:بالقطعه|بالكرتونه|كرتونه|كرتون|قطعه)(?=\s|$)/giu, " ")
+    .replace(/(?:^|\s)(?:ال)?(?:بالقطعه|قطعه|بالكرتونه|كرتونه|كرتون)(?=\s|$)/giu, " ")
     .replace(/[+|:،,؛()[\]{}]/g, " ")
     .replace(/\s+/g, " ")
     .trim();

@@ -1,4 +1,6 @@
 "use strict";
+const fs = require("node:fs");
+const path = require("node:path");
 
 function escapeXml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
@@ -12,7 +14,7 @@ function splitPages(rows, pageSize) {
   for (let i = 0; i < rows.length; i += pageSize) pages.push(rows.slice(i, i + pageSize));
   return pages;
 }
-async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 16 }) {
+async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 16, logoPlacement = "none", logoPath = null }) {
   const rows = (Array.isArray(items) ? items : []).filter(x => x && String(x.product || x.product_label || "").trim() && Number.isFinite(Number(x.package_sale_price)) && Number(x.package_sale_price) > 0);
   if (rows.length < 3) throw new Error("price_list_image_requires_three_valid_products");
   if (rows.length > 100) throw new Error("price_list_image_exceeds_100_products_split_list_first");
@@ -22,6 +24,17 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
   try { sharp = require("sharp"); }
   catch (cause) { const error = new Error("sharp_dependency_missing_run_npm_install"); error.code = "SHARP_NOT_INSTALLED"; error.cause = cause; throw error; }
   const pages = splitPages(rows, safePageSize);
+  const resolvedLogoPath = logoPath || path.join(__dirname, "..", "1781536050450.png");
+  let logoDataUri = "";
+  if (logoPlacement !== "none" && fs.existsSync(resolvedLogoPath)) {
+    const logoBase64 = fs.readFileSync(resolvedLogoPath).toString("base64");
+    logoDataUri = `data:image/png;base64,${logoBase64}`;
+  }
+  const logoSvg = logoDataUri && logoPlacement === "watermark"
+    ? `<image href="${logoDataUri}" x="300" y="390" width="600" height="360" preserveAspectRatio="xMidYMid meet" opacity="0.055"/>`
+    : logoDataUri && logoPlacement === "side"
+      ? `<image href="${logoDataUri}" x="48" y="48" width="76" height="76" preserveAspectRatio="xMidYMid meet"/>`
+      : "";
   const buffers = [];
   for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
     const pageRows = pages[pageIndex];
@@ -44,7 +57,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
     }).join("");
     const listTitle = `${escapeXml(company || "قائمة المنتجات").slice(0, 100)}`;
     const dateLine = [month ? `الفترة: ${month}` : null, priceType || "أسعار جملة", `صفحة ${pageIndex + 1} من ${pages.length}`].filter(Boolean).map(escapeXml).join(" • ");
-    const svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="productColumnClip"><rect x="700" y="0" width="440" height="100%"/></clipPath></defs><rect width="100%" height="100%" fill="#e8efeb"/><rect x="24" y="24" width="1152" height="${height-48}" rx="26" fill="#fff"/><text x="600" y="${Math.round(height/2)}" text-anchor="middle" transform="rotate(-24 600 ${Math.round(height/2)})" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="64" font-weight="700" fill="#124d3b" opacity="0.018">${escapeXml(watermark)}</text><rect x="36" y="36" width="1128" height="${headerHeight-48}" rx="20" fill="#124d3b"/><text x="600" y="82" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="23" fill="#d7eee4">قائمة أسعار • بورصة المنظفات</text><text x="600" y="137" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="39" font-weight="700" fill="#fff">${listTitle}</text><text x="600" y="180" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="21" fill="#d7eee4">${dateLine}</text><text x="600" y="211" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="17" fill="#d7eee4">الأسعار كما وردت في القائمة المرسلة • راجع المصدر قبل إعادة البيع</text><rect x="36" y="${headerHeight}" width="1128" height="${columnHeaderHeight-4}" rx="10" fill="#dce9e2"/><text x="925" y="${headerHeight+26}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">الصنف</text><text x="600" y="${headerHeight+26}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">العبوة / السعة</text><text x="72" y="${headerHeight+26}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">السعر</text>${rowSvg}<text x="600" y="${height-48}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="25" font-weight="700" fill="#124d3b">${escapeXml(watermark)}</text><text x="600" y="${height-24}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="14" fill="#61716b">صادرة من قائمة مرسلة للمراجعة — لا تمثل تأكيدًا مستقلًا للأسعار</text></svg>`;
+    const svg = `<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg"><defs><clipPath id="productColumnClip"><rect x="700" y="0" width="440" height="100%"/></clipPath></defs><rect width="100%" height="100%" fill="#e8efeb"/><rect x="24" y="24" width="1152" height="${height-48}" rx="26" fill="#fff"/><text x="600" y="${Math.round(height/2)}" text-anchor="middle" transform="rotate(-24 600 ${Math.round(height/2)})" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="64" font-weight="700" fill="#124d3b" opacity="0.018">${escapeXml(watermark)}</text><rect x="36" y="36" width="1128" height="${headerHeight-48}" rx="20" fill="#124d3b"/>${logoPlacement === "side" ? logoSvg : ""}<text x="600" y="82" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="23" fill="#d7eee4">قائمة أسعار • بورصة المنظفات</text><text x="600" y="137" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="39" font-weight="700" fill="#fff">${listTitle}</text><text x="600" y="180" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="21" fill="#d7eee4">${dateLine}</text><text x="600" y="211" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="17" fill="#d7eee4">الأسعار كما وردت في القائمة المرسلة • راجع المصدر قبل إعادة البيع</text><rect x="36" y="${headerHeight}" width="1128" height="${columnHeaderHeight-4}" rx="10" fill="#dce9e2"/><text x="925" y="${headerHeight+26}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">الصنف</text><text x="600" y="${headerHeight+26}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">العبوة / السعة</text><text x="72" y="${headerHeight+26}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">السعر</text>${rowSvg}${logoPlacement === "watermark" ? logoSvg : ""}<text x="600" y="${height-48}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="25" font-weight="700" fill="#124d3b">${escapeXml(watermark)}</text><text x="600" y="${height-24}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="14" fill="#61716b">صادرة من قائمة مرسلة للمراجعة — لا تمثل تأكيدًا مستقلًا للأسعار</text></svg>`;
     buffers.push(await sharp(Buffer.from(svg)).png({ compressionLevel: 9 }).toBuffer());
   }
   return buffers;

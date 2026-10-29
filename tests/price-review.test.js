@@ -1,9 +1,16 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEditedReview } = require("../modules/price-review");
+const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard, resolveReview, saveEditedReview } = require("../modules/price-review");
 
 (async () => {
   const row = { product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: 1, brand_key: null, raw_line: "منظف جديد 500 جم جملة 22 ج", package_sale_price: 22, price_kind: "wholesale" };
+  const prefilledEdit = formatPriceEditPrompt(23, { product_text: "دوف ق", package_sale_price: "121.00", weight_g: null, volume_ml: "350.000", pack_count: 1 });
+  assert.ok(prefilledEdit.includes("/priceedit 23 | دوف ق | 121.00 | - | 350.000 | 1"),
+    "edit prompt should prefill current values so reviewers only change what needs correction");
+  assert.ok(prefilledEdit.includes("عدّل القيم التي تحتاج تغييرها فقط"),
+    "edit prompt should explain that unchanged values can be left as-is");
+  assert.ok(formatPriceEditPrompt(24, null).includes("/priceedit 24 | اسم الصنف | السعر"),
+    "edit prompt should retain a safe generic fallback when pending values cannot be loaded");
   assert.equal(identityKey(row), identityKey({ ...row }));
   assert.notEqual(identityKey(row), identityKey({ ...row, weight_g: 750 }));
   assert.notEqual(identityKey(row), identityKey({ ...row, package_type: "sack" }),

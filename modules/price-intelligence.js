@@ -19,6 +19,13 @@ function detectUnitPriceType(text, packCount = null) {
   return null;
 }
 
+function detectListUnitContext(text) {
+  const source = normalizeArabic(String(text || ""));
+  if (/(?:الاسعار|اسعار|السعر).{0,24}(?:بالقطعه|للقطعه|سعر القطعه)|(?:بالقطعه|للقطعه)/u.test(source)) return "بالقطعة";
+  if (/(?:الاسعار|اسعار|السعر).{0,24}(?:بالكرتونه|للكرتونه|سعر الكرتونه)|(?:بالكرتونه|للكرتونه)/u.test(source)) return "بالكرتونة";
+  return null;
+}
+
 function classifyPriceKind(text) {
   const s = normalizeArabic(text);
   if (RETAIL_WORDS.test(s) && !WHOLESALE_WORDS.test(s)) return "retail";
@@ -91,7 +98,7 @@ function extractExplicitWholesalePrice(text) {
 
 function extractProductText(line) {
   return stripQuantityTokens(line)
-    .replace(/\d+(?:[.,]\d+)?\s*(?:ج|جنيه|EGP)?/gi, " ")
+    // ح is a common adjacent-key typo for ج in Egyptian price lists; consume it only after a numeric token.\n    .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|ح|EGP)?/gi, " ")
     .replace(/\|/g, " ")
     .replace(/[+]/g, " ")
     .replace(/\s+/g, " ")
@@ -287,6 +294,8 @@ function extractPriceCandidates(text) {
   const out = [];
   let company = null;
   let section = null;
+  // Egyptian trade-list default: carton prices unless a row or list heading says piece.
+  let listUnitPriceType = "بالكرتونة";
 
   for (const line of lines) {
     if (/^\/|^[-_=.*]+$/.test(line)) continue;
@@ -296,6 +305,8 @@ function extractPriceCandidates(text) {
     const parsedLine = toAsciiDigits(line).replace(/\*\*/g, "").replace(/[\u200B-\u200F\uFEFF]/g, "");
     const stripped = stripQuantityTokens(parsedLine);
     const numbers = numericPriceTokens(stripped);
+    const unitContext = detectListUnitContext(line);
+    if (unitContext) listUnitPriceType = unitContext;
 
     // Company and section headings establish context for weight-only rows such as "9 ك:".
     if (!numbers.length) {
@@ -321,7 +332,7 @@ function extractPriceCandidates(text) {
 
     const packCount = parsePackCount(parsedLine);
     const extraWeightG = parseExtraWeight(parsedLine);
-    const unitPriceType = detectUnitPriceType(parsedLine, packCount);
+    const unitPriceType = detectUnitPriceType(parsedLine, packCount) || listUnitPriceType;
     const quantity = parsedLine.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const q = quantity ? parseQuantity(quantity[0]) : null;
     const decimalAutomaticWeight = parsedLine.match(/(?:^|\s)(\d+[.,]\d{1,3})\s*(?:كجم|ك)?\s*(?:اتوماتيك|اوتوماتيك)/i);

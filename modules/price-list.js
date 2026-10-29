@@ -80,11 +80,14 @@ function parseListMetadata(text) {
 }
 function cleanExplicitProductLine(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
-  const token = [...ascii.matchAll(PRICE_TOKEN)].find(m => {
+  const tokens = [...ascii.matchAll(PRICE_TOKEN)].filter(m => {
     const end = m.index + m[0].length;
     const tail = ascii.slice(end);
     return !/^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
   });
+  // Remove the explicitly currency-marked price, not an earlier bundle size
+  // such as "350" in "صانسيلك 350 + بلسم ق 159 ج".
+  const token = tokens.filter(m => /(?:جنيه|ج|EGP)\s*$/iu.test(m[0])).at(-1) || tokens[0];
   if (!token) return cleanProductName(line);
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
     .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")

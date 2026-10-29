@@ -48,12 +48,12 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     assert.ok(png.length > 1000, "rasterized image should not be an empty/mock buffer");
   }
   if (outputDir) {
-    for (const placement of ["watermark", "side"]) {
+    for (const placement of ["watermark", "side", "both"]) {
       const variantImages = await renderPriceListImages({
         company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات",
         month: metadata.month, priceType: metadata.priceType, logoPlacement: placement
       });
-      const variantDir = path.join(outputDir, placement === "watermark" ? "logo-watermark" : "logo-side");
+      const variantDir = path.join(outputDir, `logo-${placement}`);
       fs.mkdirSync(variantDir, { recursive: true });
       for (const [index, png] of variantImages.entries()) {
         fs.writeFileSync(path.join(variantDir, `unilever-oct-2026-${placement}-page-${index + 1}.png`), png);

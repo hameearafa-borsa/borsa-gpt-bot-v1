@@ -109,7 +109,7 @@ async function saveEditedReview({ db, id, reviewerId, productText, price, weight
 function formatPriceEditPrompt(id, row = null) {
   const clean = value => {
     if (value == null || value === "") return "-";
-    return String(value).replace(/\\|/g, " ").trim() || "-";
+    return String(value).replace(/[|]/g, " ").trim() || "-";
   };
   const fallback = ["اسم الصنف", "السعر", "الوزن_بالجرام أو -", "الحجم_بالمللي أو -", "عدد العبوات أو -"];
   const fields = row
@@ -121,7 +121,7 @@ function formatPriceEditPrompt(id, row = null) {
         clean(row.pack_count)
       ]
     : fallback;
-  return `✏️ تعديل سجل السعر #${id}\\n\\nعدّل القيم التي تحتاج تغييرها فقط، واترك باقي القيم كما هي. انسخ الأمر التالي في الخاص، مع الفصل بعلامة | :\\n/priceedit ${id} | ${fields.join(" | ")}\\n\\nاستخدم - إذا كانت قيمة الوزن أو الحجم أو عدد العبوات غير معروفة. سيُحفظ السعر المعدل كسعر جملة معتمد؛ لا تعتمد السعر إلا إذا تأكدت أنه سعر جملة.`;
+  return `✏️ تعديل سجل السعر #${id}\n\nعدّل القيم التي تحتاج تغييرها فقط، واترك باقي القيم كما هي. انسخ الأمر التالي في الخاص، مع الفصل بعلامة | :\n/priceedit ${id} | ${fields.join(" | ")}\n\nاستخدم - إذا كانت قيمة الوزن أو الحجم أو عدد العبوات غير معروفة. سيُحفظ السعر المعدل كسعر جملة معتمد؛ لا تعتمد السعر إلا إذا تأكدت أنه سعر جملة.`;
 }
 
 module.exports = { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard, resolveReview, saveEditedReview };

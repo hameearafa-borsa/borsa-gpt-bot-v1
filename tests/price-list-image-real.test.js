@@ -33,7 +33,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.ok(accepted.some(row => /205 ح/.test(row.raw_line) && row.package_sale_price === 205), "the contextual currency typo should retain its source text and numeric price");
 
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
-  assert.equal(images.length, Math.ceil(accepted.length / 22), "long lists should be split into readable pages");
+  assert.equal(images.length, Math.ceil(accepted.length / 17), "long lists should be split into readable pages");
   const outputDir = process.env.PRICE_LIST_TEST_OUTPUT_DIR;
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   for (const [index, png] of images.entries()) {

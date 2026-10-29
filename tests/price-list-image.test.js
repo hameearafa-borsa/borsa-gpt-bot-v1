@@ -28,7 +28,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
       { product: "منتج أول", package_sale_price: 10 },
       { product: "منتج ثان", package_sale_price: 20 },
       { product: "منتج ثالث", package_sale_price: 30 },
-      { product: "A".repeat(149) + "&end", package_sale_price: 40, unit_price_type: "بالكرتونة" }
+      { product: "A".repeat(149) + "&end", package_sale_price: 40, volume_ml: 350, unit_price_type: "بالكرتونة" }
     ] });
     assert.equal(png.toString(), "mock-png");
     assert.match(capturedSvg, /شركة اختبار/);

@@ -1,7 +1,8 @@
 "use strict";
 
 // One-request-per-retailer live diagnostic. No Telegram, database, or publishing.
-require("dotenv").config();
+const dotenvPath = process.env.DOTENV_CONFIG_PATH;
+require("dotenv").config(dotenvPath ? { path: dotenvPath } : undefined);
 const { fetchSearch } = require("../modules/deal-sources");
 
 const sources = [

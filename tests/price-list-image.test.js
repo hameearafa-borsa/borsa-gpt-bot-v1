@@ -7,7 +7,7 @@ const { escapeXml, renderPriceListImage, renderPriceListImages } = require("../m
 const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-image.js"), "utf8");
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic UI,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
-assert.match(imageSource, /direction="rtl" unicode-bidi="plaintext"/, "Arabic SVG text must use RTL bidi handling");
+assert.match(imageSource, /text-anchor="end"/, "Arabic product labels must align to the right edge");
 assert.match(imageSource, /1793378540373\.jpg/, "renderer must resolve the committed Borsa logo");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
 assert.match(dockerSource, /font-noto-arabic/, "production image must install Noto Sans Arabic fonts");

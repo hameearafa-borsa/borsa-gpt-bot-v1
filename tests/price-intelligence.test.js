@@ -284,8 +284,8 @@ assert.notEqual(
 );
 assert.equal(
   classifyObservationChange(
-    { ...historyBase, unit_price_type: "بالقطعة" },
-    { ...historyBase, unit_price_type: "بالكرتونة" }
+    { ...historyBase, unit_price_type: "بالقطعة", product_identity_key: productIdentityKey({ ...historyBase, unit_price_type: "بالقطعة" }) },
+    { ...historyBase, unit_price_type: "بالكرتونة", product_identity_key: productIdentityKey({ ...historyBase, unit_price_type: "بالكرتونة" }) }
   ),
   "new_observation",
   "a piece/carton switch must not be reported as a price change for the same unit"

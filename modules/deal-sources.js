@@ -149,12 +149,30 @@ function extractionDiagnostics(html, sourceName, deals = []) {
     .filter(match => /application\/(?:ld\+json|json)/i.test(match[1]) ||
       /(?:__NEXT_DATA__|__NUXT__|INITIAL_STATE|APOLLO_STATE)/i.test(match[1]));
   let jsonParsed = 0, structuredProductObjects = 0, jsonParseFailures = 0;
+  const productObjectShapes = [];
   const seen = new Set();
+  const describeFields = value => Object.fromEntries(
+    Object.keys(value || {}).sort().slice(0, 40).map(key => {
+      const field = value[key];
+      return [key, Array.isArray(field) ? "array" : field === null ? "null" : typeof field];
+    })
+  );
   const visit = value => {
     if (!value || typeof value !== "object" || seen.has(value)) return;
     seen.add(value);
     const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
-    if (!Array.isArray(value) && types.some(type => String(type || "").toLowerCase() === "product")) structuredProductObjects++;
+    if (!Array.isArray(value) && types.some(type => String(type || "").toLowerCase() === "product")) {
+      structuredProductObjects++;
+      if (productObjectShapes.length < 10) {
+        const nested = {};
+        for (const key of ["offers", "offer", "price", "salePrice", "finalPrice", "currentPrice", "specialPrice", "offerPrice"]) {
+          const field = value[key];
+          if (field && typeof field === "object" && !Array.isArray(field)) nested[key] = describeFields(field);
+          else if (field !== undefined) nested[key] = Array.isArray(field) ? "array" : field === null ? "null" : typeof field;
+        }
+        productObjectShapes.push({ fields: describeFields(value), nested });
+      }
+    }
     if (Array.isArray(value)) value.forEach(visit); else Object.values(value).forEach(visit);
   };
   for (const script of scripts) {
@@ -176,6 +194,7 @@ function extractionDiagnostics(html, sourceName, deals = []) {
     structuredJsonParsed: jsonParsed,
     structuredJsonParseFailures: jsonParseFailures,
     structuredProductObjects,
+    productObjectShapes,
     htmlCardChunks,
     htmlTitleMatches,
     validatedDeals: deals.length

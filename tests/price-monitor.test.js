@@ -320,16 +320,16 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(pearl.saved, 1);
   assert.equal(pearl.savedRows[0].row.package_sale_price, 487.40, "the monitor must save the explicitly labelled wholesale amount");
   assert.equal(pearl.savedRows[0].row.listed_base_price, 505.31, "the unlabelled amount must remain available for review");
-  assert.equal(pearlQueries[3].params[18], 505.31, "the unlabelled amount must be persisted separately");
-  assert.equal(pearlQueries[3].params[19], 487.4, "the explicit wholesale amount must be persisted separately");
-  assert.match(pearlQueries[3].params[20], /explicit_wholesale_selected/);
-  assert.equal(pearlQueries[3].params[21], true, "ambiguous companion columns must remain flagged for review");
-  assert.equal(pearlQueries[3].params[22], 525, "consumer price must be persisted separately from the wholesale price");
-  assert.match(pearlQueries[3].sql, /needs_review,consumer_price/, "observation insert must store the consumer price in its own column");
+  assert.equal(pearlQueries[2].params[18], 505.31, "the unlabelled amount must be persisted separately");
+  assert.equal(pearlQueries[2].params[19], 487.4, "the explicit wholesale amount must be persisted separately");
+  assert.match(pearlQueries[2].params[20], /explicit_wholesale_selected/);
+  assert.equal(pearlQueries[2].params[21], true, "ambiguous companion columns must remain flagged for review");
+  assert.equal(pearlQueries[2].params[22], 525, "consumer price must be persisted separately from the wholesale price");
+  assert.match(pearlQueries[2].sql, /needs_review,consumer_price/, "observation insert must store the consumer price in its own column");
   assert.equal(pearl.savedRows[0].row.price_kind, "wholesale");
   assert.equal(pearl.savedRows[0].row.decision, "pending");
   assert.ok(pearl.savedRows[0].row.confidence < 0.8);
-  assert.equal(pearlQueries.length, 4);
+  assert.equal(pearlQueries.length, 3);
 
   // Full Pearl October catalog: test field-level correctness, not merely parser success.
   const pearlOctoberList = `أسعار بيرل – أكتوبر

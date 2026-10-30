@@ -697,6 +697,10 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|h
     return;
   }
 
+  // Acknowledge immediately; slow database reads or Telegram edits must not
+  // leave the callback pending or misreport a rendering failure as a data error.
+  await ctx.answerCbQuery().catch(() => {});
+
   const section = ctx.match[1];
   let body;
   try {
@@ -723,11 +727,17 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|h
     } else {
       body = "📄 التشخيص\n\nالأخطاء والتقارير التشغيلية تُرسل إلى قناة السجل. راجع آخر تقارير السجل لتحديد أي مشكلة قبل النشر.";
     }
-    await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() });
-    await ctx.answerCbQuery().catch(() => {});
+    try {
+      await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() });
+    } catch (editError) {
+      if (/message is not modified/i.test(String(editError?.message || ""))) return;
+      // Preserve navigation if Telegram refuses to edit the existing panel message.
+      await ctx.telegram.sendMessage(chatId, body, { reply_markup: adminPanel.actionKeyboard() });
+    }
   } catch (error) {
-    await ctx.answerCbQuery("تعذر تحميل بيانات هذه الخدمة. راجع قناة السجل.", { show_alert: true }).catch(() => {});
-    await sendLog({ module: "admin-panel", stage: section, severity: "warn", status: "failed", details: { error: redactString(error?.message || "panel section failed") } }).catch(() => {});
+    await sendLog({ module: "admin-panel", stage: section, severity: "warn", status: "failed", details: { phase: "load_or_render", error: redactString(error?.message || "panel section failed") } }).catch(() => {});
+    // Acknowledge has already been sent; do not issue a second callback answer.
+    // The user can still return to the dashboard with /panel if a service query fails.
   }
 });
 

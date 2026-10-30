@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { safeProductUrl, categoryOf, extractCards, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
+const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
 const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff } = require("../modules/deal-scheduler");
 const { formatNewsletterMessage } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
@@ -53,6 +53,13 @@ const noonHydrationCards = extractCards(noonHydrationFixture, "noon");
 assert.equal(noonHydrationCards.length, 1, "product data in JSON hydration state should be extracted without evaluating scripts");
 assert.equal(noonHydrationCards[0].price, 175);
 assert.equal(noonHydrationCards[0].old_price, 210);
+const hydrationDiagnostics = extractionDiagnostics(noonHydrationFixture, "noon", noonHydrationCards);
+assert.equal(hydrationDiagnostics.structuredScriptsFound, 1);
+assert.equal(hydrationDiagnostics.structuredJsonParsed, 1);
+assert.equal(hydrationDiagnostics.structuredProductObjects, 0,
+  "hydration payloads without schema.org Product types should not be misreported as typed Product objects");
+assert.equal(hydrationDiagnostics.validatedDeals, 1);
+
 const carrefourFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"فلفيتا جل منظف للملابس السوداء - 1 كيلو","url":"https://www.carrefouregypt.com/mafegy/ar/p/velvet-gel","offers":{"@type":"Offer","price":"79.99","priceCurrency":"EGP"}}</script>`;
 const amazonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"اريال مسحوق غسيل 2 كيلو","url":"https://www.amazon.eg/dp/B0ABCDEF12","offers":{"@type":"Offer","price":"99.50","priceCurrency":"EGP"}}</script>`;
 const amazonStructuredCards = extractCards(amazonStructuredFixture, "amazon", "اريال");

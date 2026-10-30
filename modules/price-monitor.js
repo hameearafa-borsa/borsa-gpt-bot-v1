@@ -124,7 +124,7 @@ async function observe({ pool, message, merchantId = null, registry }) {
     if (row.decision === "accepted") {
       const history = await pool.query(
         `SELECT product_identity_key, brand_key, price_kind, package_sale_price, weight_g, volume_ml,
-                pack_count, offer_extra_weight_g, package_type
+                pack_count, offer_extra_weight_g, package_type, unit_price_type
          FROM price_observations
          WHERE price_kind=$2 AND decision='accepted'
            AND (product_identity_key=$1 OR (product_identity_key IS NULL AND product_text=$3))

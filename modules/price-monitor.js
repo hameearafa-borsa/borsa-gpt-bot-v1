@@ -78,10 +78,9 @@ async function observe({ pool, message, merchantId = null, registry }) {
     // An explicitly approved product identity prevents repeat review based on the name alone.
     // Other ambiguities (multiple prices, unknown price kind) still remain pending.
     let previouslyReviewed = false;
-    // Look up identity memory even when today's wording omits "جملة". The old
-    // confidence gate made first observations pending (correctly), but also
-    // prevented already-approved products from ever benefiting from memory.
-    if (pool && !match.matched) {
+    // Reviewer-approved identity memory applies to registry-matched and
+    // unregistered products alike, preventing repeat reviews after correction.
+    if (pool) {
       const known = await pool.query(
         "SELECT 1 FROM reviewed_price_products WHERE identity_key=$1 LIMIT 1",
         [identityKey(row)]
@@ -90,6 +89,8 @@ async function observe({ pool, message, merchantId = null, registry }) {
     }
     if (previouslyReviewed && candidate.price_kind === "wholesale_candidate") {
       row.price_kind = "wholesale";
+      // Identity keys include price_kind; recompute after promotion.
+      row.product_identity_key = productIdentityKey(row);
       row.context_inferred_wholesale = true;
       row.price_selection_reason = [row.price_selection_reason, "previously_approved_product_identity"].filter(Boolean).join(";");
     }

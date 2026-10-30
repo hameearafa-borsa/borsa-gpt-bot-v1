@@ -53,7 +53,8 @@ const allSources = [
         requestSucceeded: Boolean(result.ok),
         extractedCount: deals.length,
         ...(result.reason ? { reason: result.reason } : {}),
-        ...(result.pageSignal ? { pageSignal: result.pageSignal } : {}),\n        ...(result.extractionDiagnostics ? { extractionDiagnostics: result.extractionDiagnostics } : {}),
+        ...(result.pageSignal ? { pageSignal: result.pageSignal } : {}),
+        ...(result.extractionDiagnostics ? { extractionDiagnostics: result.extractionDiagnostics } : {}),
         products: deals.slice(0, 8).map(deal => ({
           title: deal.title,
           priceEGP: deal.price,
@@ -80,8 +81,8 @@ const allSources = [
     retailersTested: report.length,
     maximumRequests: report.length,
     totalValidatedProducts: totals,
-    results: report.map(({ source, requestSucceeded, extractedCount, reason, pageSignal, elapsedMs }) =>
-      ({ source, requestSucceeded, extractedCount, ...(reason ? { reason } : {}), ...(pageSignal ? { pageSignal } : {}), elapsedMs }))
+    results: report.map(({ source, requestSucceeded, extractedCount, reason, pageSignal, extractionDiagnostics, elapsedMs }) =>
+      ({ source, requestSucceeded, extractedCount, ...(reason ? { reason } : {}), ...(pageSignal ? { pageSignal } : {}), ...(extractionDiagnostics ? { extractionDiagnostics } : {}), elapsedMs }))
   }, null, 2));
   if (report.some(row => !row.requestSucceeded)) process.exitCode = 1;
 })().catch(error => {

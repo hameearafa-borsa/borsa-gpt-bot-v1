@@ -41,7 +41,17 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);
-    assert.match(capturedSvg, /بالكرتونة/, "carton price type should be visible on rendered list rows");
+    assert.match(capturedSvg, /بالكرتونة/, "carton price type should be visible in the package/status column");
+    assert.match(capturedSvg, /العبوة \/ السعر/, "the new middle column must have a clear heading");
+    assert.match(capturedSvg, /x="390"/, "package/status column should sit between product and price, closer to the price");
+    assert.match(capturedSvg, /opacity="0.10"/, "the brand logo should appear as a visible but subtle background watermark");
+    const perPieceImages = await renderPriceListImages({ company: "شركة اختبار", items: [
+      { product: "شامبو 120مل", package_sale_price: 30, volume_ml: 120, unit_price_type: "بالقطعة" },
+      { product: "صابون 100جم", package_sale_price: 20, weight_g: 100, unit_price_type: "بالقطعة" },
+      { product: "منظف", package_sale_price: 200, unit_price_type: "بالكرتونة" }
+    ] });
+    assert.match(capturedSvg, /بالكرتونة/);
+    assert.match(capturedSvg, /120 مل • بالقطعة|بالقطعة • 120 مل/);
     const unileverLikeImages = await renderPriceListImages({
       company: "شركة اختبار",
       items: Array.from({ length: 66 }, (_, i) => ({

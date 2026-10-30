@@ -42,24 +42,56 @@ function extractStructuredCards(html, sourceName, query = "") {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
   const products = [];
-  const visit = value => {
-    if (!value || typeof value !== "object") return;
+  const seenObjects = new Set();
+  const isProductObject = value => {
     const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
-    if (types.some(type => String(type || "").toLowerCase() === "product")) products.push(value);
+    if (types.some(type => String(type || "").toLowerCase() === "product")) return true;
+    const title = value.name || value.title || value.displayName || value.productName;
+    const url = value.url || value.productUrl || value.canonicalUrl || value.slug || value.urlKey;
+    const offers = value.offers || value.offer || {};
+    const price = value.price ?? value.salePrice ?? value.finalPrice ?? value.currentPrice ??
+      value.specialPrice ?? value.offerPrice ?? offers.price ?? offers.lowPrice;
+    return typeof title === "string" && title.trim().length >= 4 &&
+      typeof url === "string" && url.trim().length > 0 && price != null;
+  };
+  const visit = value => {
+    if (!value || typeof value !== "object" || seenObjects.has(value)) return;
+    seenObjects.add(value);
+    if (!Array.isArray(value) && isProductObject(value)) products.push(value);
     if (Array.isArray(value)) value.forEach(visit); else Object.values(value).forEach(visit);
   };
-  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)].filter(match => /\btype\s*=\s*(["\x27])application\/ld\+json\1/i.test(match[1])).map(match => match[2]);
-  for (const script of scripts) { try { visit(JSON.parse(script.trim())); } catch { /* Ignore malformed structured data. */ } }
+  // Retailers often move product data from JSON-LD into hydration state.
+  // Parse JSON-bearing scripts only; never evaluate page JavaScript.
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+    .filter(match => /application\/(?:ld\+json|json)/i.test(match[1]) ||
+      /(?:__NEXT_DATA__|__NUXT__|INITIAL_STATE|APOLLO_STATE)/i.test(match[1]))
+    .map(match => match[2]);
+  for (const script of scripts) {
+    try { visit(JSON.parse(script.trim())); } catch { /* Ignore non-JSON and malformed hydration payloads. */ }
+  }
   const merchant = sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "noon" ? "Noon Egypt" : "Carrefour Egypt";
   const cards = [];
   for (const product of products) {
-    const title = htmlText(product.name || product.title || "");
+    const title = htmlText(product.name || product.title || product.displayName || product.productName || "");
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
-    const url = safeProductUrl(product.url || product.offers?.url || product.mainEntityOfPage?.["@id"] || "", sourceName);
-    const offerList = Array.isArray(product.offers) ? product.offers : [product.offers || {}];
-    const prices = offerList.filter(offer => !offer.priceCurrency || String(offer.priceCurrency).toUpperCase() === "EGP").map(offer => money(offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price)).filter(value => value !== null);
+    const offers = product.offers || product.offer || {};
+    const rawUrl = product.url || product.productUrl || product.canonicalUrl ||
+      product.mainEntityOfPage?.["@id"] || product.slug || product.urlKey || offers.url || "";
+    const url = safeProductUrl(rawUrl, sourceName);
+    const offerList = Array.isArray(offers) ? offers : [offers];
+    const prices = [
+      ...offerList.filter(offer => !offer.priceCurrency && !offer.currencyCode ||
+        String(offer.priceCurrency || offer.currencyCode).toUpperCase() === "EGP")
+        .map(offer => money(offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price)),
+      money(product.price?.value ?? product.price?.amount ?? product.price),
+      money(product.salePrice?.value ?? product.salePrice),
+      money(product.finalPrice?.value ?? product.finalPrice),
+      money(product.currentPrice?.value ?? product.currentPrice),
+      money(product.specialPrice?.value ?? product.specialPrice),
+      money(product.offerPrice?.value ?? product.offerPrice)
+    ].filter(value => value !== null);
     const price = prices.length ? Math.min(...prices) : null;
-    const oldPrice = money(product.offers?.highPrice || product.highPrice);
+    const oldPrice = money(offers.highPrice || product.highPrice || product.oldPrice || product.listPrice || product.wasPrice);
     if (!url || !price) continue;
     const deal = { merchant, title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
     if (validateDeal(deal).ok) cards.push(deal);

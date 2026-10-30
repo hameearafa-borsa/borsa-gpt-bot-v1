@@ -832,7 +832,6 @@ installFatalProcessHandlers({
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
   console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
-  // Scheduled deal newsletters stay disabled by default to protect paid ScraperAPI credits.
   // Scheduled newsletters are enabled by default; set DEALS_SCHEDULER_ENABLED=false to pause them.
   if (String(process.env.DEALS_SCHEDULER_ENABLED ?? "true").toLowerCase() !== "false") {
     stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {

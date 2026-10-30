@@ -93,15 +93,20 @@ async function observe({ pool, message, merchantId = null, registry }) {
       row.context_inferred_wholesale = true;
       row.price_selection_reason = [row.price_selection_reason, "previously_approved_product_identity"].filter(Boolean).join(";");
     }
-    // Rows parsed from the two explicitly recognized, pre-interpreted catalog formats
-    // have deterministic column semantics and are trusted as complete wholesale observations.
-    // Ordinary chat messages still require registry/reviewer evidence as before.
+    // A new product is not an ambiguity: explicit price labels and clear
+    // commercial context are sufficient evidence even when the registry has
+    // never seen this identity. Registry membership must not cap confidence.
+    // Keep reviewer memory as a confidence aid, not as a prerequisite for saving.
     row.confidence = candidate.trusted_catalog_row
       ? candidate.confidence
       : previouslyReviewed
         ? Math.max(candidate.confidence, 0.9)
-        : Math.min(candidate.confidence, match.matched ? 0.98 : 0.45);
-    row.decision = row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
+        : candidate.confidence;
+    // Explicit parser ambiguity (e.g. competing unlabelled and wholesale prices)
+    // still requires review even if its numeric confidence crosses the threshold.
+    row.decision = row.confidence >= 0.8 && row.price_kind === "wholesale" && !row.needs_review
+      ? "accepted"
+      : "pending";
     const fp = fingerprint(row);
     if (seen.has(fp)) continue;
     seen.add(fp);

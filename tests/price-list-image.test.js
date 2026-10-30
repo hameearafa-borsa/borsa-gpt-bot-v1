@@ -10,7 +10,8 @@ assert.match(imageSource, /Noto Sans Arabic UI,Noto Naskh Arabic,sans-serif/, "S
 assert.match(imageSource, /direction="rtl" unicode-bidi="plaintext"/, "Arabic SVG text must use RTL bidi handling");
 assert.match(imageSource, /1793378540373\\.jpg/, "renderer must resolve the committed Borsa logo");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
-assert.match(dockerSource, /apk add --no-cache font-noto fontconfig/, "production image must install Arabic-capable fonts for SVG rasterization");
+assert.match(dockerSource, /font-noto-arabic/, "production image must install Noto Sans Arabic fonts");
+assert.match(dockerSource, /font-noto-naskh-arabic/, "production image must install Noto Naskh Arabic fonts");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
 (async () => {

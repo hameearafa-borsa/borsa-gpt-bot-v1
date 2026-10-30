@@ -464,8 +464,12 @@ function productIdentityKey(row) {
   // Product identity describes the item itself, not the supplier's temporary carton configuration.
   // Keep size, extra free weight and package type in identity, but track carton count per observation:
   // promotions and carton-merging can change count without changing the underlying product.
-  const dimensions = [row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g, row?.package_type]
-    .map(value => value == null || value === "" ? "" : String(value));
+  const dimensions = [
+    row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g,
+    row?.package_type, row?.unit_price_type
+  ].map(value => value == null || value === "" ? "" : String(value));
+  // Piece and carton prices are different commercial units and must never
+  // share a price history or inherit each other's carton count.
   return [String(row?.brand_key || ""), stableName, String(row?.price_kind || ""), ...dimensions].join("|");
 }
 
@@ -484,8 +488,9 @@ function classifyObservationChange(previous, current) {
   const dimensions = ["weight_g", "volume_ml", "offer_extra_weight_g"];
   const weightChanged = dimensions.some(key => !sameNumber(previous[key], current[key]));
   const packageTypeChanged = String(previous.package_type || "") !== String(current.package_type || "");
+  const unitPriceTypeChanged = String(previous.unit_price_type || "") !== String(current.unit_price_type || "");
   const packageCountChanged = !sameNumber(previous.pack_count, current.pack_count);
-  const packageConfigurationChanged = packageTypeChanged || packageCountChanged;
+  const packageConfigurationChanged = packageTypeChanged || unitPriceTypeChanged || packageCountChanged;
   const priceChanged = !sameNumber(previous.package_sale_price, current.package_sale_price);
 
   if ((weightChanged || packageConfigurationChanged) && priceChanged) {

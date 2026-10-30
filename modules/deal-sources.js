@@ -144,6 +144,43 @@ function extractCards(html, sourceName, query = "") {
   }
   return cards;
 }
+function extractionDiagnostics(html, sourceName, deals = []) {
+  const scripts = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)]
+    .filter(match => /application\\/(?:ld\\+json|json)/i.test(match[1]) ||
+      /(?:__NEXT_DATA__|__NUXT__|INITIAL_STATE|APOLLO_STATE)/i.test(match[1]));
+  let jsonParsed = 0, structuredProductObjects = 0, jsonParseFailures = 0;
+  const seen = new Set();
+  const visit = value => {
+    if (!value || typeof value !== "object" || seen.has(value)) return;
+    seen.add(value);
+    const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
+    if (!Array.isArray(value) && types.some(type => String(type || "").toLowerCase() === "product")) structuredProductObjects++;
+    if (Array.isArray(value)) value.forEach(visit); else Object.values(value).forEach(visit);
+  };
+  for (const script of scripts) {
+    try { visit(JSON.parse(script[2].trim())); jsonParsed++; }
+    catch { jsonParseFailures++; }
+  }
+  let htmlCardChunks = 0, htmlTitleMatches = 0;
+  if (sourceName === "amazon") {
+    htmlCardChunks = [...html.matchAll(/<div\\b(?=[^>]*\\bdata-component-type=["']s-search-result["'])[^>]*>/gi)].length;
+  } else {
+    const cardPattern = /<(?:article|div)\\b(?=[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:\\bprd\\b|product(?:[-_ ]?(?:card|item|tile))?|item-product|productContainer)[^"']*["'])[^>]*>/gi;
+    htmlCardChunks = [...html.matchAll(cardPattern)].length;
+    if (!htmlCardChunks) htmlCardChunks = [...html.matchAll(/<article[\\s\\S]*?<\\/article>/gi)].length;
+  }
+  const titlePattern = /<(?:h[23]|span|div)[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:name|title|product[-_ ]?name)[^"']*["'][^>]*>/gi;
+  htmlTitleMatches = [...html.matchAll(titlePattern)].length;
+  return {
+    structuredScriptsFound: scripts.length,
+    structuredJsonParsed: jsonParsed,
+    structuredJsonParseFailures: jsonParseFailures,
+    structuredProductObjects,
+    htmlCardChunks,
+    htmlTitleMatches,
+    validatedDeals: deals.length
+  };
+}
 function getScraperKeys() {
   return [...new Set([
     String(process.env.SCRAPER_API_KEY || "").trim(),
@@ -169,13 +206,13 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
       const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
       if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
       const html = await response.text();
-      const deals = extractCards(html, sourceName, query);
+      const deals = extractCards(html, sourceName, query);\n      const diagnostics = deals.length === 0 ? extractionDiagnostics(html, sourceName, deals) : undefined;
       const pageSignal = /captcha|robot check|automated access|validatecaptcha|enter the characters you see/i.test(html)
         ? "captcha_or_block_page"
         : /data-component-type=["']s-search-result["']|application\/(?:ld\+json|json)|__NEXT_DATA__|__NUXT__|data-qa=["'][^"']*product|data-testid=["'][^"']*product|class=["'][^"']*(?:prd|product-card|productCard|product-item)/i.test(html)
           ? "product_markup_present"
           : html.trim().length === 0 ? "empty_response" : "no_product_markers";
-      return { source: sourceName, ok: true, deals, ...(deals.length === 0 ? { pageSignal } : {}) };
+      return { source: sourceName, ok: true, deals, ...(deals.length === 0 ? { pageSignal, extractionDiagnostics: diagnostics } : {}) };
     } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
     finally { clearTimeout(timer); }
   };
@@ -250,4 +287,4 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   }
   return { deals, errors, sourceStats, sourceCount: tasks.length };
 }
-module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, getScraperKeys, fetchSearch, collectDealCandidates };
+module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, getScraperKeys, fetchSearch, collectDealCandidates };

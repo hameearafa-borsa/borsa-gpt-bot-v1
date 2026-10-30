@@ -143,17 +143,26 @@ function extractCards(html, sourceName, query = "") {
     const starts = [...html.matchAll(/<div\b(?=[^>]*\bdata-component-type=["']s-search-result["'])[^>]*>/gi)];
     chunks = starts.map((match, index) => html.slice(match.index, starts[index + 1]?.index ?? html.length));
   }
-  else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["\x27][^"\x27]*prd[^"\x27]*["\x27][\s\S]*?<\/article>/gi)].map(m=>m[0]);
-  else chunks = [...html.matchAll(/<article[\s\S]*?<\/article>/gi)].map(m=>m[0]);
+  else {
+    // Retailer card wrappers may be article or div; require a product-like marker.
+    const cardPattern = /<(?:article|div)\\b(?=[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:\\bprd\\b|product(?:[-_ ]?(?:card|item|tile))?|item-product|productContainer)[^"']*["'])[^>]*>/gi;
+    const starts = [...html.matchAll(cardPattern)];
+    chunks = starts.map((match, index) => html.slice(match.index, starts[index + 1]?.index ?? html.length));
+    if (!chunks.length) chunks = [...html.matchAll(/<article[\\s\\S]*?<\\/article>/gi)].map(m => m[0]);
+  }
   for (const chunk of chunks) {
-    const titleMatch = chunk.match(/<h2[^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/h2>/i) || chunk.match(/(?:data-qa=["']product-name["'][^>]*>|class=["']name["'][^>]*>)([\s\S]*?)<\//i);
+    const titleMatch = chunk.match(/<h[23][^>]*>[\\s\\S]*?<span[^>]*>([\\s\\S]*?)<\\/span>[\\s\\S]*?<\\/h[23]>/i) ||
+      chunk.match(/<(?:h[23]|span|div)[^>]*(?:data-qa|data-testid)=["'][^"']*product[-_ ]?name[^"']*["'][^>]*>([\\s\\S]*?)<\\//i) ||
+      chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\\s\\S]*?)<\\//i);
     const title = htmlText(titleMatch?.[1] || "");
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
     const href = chunk.match(/<a[^>]+href=["']([^"']+)["']/i)?.[1];
     const url = safeProductUrl(href || "", sourceName);
     const priceMatch = sourceName === "amazon"
-      ? (chunk.match(/class=["']a-price-whole["'][^>]*>([\s\S]*?)<\//i) || chunk.match(/class=["']a-offscreen["'][^>]*>([\s\S]*?)<\//i))
-      : (chunk.match(/class=["'](?:prc|priceNow|price)["'][^>]*>([\s\S]*?)<\//i) || chunk.match(/data-qa=["']product-price["'][^>]*>([\s\S]*?)<\//i));
+      ? (chunk.match(/class=["']a-price-whole["'][^>]*>([\\s\\S]*?)<\\//i) || chunk.match(/class=["']a-offscreen["'][^>]*>([\\s\\S]*?)<\\//i))
+      : (chunk.match(/class=["'][^"']*(?:prc|priceNow|price-now|sellingPrice|selling-price|finalPrice|currentPrice|price)["'][^>]*>([\\s\\S]*?)<\\//i) ||
+        chunk.match(/(?:data-qa|data-testid)=["'][^"']*product[-_ ]?price[^"']*["'][^>]*>([\\s\\S]*?)<\\//i) ||
+        chunk.match(/itemprop=["']price["'][^>]*content=["']([^"']+)["']/i));
     const price = money(htmlText(priceMatch?.[1] || ""));
     const oldMatch = chunk.match(/class=["'][^"']*(?:old|oldPrice|price-was)[^"']*["'][^>]*>([\s\S]*?)<\//i);
     const oldPrice = money(htmlText(oldMatch?.[1] || ""));
@@ -195,7 +204,7 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
       const deals = extractCards(html, sourceName, query);
       const pageSignal = /captcha|robot check|automated access|validatecaptcha|enter the characters you see/i.test(html)
         ? "captcha_or_block_page"
-        : /data-component-type=["']s-search-result["']|application\/ld\+json/i.test(html)
+        : /data-component-type=["']s-search-result["']|application\\/(?:ld\\+json|json)|__NEXT_DATA__|__NUXT__|data-qa=["'][^"']*product|data-testid=["'][^"']*product|class=["'][^"']*(?:prd|product-card|productCard|product-item)/i.test(html)
           ? "product_markup_present"
           : html.trim().length === 0 ? "empty_response" : "no_product_markers";
       return { source: sourceName, ok: true, deals, ...(deals.length === 0 ? { pageSignal } : {}) };
@@ -203,8 +212,10 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
     finally { clearTimeout(timer); }
   };
   const first = await requestWithKey(keys[startIndex]);
-  // Retry only credential rejection. Do not retry retailer errors, rate limits, or timeouts.
-  if (!first.ok && (first.status === 401 || first.status === 403) && keys.length > 1) {
+  // Retry once with the alternate key for auth failures or transient server errors.
+  // Never retry rate limits, timeouts, or successful pages with empty extraction.
+  const retryableStatus = [401, 403, 500, 502, 503, 504].includes(first.status);
+  if (!first.ok && retryableStatus && keys.length > 1) {
     const alternate = await requestWithKey(keys[(startIndex + 1) % keys.length]);
     if (alternate.ok) return alternate;
     return { ...alternate, reason: `${first.reason};alternate_${alternate.reason}` };

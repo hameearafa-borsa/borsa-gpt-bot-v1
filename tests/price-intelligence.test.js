@@ -266,7 +266,30 @@ assert.equal(classifyObservationChange(historyBase, { ...historyBase, price_kind
 assert.equal(parsePackageType("شكارة 10 ك"), "sack");
 assert.equal(parsePackageType("كيس 50 جم"), "sachet");
 assert.equal(parsePackageType("9 ك"), null);
-assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 5 ك" }), productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 9 ك" }), "weight should not change stable product identity");
+assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 5 ك" }), productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 9 ك" }), "normalized product wording should not alone change the stable identity when dimensions are equal");
+assert.notEqual(
+  productIdentityKey({ ...historyBase, unit_price_type: "بالقطعة" }),
+  productIdentityKey({ ...historyBase, unit_price_type: "بالكرتونة" }),
+  "piece and carton prices must have separate price histories"
+);
+assert.notEqual(
+  productIdentityKey({ ...historyBase, offer_extra_weight_g: null }),
+  productIdentityKey({ ...historyBase, offer_extra_weight_g: 300 }),
+  "a free-extra-weight offer must have a separate identity"
+);
+assert.notEqual(
+  productIdentityKey({ ...historyBase, package_type: null }),
+  productIdentityKey({ ...historyBase, package_type: "sack" }),
+  "sack packaging must not share the ordinary package identity"
+);
+assert.equal(
+  classifyObservationChange(
+    { ...historyBase, unit_price_type: "بالقطعة" },
+    { ...historyBase, unit_price_type: "بالكرتونة" }
+  ),
+  "new_observation",
+  "a piece/carton switch must not be reported as a price change for the same unit"
+);
 
 (async () => {
   const aiReturnsWrongNumbers = {

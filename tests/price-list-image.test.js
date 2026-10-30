@@ -8,7 +8,7 @@ const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic UI,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
 assert.match(imageSource, /direction="rtl" unicode-bidi="plaintext"/, "Arabic SVG text must use RTL bidi handling");
-assert.match(imageSource, /1793378540373\\.jpg/, "renderer must resolve the committed Borsa logo");
+assert.match(imageSource, /1793378540373\.jpg/, "renderer must resolve the committed Borsa logo");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
 assert.match(dockerSource, /font-noto-arabic/, "production image must install Noto Sans Arabic fonts");
 assert.match(dockerSource, /font-noto-naskh-arabic/, "production image must install Noto Naskh Arabic fonts");
@@ -36,7 +36,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.equal(png.toString(), "mock-png");
     assert.match(capturedSvg, /شركة اختبار/);
     assert.match(capturedSvg, /بورصة المنظفات/);
-    assert.match(capturedSvg, /data:image\\/jpeg;base64,/, "logo image must be embedded in generated SVG");
+    assert.match(capturedSvg, /data:image\/jpeg;base64,/, "logo image must be embedded in generated SVG");
     assert.match(capturedSvg, /<image href=/, "logo must be rendered as an image asset");
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");

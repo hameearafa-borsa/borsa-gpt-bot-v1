@@ -206,7 +206,8 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
       const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
       if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
       const html = await response.text();
-      const deals = extractCards(html, sourceName, query);\n      const diagnostics = deals.length === 0 ? extractionDiagnostics(html, sourceName, deals) : undefined;
+      const deals = extractCards(html, sourceName, query);
+      const diagnostics = deals.length === 0 ? extractionDiagnostics(html, sourceName, deals) : undefined;
       const pageSignal = /captcha|robot check|automated access|validatecaptcha|enter the characters you see/i.test(html)
         ? "captcha_or_block_page"
         : /data-component-type=["']s-search-result["']|application\/(?:ld\+json|json)|__NEXT_DATA__|__NUXT__|data-qa=["'][^"']*product|data-testid=["'][^"']*product|class=["'][^"']*(?:prd|product-card|productCard|product-item)/i.test(html)

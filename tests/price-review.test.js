@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard, resolveReview, saveEditedReview } = require("../modules/price-review");
 
 (async () => {
-  const row = { product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: 1, brand_key: null, raw_line: "منظف جديد 500 جم جملة 22 ج", package_sale_price: 22, price_kind: "wholesale" };
+  const row = { product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: 1, brand_key: null, raw_line: "منظف جديد 500 جم جملة 22 ج", package_sale_price: 22, price_kind: "wholesale", unit_price_type: "بالقطعة" };
   const prefilledEdit = formatPriceEditPrompt(23, { product_text: "دوف ق", package_sale_price: "121.00", weight_g: null, volume_ml: "350.000", pack_count: 1 });
   assert.ok(prefilledEdit.includes("/priceedit 23 | دوف ق | 121.00 | - | 350.000 | 1"),
     "edit prompt should prefill current values so reviewers only change what needs correction");
@@ -13,6 +13,10 @@ const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard,
     "edit prompt should retain a safe generic fallback when pending values cannot be loaded");
   assert.equal(identityKey(row), identityKey({ ...row }));
   assert.notEqual(identityKey(row), identityKey({ ...row, weight_g: 750 }));
+  assert.notEqual(identityKey({ ...row, unit_price_type: "بالقطعة" }), identityKey({ ...row, unit_price_type: "بالكرتونة" }),
+    "piece approval must never be inherited by carton prices or vice versa");
+  assert.notEqual(identityKey({ ...row, unit_price_type: "بالقطعة" }), identityKey({ ...row, unit_price_type: null }),
+    "an unknown historical unit must not silently authorize a known unit");
   assert.notEqual(identityKey(row), identityKey({ ...row, package_type: "sack" }),
     "a sack and a non-sack package must not share reviewer identity memory");
   assert.notEqual(identityKey({ ...row, offer_extra_weight_g: null }), identityKey({ ...row, offer_extra_weight_g: 300 }),
@@ -40,6 +44,8 @@ const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard,
   assert.equal(approved.ok, true);
   assert.equal(calls.length, 3);
   assert.ok(calls[1].sql.includes("reviewed_price_products"));
+  assert.match(calls[1].sql, /unit_price_type/);
+  assert.equal(calls[1].params[9], "بالقطعة", "review approval memory must persist the exact price unit");
   assert.ok(calls[2].sql.includes("price_review_queue"));
   assert.match(calls[2].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);
   assert.match(calls[0].sql, /WHERE id=\$4 AND decision='pending'/);

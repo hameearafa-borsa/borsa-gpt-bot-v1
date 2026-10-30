@@ -26,7 +26,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
   const pages = splitPages(rows, safePageSize);
   const brandPath = logoPath || path.join(__dirname, "..", "1793378540373.jpg");
   const brandData = fs.existsSync(brandPath) ? fs.readFileSync(brandPath).toString("base64") : "";
-  const brandMime = /\\.jpe?g$/i.test(brandPath) ? "image/jpeg" : "image/png";
+  const brandMime = /\.jpe?g$/i.test(brandPath) ? "image/jpeg" : "image/png";
   const brandUri = brandData ? `data:${brandMime};base64,${brandData}` : "";
   const headerLogo = brandUri ? `<rect x="54" y="55" width="112" height="112" rx="12" fill="#fff"/><image href="${brandUri}" x="58" y="59" width="104" height="104" preserveAspectRatio="xMidYMid meet"/>` : "";
   const watermarkLogo = brandUri ? `<image href="${brandUri}" x="420" y="300" width="360" height="360" preserveAspectRatio="xMidYMid meet" opacity="0.07"/>` : "";

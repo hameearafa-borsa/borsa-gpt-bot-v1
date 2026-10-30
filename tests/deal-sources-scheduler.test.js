@@ -76,6 +76,12 @@ assert.equal(carrefourCards.length, 1, "Carrefour Product JSON-LD should produce
 assert.equal(carrefourCards[0].merchant, "Carrefour Egypt");
 assert.equal(carrefourCards[0].price, 79.99);
 assert.equal(carrefourCards[0].category, "detergent");
+
+const carrefourCardFixture = `<div class="product-card"><a href="/mafegy/ar/p/velvet-cleaner"><h3 class="product-title">فلفيتا جل منظف للملابس السوداء 1 كيلو</h3></a><span class="currentPrice">79.99 ج.م</span></div>`;
+const carrefourCardDeals = extractCards(carrefourCardFixture, "carrefour");
+assert.equal(carrefourCardDeals.length, 1, "Carrefour product cards outside JSON-LD should also be eligible");
+assert.equal(carrefourCardDeals[0].merchant, "Carrefour Egypt");
+assert.equal(carrefourCardDeals[0].price, 79.99);
 assert.equal(safeProductUrl("https://evil.example/mafegy/ar/p/velvet-gel", "carrefour"), null);
 assert.equal(extractCards(carrefourFixture.replace('"price":"79.99"', '"price":"0"'), "carrefour").length, 0, "invalid prices must be rejected");
 

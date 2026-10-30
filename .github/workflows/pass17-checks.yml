@@ -26,3 +26,13 @@ jobs:
         run: npm run check
       - name: Run test suite
         run: npm test
+      - name: Render real Unilever image pages for visual QA
+        run: node tests/price-list-image-real.test.js
+        env:
+          PRICE_LIST_VISUAL_QA_DIR: artifacts/price-list-visual-qa
+      - name: Upload rendered price-list images
+        uses: actions/upload-artifact@v4
+        with:
+          name: price-list-visual-qa
+          path: artifacts/price-list-visual-qa/*.png
+          if-no-files-found: error

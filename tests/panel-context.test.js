@@ -16,4 +16,10 @@ assert.ok(source.includes(String.raw`\nحالة اعتماد البوت:`), "set
 assert.equal(source.includes(String.raw`\\nحالة اعتماد البوت:`), false, "settings status must not show literal \\n text");
 assert.ok(source.includes("$" + "{original}" + String.raw`\n\n` + "$" + "{status}"), "review decision must render real line breaks");
 assert.equal(source.includes("$" + "{original}" + String.raw`\\n\\n` + "$" + "{status}"), false, "review decision must not show literal \\n text");
+const panelHandlerStart = source.indexOf('bot.action(/^panel:');
+const panelHandlerEnd = source.indexOf('bot.action(/^prv:', panelHandlerStart);
+const panelHandler = source.slice(panelHandlerStart, panelHandlerEnd);
+assert.ok(panelHandler.indexOf('await ctx.answerCbQuery().catch') < panelHandler.indexOf('const section = ctx.match[1]'), "panel callbacks must be acknowledged before service loading");
+assert.match(panelHandler, /ctx\.telegram\.sendMessage\(chatId, body, \{ reply_markup: adminPanel\.actionKeyboard\(\) \}\)/, "panel navigation must recover by sending a fresh screen when Telegram cannot edit the old message");
+assert.doesNotMatch(panelHandler, /answerCbQuery\("تعذر تحميل بيانات هذه الخدمة/, "a second callback answer must not mask an already acknowledged navigation action");
 console.log("legacy panel stays disabled while authorized settings are available: OK");

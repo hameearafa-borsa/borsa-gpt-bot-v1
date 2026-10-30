@@ -53,7 +53,7 @@ const allSources = [
         requestSucceeded: Boolean(result.ok),
         extractedCount: deals.length,
         ...(result.reason ? { reason: result.reason } : {}),
-        ...(result.pageSignal ? { pageSignal: result.pageSignal } : {}),
+        ...(result.pageSignal ? { pageSignal: result.pageSignal } : {}),\n        ...(result.extractionDiagnostics ? { extractionDiagnostics: result.extractionDiagnostics } : {}),
         products: deals.slice(0, 8).map(deal => ({
           title: deal.title,
           priceEGP: deal.price,

@@ -32,6 +32,27 @@ assert.equal(cards.length,1);
 assert.equal(cards[0].category,"paper");
 assert.equal(cards[0].price,25);
 assert.equal(cards[0].old_price,35);
+
+const jumiaDivFixture = `<div class="prd product-card"><a href="/cleaning/bright-detergent.html"><h3 class="name">مسحوق برسيل للغسيل 2 كيلو</h3></a><span class="priceNow">149.00 ج.م</span><span class="oldPrice">189.00 ج.م</span></div>`;
+const jumiaDivCards = extractCards(jumiaDivFixture, "jumia");
+assert.equal(jumiaDivCards.length, 1, "Jumia product cards rendered as divs should be extracted");
+assert.equal(jumiaDivCards[0].price, 149);
+assert.equal(jumiaDivCards[0].old_price, 189);
+
+const noonDivFixture = `<div data-testid="product-card"><a href="/egypt-ar/product/NOON123"><h3 class="product-title">شامبو دوف للعناية بالشعر</h3></a><span class="price-now">119.50 ج.م</span></div>`;
+const noonDivCards = extractCards(noonDivFixture, "noon");
+assert.equal(noonDivCards.length, 1, "Noon product cards rendered as divs should be extracted");
+assert.equal(noonDivCards[0].price, 119.5);
+
+const noonHydrationFixture = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+  props: { pageProps: { products: [
+    { name: "مسحوق برسيل للغسالات 3 كيلو", slug: "/egypt-ar/product/PERSIL123", price: { value: "175.00", currency: "EGP" }, oldPrice: 210 }
+  ] } }
+})}</script>`;
+const noonHydrationCards = extractCards(noonHydrationFixture, "noon");
+assert.equal(noonHydrationCards.length, 1, "product data in JSON hydration state should be extracted without evaluating scripts");
+assert.equal(noonHydrationCards[0].price, 175);
+assert.equal(noonHydrationCards[0].old_price, 210);
 const carrefourFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"فلفيتا جل منظف للملابس السوداء - 1 كيلو","url":"https://www.carrefouregypt.com/mafegy/ar/p/velvet-gel","offers":{"@type":"Offer","price":"79.99","priceCurrency":"EGP"}}</script>`;
 const amazonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"اريال مسحوق غسيل 2 كيلو","url":"https://www.amazon.eg/dp/B0ABCDEF12","offers":{"@type":"Offer","price":"99.50","priceCurrency":"EGP"}}</script>`;
 const amazonStructuredCards = extractCards(amazonStructuredFixture, "amazon", "اريال");
@@ -193,6 +214,20 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(authRetry.ok, true, "a credential rejection should retry once with the alternate key");
  assert.equal(authRetryKeys.length, 2, "credential retry must be bounded to one alternate request");
  assert.notEqual(authRetryKeys[0], authRetryKeys[1], "credential retry must use a different key");
+
+ const serverRetryKeys = [];
+ const serverRetry = await fetchSearch("noon", "temporary upstream error", {
+   fetchImpl: async url => {
+     serverRetryKeys.push(new URL(String(url)).searchParams.get("api_key"));
+     return serverRetryKeys.length === 1
+       ? { ok: false, status: 500, text: async () => "" }
+       : { ok: true, status: 200, text: async () => noonHydrationFixture };
+   }
+ });
+ assert.equal(serverRetry.ok, true, "a transient retailer/ScraperAPI 500 should receive one bounded alternate-key retry");
+ assert.equal(serverRetry.deals.length, 1);
+ assert.equal(serverRetryKeys.length, 2);
+ assert.notEqual(serverRetryKeys[0], serverRetryKeys[1]);
  const noRetryKeys = [];
  const rateLimited = await fetchSearch("amazon", "no retry on rate limit", {
    fetchImpl: async url => {

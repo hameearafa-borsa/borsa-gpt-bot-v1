@@ -737,7 +737,13 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|h
   } catch (error) {
     await sendLog({ module: "admin-panel", stage: section, severity: "warn", status: "failed", details: { phase: "load_or_render", error: redactString(error?.message || "panel section failed") } }).catch(() => {});
     // Acknowledge has already been sent; do not issue a second callback answer.
-    // The user can still return to the dashboard with /panel if a service query fails.
+    // Keep the user in a usable panel flow even if a service query fails.
+    const fallback = "تعذر تحميل بيانات هذه الخدمة حاليًا. يمكنك العودة إلى القائمة الرئيسية أو مراجعة قناة السجل.";
+    try {
+      await ctx.telegram.sendMessage(chatId, fallback, { reply_markup: adminPanel.actionKeyboard() });
+    } catch (fallbackError) {
+      await sendLog({ module: "admin-panel", stage: section, severity: "warn", status: "failed", details: { phase: "fallback_render", error: redactString(fallbackError?.message || "fallback screen failed") } }).catch(() => {});
+    }
   }
 });
 

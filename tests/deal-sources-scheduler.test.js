@@ -111,6 +111,15 @@ const relevantPersonalCareFixture = `<script type="application/ld+json">${JSON.s
 })}</script>`;
 assert.equal(extractCards(relevantPersonalCareFixture, "amazon").length, 1,
   "relevant personal-care products must remain eligible after tightening exclusions");
+
+const expandedHouseholdFixture = `<script type="application/ld+json">${JSON.stringify({
+  "@type": "Product",
+  name: "منظف أرضيات متعدد الاستخدامات",
+  url: "https://www.jumia.com.eg/cleaner-floor-product",
+  offers: { price: "65", priceCurrency: "EGP" }
+})}</script>`;
+assert.equal(extractCards(expandedHouseholdFixture, "jumia").length, 1,
+  "relevant household cleaning products should not be rejected by a narrow keyword allowlist");
 const newsletterFixture = [
   { title: "منظف أول", merchant: "متجر", price: 25, url: "https://www.amazon.eg/dp/B0ABCDEF12" },
   { title: "رابط طويل", merchant: "متجر", price: 35, url: "https://www.amazon.eg/" + "x".repeat(500) }

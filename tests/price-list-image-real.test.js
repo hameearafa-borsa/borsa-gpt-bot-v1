@@ -32,7 +32,13 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     "the carton offer note in the soap section should establish carton pricing for following soap rows");
   assert.ok(accepted.some(row => /205 ح/.test(row.raw_line) && row.package_sale_price === 205), "the contextual currency typo should retain its source text and numeric price");
 
+  const brandPath = path.join(__dirname, "..", "1793378540373.jpg");
+  assert.ok(fs.existsSync(brandPath), "the committed Borsa logo must be present for real image rendering");
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
+  if (process.env.PRICE_LIST_VISUAL_QA_DIR) {
+    fs.mkdirSync(process.env.PRICE_LIST_VISUAL_QA_DIR, { recursive: true });
+    images.forEach((png, index) => fs.writeFileSync(path.join(process.env.PRICE_LIST_VISUAL_QA_DIR, `unilever-page-${index + 1}.png`), png));
+  }
   assert.equal(images.length, Math.ceil(accepted.length / 22), "long lists should be split into readable pages");
   for (const png of images) {
     assert.ok(Buffer.isBuffer(png));

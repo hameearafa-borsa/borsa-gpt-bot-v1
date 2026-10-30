@@ -145,8 +145,8 @@ function extractCards(html, sourceName, query = "") {
   return cards;
 }
 function extractionDiagnostics(html, sourceName, deals = []) {
-  const scripts = [...html.matchAll(/<script\\b([^>]*)>([\\s\\S]*?)<\\/script>/gi)]
-    .filter(match => /application\\/(?:ld\\+json|json)/i.test(match[1]) ||
+  const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
+    .filter(match => /application\/(?:ld\+json|json)/i.test(match[1]) ||
       /(?:__NEXT_DATA__|__NUXT__|INITIAL_STATE|APOLLO_STATE)/i.test(match[1]));
   let jsonParsed = 0, structuredProductObjects = 0, jsonParseFailures = 0;
   const seen = new Set();
@@ -163,11 +163,11 @@ function extractionDiagnostics(html, sourceName, deals = []) {
   }
   let htmlCardChunks = 0, htmlTitleMatches = 0;
   if (sourceName === "amazon") {
-    htmlCardChunks = [...html.matchAll(/<div\\b(?=[^>]*\\bdata-component-type=["']s-search-result["'])[^>]*>/gi)].length;
+    htmlCardChunks = [...html.matchAll(/<div\b(?=[^>]*\bdata-component-type=["']s-search-result["'])[^>]*>/gi)].length;
   } else {
-    const cardPattern = /<(?:article|div)\\b(?=[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:\\bprd\\b|product(?:[-_ ]?(?:card|item|tile))?|item-product|productContainer)[^"']*["'])[^>]*>/gi;
+    const cardPattern = /<(?:article|div)\b(?=[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:\bprd\b|product(?:[-_ ]?(?:card|item|tile))?|item-product|productContainer)[^"']*["'])[^>]*>/gi;
     htmlCardChunks = [...html.matchAll(cardPattern)].length;
-    if (!htmlCardChunks) htmlCardChunks = [...html.matchAll(/<article[\\s\\S]*?<\\/article>/gi)].length;
+    if (!htmlCardChunks) htmlCardChunks = [...html.matchAll(/<article[\s\S]*?<\/article>/gi)].length;
   }
   const titlePattern = /<(?:h[23]|span|div)[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:name|title|product[-_ ]?name)[^"']*["'][^>]*>/gi;
   htmlTitleMatches = [...html.matchAll(titlePattern)].length;

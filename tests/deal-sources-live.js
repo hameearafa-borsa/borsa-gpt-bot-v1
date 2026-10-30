@@ -25,7 +25,7 @@ const sources = [
   try {
     for (const source of sources) {
       const startedAt = Date.now();
-      const result = await fetchSearch(source.name, source.query, { timeoutMs: 25000 });
+      const result = await fetchSearch(source.name, source.query, { timeoutMs: 70000 });
       const deals = Array.isArray(result.deals) ? result.deals : [];
       const entry = {
         source: source.name,

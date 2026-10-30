@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, "fix/pass17-owner-panel-deal-alert-dedupe"]
+    branches: [main, "fix/pass17-owner-panel-deal-alert-dedupe", "fix/deals-fetch-resilience-2026-10-30"]
 
 permissions:
   contents: read

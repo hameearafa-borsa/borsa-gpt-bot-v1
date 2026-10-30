@@ -101,38 +101,6 @@ function extractStructuredCards(html, sourceName, query = "") {
 function extractCards(html, sourceName, query = "") {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
-  if (sourceName === "carrefour") {
-    const cards = [];
-    const products = [];
-    // Match script elements first, then inspect the type attribute. This avoids
-    // depending on attribute order or whitespace in retailer-generated HTML.
-    const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
-      .filter(match => /\btype\s*=\s*(["'])application\/ld\+json\1/i.test(match[1]))
-      .map(match => match[2]);
-    const visit = value => {
-      if (!value || typeof value !== "object") return;
-      const types = Array.isArray(value["@type"]) ? value["@type"] : [value["@type"]];
-      if (types.includes("Product")) products.push(value);
-      if (Array.isArray(value)) value.forEach(visit);
-      else Object.values(value).forEach(visit);
-    };
-    for (const script of scripts) {
-      try { visit(JSON.parse(script.trim())); } catch { /* Ignore malformed structured data. */ }
-    }
-    for (const product of products) {
-      const title = htmlText(product.name || "");
-      if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
-      const url = safeProductUrl(product.url || product.offers?.url || "", sourceName);
-      const offerList = Array.isArray(product.offers) ? product.offers : [product.offers || {}];
-      const prices = offerList.map(offer => money(offer.price ?? offer.lowPrice)).filter(value => value !== null);
-      const price = prices.length ? Math.min(...prices) : null;
-      const oldPrice = money(product.offers?.highPrice || product.highPrice);
-      if (!url || !price) continue;
-      const deal = { merchant: "Carrefour Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
-      if (validateDeal(deal).ok) cards.push(deal);
-    }
-    return cards;
-  }
   let cards = extractStructuredCards(html, sourceName, query);
   const structuredKeys = new Set(cards.map(deal => deal.url + "|" + deal.price));
   let chunks = [];
@@ -167,7 +135,7 @@ function extractCards(html, sourceName, query = "") {
     const oldMatch = chunk.match(/class=["'][^"']*(?:old|oldPrice|price-was)[^"']*["'][^>]*>([\s\S]*?)<\//i);
     const oldPrice = money(htmlText(oldMatch?.[1] || ""));
     if (!url || !price) continue;
-    const deal = { merchant: sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : "Noon Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
+    const deal = { merchant: sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "carrefour" ? "Carrefour Egypt" : "Noon Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
     if (validateDeal(deal).ok) {
       const key = deal.url + "|" + deal.price;
       if (!structuredKeys.has(key)) cards.push(deal);

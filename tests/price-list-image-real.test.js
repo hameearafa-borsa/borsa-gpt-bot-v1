@@ -39,7 +39,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     fs.mkdirSync(process.env.PRICE_LIST_VISUAL_QA_DIR, { recursive: true });
     images.forEach((png, index) => fs.writeFileSync(path.join(process.env.PRICE_LIST_VISUAL_QA_DIR, `unilever-page-${index + 1}.png`), png));
   }
-  assert.equal(images.length, Math.ceil(accepted.length / 22), "long lists should be split into readable pages");
+  assert.equal(images.length, Math.ceil(accepted.length / 18), "long lists should be split into readable pages");
   for (const png of images) {
     assert.ok(Buffer.isBuffer(png));
     assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "output must have a real PNG signature");

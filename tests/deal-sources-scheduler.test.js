@@ -58,7 +58,18 @@ assert.equal(hydrationDiagnostics.structuredScriptsFound, 1);
 assert.equal(hydrationDiagnostics.structuredJsonParsed, 1);
 assert.equal(hydrationDiagnostics.structuredProductObjects, 0,
   "hydration payloads without schema.org Product types should not be misreported as typed Product objects");
+assert.deepEqual(hydrationDiagnostics.productObjectShapes, [],
+  "product field-shape diagnostics should only describe typed Product objects");
 assert.equal(hydrationDiagnostics.validatedDeals, 1);
+const typedShapeFixture = `<script type="application/ld+json">${JSON.stringify({
+  "@type": "Product", name: "مسحوق غسيل برسيل", url: "https://www.jumia.com.eg/persil-product",
+  offers: { price: "120", priceCurrency: "EGP" }
+})}</script>`;
+const typedShapeDiagnostics = extractionDiagnostics(typedShapeFixture, "jumia");
+assert.equal(typedShapeDiagnostics.productObjectShapes.length, 1);
+assert.equal(typedShapeDiagnostics.productObjectShapes[0].fields.name, "string");
+assert.equal(typedShapeDiagnostics.productObjectShapes[0].nested.offers.price, "string",
+  "shape diagnostics must expose field names and types without exposing product values");
 
 const carrefourFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"فلفيتا جل منظف للملابس السوداء - 1 كيلو","url":"https://www.carrefouregypt.com/mafegy/ar/p/velvet-gel","offers":{"@type":"Offer","price":"79.99","priceCurrency":"EGP"}}</script>`;
 const amazonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"اريال مسحوق غسيل 2 كيلو","url":"https://www.amazon.eg/dp/B0ABCDEF12","offers":{"@type":"Offer","price":"99.50","priceCurrency":"EGP"}}</script>`;

@@ -5,6 +5,8 @@ assert.deepEqual(parseMessageLink("https://t.me/c/123456/789"), { chatId: -10012
 assert.deepEqual(parseMessageLink("https://t.me/example_channel/789"), { username: "@example_channel", messageId: 789 });
 assert.deepEqual(parseMessageLink("https://t.me/example_channel/789?single"), { username: "@example_channel", messageId: 789 });
 assert.equal(parseMessageLink("https://t.me/not-a-message"), null);
+assert.equal(parseMessageLink("https://t.me/example_channel/999999999999999999999"), null);
+assert.equal(parseMessageLink("https://t.me/c/0/789"), null);
 (async () => {
   const calls = [];
   const lookup = async (_pool, chatId, messageId) => { calls.push([chatId, messageId]); return { text: "قائمة أسعار" }; };

@@ -77,6 +77,45 @@ if (!connectionString) {
     assert.equal(row.package_type, null);
     assert.equal(row.decision, "pending");
 
+    // A first-seen product with an explicit wholesale price is accepted
+    // without requiring a product-registry match or prior reviewer approval.
+    const firstSeen = await observe({
+      pool,
+      message: {
+        chatId: -1007654321,
+        messageId: 9002,
+        userId: 9002,
+        text: "صابون جديد 500 جم جملة 42 ج"
+      },
+      registry: []
+    });
+    assert.equal(firstSeen.saved, 1, "a clear first-seen wholesale product must be saved");
+    assert.equal(firstSeen.savedRows[0].row.registry_match, false);
+    assert.equal(firstSeen.savedRows[0].row.decision, "accepted",
+      "a clear wholesale price must not be held just because the product is new");
+    const firstSeenStored = await pool.query(
+      "SELECT decision, confidence FROM price_observations WHERE source_chat_id=$1 AND source_message_id=$2",
+      [-1007654321, 9002]
+    );
+    assert.equal(firstSeenStored.rowCount, 1);
+    assert.equal(firstSeenStored.rows[0].decision, "accepted");
+    assert.ok(Number(firstSeenStored.rows[0].confidence) >= 0.8);
+
+    // A name and amount are still persisted when the trade type is unclear,
+    // but are not promoted into accepted wholesale history.
+    const unclearKind = await observe({
+      pool,
+      message: {
+        chatId: -1007654321,
+        messageId: 9004,
+        userId: 9002,
+        text: "منظف تجريبي 500 جم 42 ج"
+      },
+      registry: []
+    });
+    assert.equal(unclearKind.saved, 1, "an identifiable product and amount should be retained");
+    assert.equal(unclearKind.savedRows[0].row.decision, "pending",
+      "unknown trade type must remain pending rather than being assumed wholesale");
 
     // Full Pearl October catalog: verify all thirteen parsed rows and distinct
     // wholesale/base/consumer fields survive a real PostgreSQL write.
@@ -130,7 +169,7 @@ if (!connectionString) {
     assert.deepEqual(pearlStored.rows.slice(3, 5).map(row => row.pack_count), [null, null],
       "unknown sack unit counts must remain SQL NULL rather than being invented");
     assert.ok(pearlStored.rows.every(row => row.decision === "pending"),
-      "new catalog identities must be saved for review rather than auto-approved");
+      "Pearl rows with competing base/wholesale/consumer amounts or inferred context must remain pending");
 
     console.log("PRICE OBSERVATION POSTGRESQL INTEGRATION TESTS: OK");
   } finally {

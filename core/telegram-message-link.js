@@ -1,10 +1,16 @@
 "use strict";
 function parseMessageLink(value) {
-  const source = String(value || "").trim();
-  const match = source.match(/^https?:\\/\\/(?:www\\.)?(?:t\\.me|telegram\\.me)\\/(?:c\\/(\\d+)\\/(\\d+)|([A-Za-z0-9_]+)\\/(\\d+))(?:\\?(?:single|comment=\\d+))?\\/?$/i);
-  if (!match) return null;
-  if (match[1] && match[2]) return { chatId: Number(`-100${match[1]}`), messageId: Number(match[2]) };
-  return { username: `@${match[3]}`, messageId: Number(match[4]) };
+  let url;
+  try { url = new URL(String(value || "").trim()); } catch { return null; }
+  if (!["t.me", "www.t.me", "telegram.me", "www.telegram.me"].includes(url.hostname.toLowerCase())) return null;
+  const parts = url.pathname.split("/").filter(Boolean);
+  if (parts.length === 3 && parts[0].toLowerCase() === "c" && /^\\d+$/.test(parts[1]) && /^\\d+$/.test(parts[2])) {
+    return { chatId: Number(`-100${parts[1]}`), messageId: Number(parts[2]) };
+  }
+  if (parts.length === 2 && /^[A-Za-z0-9_]+$/.test(parts[0]) && /^\\d+$/.test(parts[1])) {
+    return { username: `@${parts[0]}`, messageId: Number(parts[1]) };
+  }
+  return null;
 }
 async function findCachedLinkedMessage({ pool, telegram, link, getMessageByRef }) {
   if (!link || !pool || typeof getMessageByRef !== "function") return { status: "not_cached", message: null };

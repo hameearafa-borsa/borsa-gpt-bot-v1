@@ -33,8 +33,11 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.ok(accepted.some(row => /205 ح/.test(row.raw_line) && row.package_sale_price === 205), "the contextual currency typo should retain its source text and numeric price");
 
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
-  assert.equal(images.length, Math.ceil(accepted.length / 22), "long lists should be split into readable pages");
-  for (const png of images) {
+  assert.equal(images.length, Math.ceil(accepted.length / 16), "long lists should be split into readable pages");
+  const outputDir = process.env.PRICE_LIST_TEST_OUTPUT_DIR;
+  if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
+  for (const [index, png] of images.entries()) {
+    if (outputDir) fs.writeFileSync(path.join(outputDir, `unilever-oct-2026-page-${index + 1}.png`), png);
     assert.ok(Buffer.isBuffer(png));
     assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "output must have a real PNG signature");
     const m = await sharp(png).metadata();
@@ -43,6 +46,24 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     assert.ok(m.height >= 250 && m.height <= 1200, "page height should remain readable and shareable");
     assert.equal(m.channels, 4);
     assert.ok(png.length > 1000, "rasterized image should not be an empty/mock buffer");
+  }
+  if (outputDir) {
+    for (const placement of ["watermark", "side", "both"]) {
+      const variantImages = await renderPriceListImages({
+        company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات",
+        month: metadata.month, priceType: metadata.priceType, logoPlacement: placement
+      });
+      const variantDir = path.join(outputDir, `logo-${placement}`);
+      fs.mkdirSync(variantDir, { recursive: true });
+      for (const [index, png] of variantImages.entries()) {
+        fs.writeFileSync(path.join(variantDir, `unilever-oct-2026-${placement}-page-${index + 1}.png`), png);
+        const meta = await sharp(png).metadata();
+        assert.equal(meta.format, "png");
+        assert.equal(meta.width, 1200);
+        assert.ok(png.length > 1000, "logo variant must remain a real, non-empty PNG");
+      }
+      console.log(`Rendered ${placement} logo variant: ${variantImages.length} pages`);
+    }
   }
   console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

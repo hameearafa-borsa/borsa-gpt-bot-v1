@@ -78,9 +78,8 @@ async function observe({ pool, message, merchantId = null, registry }) {
     // An explicitly approved product identity prevents repeat review based on the name alone.
     // Other ambiguities (multiple prices, unknown price kind) still remain pending.
     let previouslyReviewed = false;
-    // Reviewer-approved identity memory must apply to registry-matched and
-    // unregistered products alike. Otherwise known brands can be sent for review
-    // repeatedly even after a reviewer corrected and approved the exact identity.
+    // Reviewer-approved identity memory applies to registry-matched and
+    // unregistered products alike, preventing repeat reviews after correction.
     if (pool) {
       const known = await pool.query(
         "SELECT 1 FROM reviewed_price_products WHERE identity_key=$1 LIMIT 1",
@@ -90,21 +89,25 @@ async function observe({ pool, message, merchantId = null, registry }) {
     }
     if (previouslyReviewed && candidate.price_kind === "wholesale_candidate") {
       row.price_kind = "wholesale";
-      // product_identity_key includes price_kind; rebuild it after the memory-based
-      // promotion or history lookup will keep using the pre-approval candidate key.
+      // Identity keys include price_kind; recompute after promotion.
       row.product_identity_key = productIdentityKey(row);
       row.context_inferred_wholesale = true;
       row.price_selection_reason = [row.price_selection_reason, "previously_approved_product_identity"].filter(Boolean).join(";");
     }
-    // Rows parsed from the two explicitly recognized, pre-interpreted catalog formats
-    // have deterministic column semantics and are trusted as complete wholesale observations.
-    // Ordinary chat messages still require registry/reviewer evidence as before.
+    // A new product is not an ambiguity: explicit price labels and clear
+    // commercial context are sufficient evidence even when the registry has
+    // never seen this identity. Registry membership must not cap confidence.
+    // Keep reviewer memory as a confidence aid, not as a prerequisite for saving.
     row.confidence = candidate.trusted_catalog_row
       ? candidate.confidence
       : previouslyReviewed
         ? Math.max(candidate.confidence, 0.9)
-        : Math.min(candidate.confidence, match.matched ? 0.98 : 0.45);
-    row.decision = row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
+        : candidate.confidence;
+    // Explicit parser ambiguity (e.g. competing unlabelled and wholesale prices)
+    // still requires review even if its numeric confidence crosses the threshold.
+    row.decision = row.confidence >= 0.8 && row.price_kind === "wholesale" && !row.needs_review
+      ? "accepted"
+      : "pending";
     const fp = fingerprint(row);
     if (seen.has(fp)) continue;
     seen.add(fp);
@@ -122,7 +125,7 @@ async function observe({ pool, message, merchantId = null, registry }) {
     if (row.decision === "accepted") {
       const history = await pool.query(
         `SELECT product_identity_key, brand_key, price_kind, package_sale_price, weight_g, volume_ml,
-                pack_count, offer_extra_weight_g, package_type
+                pack_count, offer_extra_weight_g, package_type, unit_price_type
          FROM price_observations
          WHERE price_kind=$2 AND decision='accepted'
            AND (product_identity_key=$1 OR (product_identity_key IS NULL AND product_text=$3))

@@ -48,7 +48,8 @@ function getPriceTokens(line) {
     const end = m.index + m[0].length;
     const tail = s.slice(end);
     const isQuantity = /^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
-    return { value: parseNumber(m[1]), index: m.index, token: m[0].trim(), isQuantity };
+    const explicitCurrency = /(?:جنيه|ج|EGP)\s*$/iu.test(m[0]);
+    return { value: parseNumber(m[1]), index: m.index, token: m[0].trim(), isQuantity, explicitCurrency };
   }).filter(x => !x.isQuantity && x.value != null && x.value > 0 && x.value < 100000);
 }
 function cleanProductName(line) {
@@ -79,11 +80,14 @@ function parseListMetadata(text) {
 }
 function cleanExplicitProductLine(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
-  const token = [...ascii.matchAll(PRICE_TOKEN)].find(m => {
+  const tokens = [...ascii.matchAll(PRICE_TOKEN)].filter(m => {
     const end = m.index + m[0].length;
     const tail = ascii.slice(end);
     return !/^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
   });
+  // Remove the explicitly currency-marked price, not an earlier bundle size
+  // such as "350" in "صانسيلك 350 + بلسم ق 159 ج".
+  const token = tokens.filter(m => /(?:جنيه|ج|EGP)\s*$/iu.test(m[0])).at(-1) || tokens[0];
   if (!token) return cleanProductName(line);
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
     .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
@@ -163,8 +167,15 @@ function deterministicList(text) {
     const consumerIndex = line.search(RETAIL_LABEL);
     const afterWholesale = wholesaleIndex >= 0 ? getPriceTokens(line.slice(wholesaleIndex + line.slice(wholesaleIndex).match(WHOLESALE_LABEL)[0].length))[0]?.value ?? null : null;
     const afterConsumer = consumerIndex >= 0 ? getPriceTokens(line.slice(consumerIndex + line.slice(consumerIndex).match(RETAIL_LABEL)[0].length))[0]?.value ?? null : null;
-    const beforeLabel = priceTokens.find(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
-    const packagePrice = beforeLabel?.value ?? null;
+    const beforeLabel = priceTokens.filter(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
+    // Product/bundle quantities can appear before the actual price (e.g. "350 + بلسم ق 159 ج").
+    // Prefer an explicit currency-marked token; when several exist, the last one before
+    // a wholesale/consumer label is the declared price. Fall back to the first token
+    // only when the source line does not mark any candidate with currency.
+    const currencyMarkedPrices = beforeLabel.filter(p => p.explicitCurrency);
+    const packagePrice = (currencyMarkedPrices.length
+      ? currencyMarkedPrices[currencyMarkedPrices.length - 1]
+      : beforeLabel[0])?.value ?? null;
     const rowUnitPriceType = detectUnitPriceType(line);
     // A carton-specific offer note establishes the unit for following rows in the same product section.
     if (rowUnitPriceType === "بالكرتونة" && /العرض\s+على\s+الكرتونة|العرض\s+على\s+الكرتونه/iu.test(line)) {

@@ -19,6 +19,13 @@ function detectUnitPriceType(text, packCount = null) {
   return null;
 }
 
+function detectListUnitContext(text) {
+  const source = normalizeArabic(String(text || ""));
+  if (/(?:الاسعار|اسعار|السعر).{0,24}(?:بالقطعه|للقطعه|سعر القطعه)|(?:بالقطعه|للقطعه)/u.test(source)) return "بالقطعة";
+  if (/(?:الاسعار|اسعار|السعر).{0,24}(?:بالكرتونه|للكرتونه|سعر الكرتونه)|(?:بالكرتونه|للكرتونه)/u.test(source)) return "بالكرتونة";
+  return null;
+}
+
 function classifyPriceKind(text) {
   const s = normalizeArabic(text);
   if (RETAIL_WORDS.test(s) && !WHOLESALE_WORDS.test(s)) return "retail";
@@ -91,7 +98,8 @@ function extractExplicitWholesalePrice(text) {
 
 function extractProductText(line) {
   return stripQuantityTokens(line)
-    .replace(/\d+(?:[.,]\d+)?\s*(?:ج|جنيه|EGP)?/gi, " ")
+    // ح is a common adjacent-key typo for ج in Egyptian price lists; consume it only after a numeric token.
+    .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|ح|EGP)?/gi, " ")
     .replace(/\|/g, " ")
     .replace(/[+]/g, " ")
     .replace(/\s+/g, " ")
@@ -278,6 +286,13 @@ function parseInvoiceTable(text) {
   return rows.length ? rows : null;
 }
 
+function isConversationalNumericNoise(line) {
+  const source = String(line || "").trim();
+  const conversational = /(?:هههه|😂|🤣|فيلم|سمعته|مره|مرة|بعده|قبله|بضحك|بهزر|يا عم)/iu.test(source);
+  const productOrCommerceCue = /(?:جنيه|\bج\b|egp|جمله|جملة|مستهلك|قطاعي|كرتونه|كرتونة|كيلو|كجم|جم|جرام|لتر|مل|قطعة|عبوة|مسحوق|صابون|شامبو|منظف|اريال|أريال|دوف|كمفورت|سيجنال|كلير|بيرل)/iu.test(source);
+  return conversational && !productOrCommerceCue && /\d/.test(toAsciiDigits(source));
+}
+
 function extractPriceCandidates(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const invoiceRows = parseInvoiceTable(text);
@@ -287,8 +302,11 @@ function extractPriceCandidates(text) {
   const out = [];
   let company = null;
   let section = null;
+  // Egyptian trade-list default: carton prices unless a row or list heading says piece.
+  let listUnitPriceType = "بالكرتونة";
 
   for (const line of lines) {
+    if (isConversationalNumericNoise(line)) continue;
     if (/^\/|^[-_=.*]+$/.test(line)) continue;
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
 
@@ -296,6 +314,8 @@ function extractPriceCandidates(text) {
     const parsedLine = toAsciiDigits(line).replace(/\*\*/g, "").replace(/[\u200B-\u200F\uFEFF]/g, "");
     const stripped = stripQuantityTokens(parsedLine);
     const numbers = numericPriceTokens(stripped);
+    const unitContext = detectListUnitContext(line);
+    if (unitContext) listUnitPriceType = unitContext;
 
     // Company and section headings establish context for weight-only rows such as "9 ك:".
     if (!numbers.length) {
@@ -321,7 +341,7 @@ function extractPriceCandidates(text) {
 
     const packCount = parsePackCount(parsedLine);
     const extraWeightG = parseExtraWeight(parsedLine);
-    const unitPriceType = detectUnitPriceType(parsedLine, packCount);
+    const unitPriceType = detectUnitPriceType(parsedLine, packCount) || listUnitPriceType;
     const quantity = parsedLine.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const q = quantity ? parseQuantity(quantity[0]) : null;
     const decimalAutomaticWeight = parsedLine.match(/(?:^|\s)(\d+[.,]\d{1,3})\s*(?:كجم|ك)?\s*(?:اتوماتيك|اوتوماتيك)/i);
@@ -350,8 +370,6 @@ function extractPriceCandidates(text) {
       ? extractInvoiceProductText(parsedLine)
       : extractProductText(parsedLine))
       .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى|قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة|بعد)/giu, " ")
-      // Standalone "ق" denotes a per-piece price; it is not part of the product name.
-      .replace(/(?:^|\s)ق(?=\s|$)/giu, " ")
       .replace(/\s+/g, " ").trim();
     const weightLabel = quantity?.[0]?.trim() || (decimalAutomaticWeight ? decimalAutomaticWeight[1] : null);
     // Generic package words describe packaging, not the product identity.
@@ -446,8 +464,12 @@ function productIdentityKey(row) {
   // Product identity describes the item itself, not the supplier's temporary carton configuration.
   // Keep size, extra free weight and package type in identity, but track carton count per observation:
   // promotions and carton-merging can change count without changing the underlying product.
-  const dimensions = [row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g, row?.package_type]
-    .map(value => value == null || value === "" ? "" : String(value));
+  const dimensions = [
+    row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g,
+    row?.package_type, row?.unit_price_type
+  ].map(value => value == null || value === "" ? "" : String(value));
+  // Piece and carton prices are different commercial units and must never
+  // share a price history or inherit each other's carton count.
   return [String(row?.brand_key || ""), stableName, String(row?.price_kind || ""), ...dimensions].join("|");
 }
 
@@ -466,8 +488,12 @@ function classifyObservationChange(previous, current) {
   const dimensions = ["weight_g", "volume_ml", "offer_extra_weight_g"];
   const weightChanged = dimensions.some(key => !sameNumber(previous[key], current[key]));
   const packageTypeChanged = String(previous.package_type || "") !== String(current.package_type || "");
+  // Older observations may not have a stored unit classification; only
+  // compare units when both sides are explicitly known.
+  const unitPriceTypeChanged = Boolean(previous.unit_price_type && current.unit_price_type) &&
+    previous.unit_price_type !== current.unit_price_type;
   const packageCountChanged = !sameNumber(previous.pack_count, current.pack_count);
-  const packageConfigurationChanged = packageTypeChanged || packageCountChanged;
+  const packageConfigurationChanged = packageTypeChanged || unitPriceTypeChanged || packageCountChanged;
   const priceChanged = !sameNumber(previous.package_sale_price, current.package_sale_price);
 
   if ((weightChanged || packageConfigurationChanged) && priceChanged) {

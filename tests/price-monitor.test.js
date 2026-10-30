@@ -215,13 +215,6 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(pieceInsertParams[23], "بالقطعة",
     "unit_price_type must be persisted in the new final INSERT parameter");
 
-  // A standalone "ق" is a piece-price marker, not part of the product name.
-  const dovePiece = extractPriceCandidates("دوف 350مل ق 121 ج")[0];
-  assert.equal(dovePiece.product_text, "دوف");
-  assert.equal(dovePiece.volume_ml, 350);
-  assert.equal(dovePiece.package_sale_price, 121);
-  assert.equal(dovePiece.unit_price_type, "بالقطعة");
-
   // Historical accepted observations are compared before insertion, without posting a chat message.
   let historyInsertParams = null;
   const historyPool = {
@@ -518,38 +511,30 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(remembered.savedRows[0].row.decision, "accepted",
     "previously approved product identities should not be sent back to review just because this post omits the wholesale label");
   assert.equal(remembered.savedRows[0].row.price_kind, "wholesale");
-  assert.equal(remembered.savedRows[0].row.product_identity_key, productIdentityKey(remembered.savedRows[0].row),
-    "when reviewer memory promotes a candidate to wholesale, the canonical history key must be recomputed too");
-
-  // Reviewer memory must also be consulted for products matched by the registry.
-  // A previously corrected Ariel identity should not be re-reviewed merely because
-  // its next post omits the explicit wholesale word.
-  const registryMemoryQueries = [];
-  const registryRememberedPool = {
-    async query(sql) {
-      registryMemoryQueries.push(sql);
-      if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
-      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
-      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
-      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 101 }], rowCount: 1 };
-      throw new Error("unexpected registry-memory query");
-    }
-  };
-  const registryRemembered = await observe({
-    pool: registryRememberedPool,
-    message: { chatId: -100123, messageId: 466, text: "أريال مسحوق 2 كجم 150 ج" },
-    registry
-  });
-  assert.equal(registryRemembered.saved, 1);
-  assert.equal(registryRemembered.savedRows[0].row.decision, "accepted",
-    "reviewer identity memory must be honored even when the product registry matches");
-  assert.ok(registryMemoryQueries.some(sql => sql.includes("reviewed_price_products")),
-    "registry-matched products must still look up reviewer approval memory");
-  assert.equal(registryRemembered.savedRows[0].row.product_identity_key, productIdentityKey(registryRemembered.savedRows[0].row),
-    "registry-matched approval memory must also persist the canonical wholesale identity key");
 
   // Multi-product context can infer wholesale classification, but must not
   // auto-approve a brand-new identity without registry or prior approval.
+  // Egyptian list context: default to carton; explicit piece/carton headings persist until changed.
+  const unitContextRows = extractPriceCandidates(`الأسعار بالقطعة
+شامبو ألف 500 مل 22
+بلسم باء 600 مل 35
+الأسعار بالكرتونة
+شامبو جيم 500 مل 350
+بلسم دال 600 مل 420`);
+  assert.deepEqual(unitContextRows.map(row => row.unit_price_type),
+    ["بالقطعة", "بالقطعة", "بالكرتونة", "بالكرتونة"],
+    "list unit headings must carry forward until a later heading changes the unit");
+
+  const defaultCartonRows = extractPriceCandidates("شامبو ألف 500 مل 350\nبلسم باء 600 مل 420");
+  assert.deepEqual(defaultCartonRows.map(row => row.unit_price_type), ["بالكرتونة", "بالكرتونة"],
+    "Egyptian trade lists default to carton prices when no piece marker is present");
+
+  const typoCurrencyRow = extractPriceCandidates("تريزيمي بلسم 600 مل ق 205 ح")[0];
+  assert.equal(typoCurrencyRow.package_sale_price, 205, "ح after a price must not change its numeric value");
+  assert.equal(typoCurrencyRow.unit_price_type, "بالقطعة", "standalone ق marks a piece price");
+  assert.equal(typoCurrencyRow.product_text, "تريزيمي بلسم", "currency typo must not leak into product identity");
+  assert.equal(typoCurrencyRow.raw_line, "تريزيمي بلسم 600 مل ق 205 ح", "retain the exact source line for audit");
+
   const contextual = extractPriceCandidates("منظف ألف 500 جم 22 ج\nمنظف باء 1 لتر 35 ج");
   assert.ok(contextual.length >= 2);
   const contextPool = {

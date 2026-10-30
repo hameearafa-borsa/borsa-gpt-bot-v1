@@ -9,6 +9,7 @@ const { runMigrations } = require("./core/migrations");
 const { loadRegistry } = require("./core/product-registry");
 const { claimMessage, isBotMessage, isLogChat } = require("./core/message-gate");
 const { cacheMessage, getMessageByRef } = require("./core/message-cache");
+const { parseMessageLink, findCachedLinkedMessage } = require("./core/telegram-message-link");
 const { log, makeReport, emitReport, redactString } = require("./core/diagnostics");
 const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
 const { formatTelegramStartupError } = require("./core/telegram-startup-error");
@@ -90,14 +91,6 @@ function messageData(ctx) {
 function commandText(text) { return String(text || "").replace(/^\/[^\s@]+(?:@[^\s]+)?\s*/i, "").trim(); }
 function commandName(text) { return String(text || "").match(/^\/([^\s@]+)/)?.[1] || ""; }
 
-function parseMessageLink(value) {
-  const s = String(value || "").trim();
-  const m = s.match(/^https?:\/\/(?:t\.me|telegram\.me)\/(?:c\/(\d+)\/(\d+)|([A-Za-z0-9_]+)\/(\d+))$/i);
-  if (!m) return null;
-  if (m[1] && m[2]) return { chatId: Number(`-100${m[1]}`), messageId: Number(m[2]) };
-  return { username: `@${m[3]}`, messageId: Number(m[4]) };
-}
-
 const recentLogAlerts = new Map();
 async function sendLog(event) {
   const stage = String(event?.stage || "event");
@@ -127,8 +120,11 @@ async function isAuthorizedChat(chatId) {
   return Boolean(r.rows[0]?.active);
 }
 
+// Explicitly trusted review operator for the shared board/admin group.
+const ADDITIONAL_PRICE_REVIEWER_IDS = new Set([831621854]);
+
 async function isPriceReviewer(telegram, userId) {
-  if (isMaster(userId)) return true;
+  if (isMaster(userId) || ADDITIONAL_PRICE_REVIEWER_IDS.has(Number(userId))) return true;
   if (!db.pool || !telegram || !userId) return false;
   try {
     const groups = await db.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE");
@@ -311,7 +307,7 @@ bot.on("text", async ctx => {
   const cmd = commandName(text);
   const args = commandText(text);
   if (cmd === "priceedit" && m.chatType === "private") {
-    if (!(await isPriceReviewer(ctx.telegram, m.userId))) { await ctx.reply("هذا الإجراء متاح لمالك البوت أو منشئي المجموعات المعتمدة فقط."); return; }
+    if (!(await isPriceReviewer(ctx.telegram, m.userId))) { await ctx.reply("هذا الإجراء متاح للمراجعين المعتمدين ومالكي المجموعات النشطة المعتمدة فقط."); return; }
     const fields = args.split("|").map(value => value.trim());
     if (fields.length !== 6) { await ctx.reply("صيغة غير صحيحة. استخدم: /priceedit ID | اسم الصنف | السعر | الوزن_جرام أو - | الحجم_مللي أو - | عدد العبوات أو -"); return; }
     const [idText, productText, priceText, weightText, volumeText, packText] = fields;
@@ -476,9 +472,18 @@ bot.on("text", async ctx => {
     let sourceText = args;
     const link = parseMessageLink(args);
     if (link) {
-      const source = link.chatId ? await getMessageByRef(db.pool, link.chatId, link.messageId) : null;
+      const lookup = await findCachedLinkedMessage({
+        pool: db.pool,
+        telegram: ctx.telegram,
+        link,
+        getMessageByRef
+      });
+      const source = lookup.message;
       if (!source) {
-        await ctx.reply("🔎 الرابط مفهوم، لكن الرسالة الأصلية لم تمر على البوت من قبل. أعد توجيه الرسالة هنا أو أرسل نص القائمة بعد الأمر /قائمة.");
+        const reason = lookup.status === "chat_unavailable"
+          ? "لم أتمكن من الوصول إلى القناة أو المجموعة من خلال البوت."
+          : "الرابط صحيح، لكن الرسالة غير محفوظة في ذاكرة البوت السابقة.";
+        await ctx.reply(`🔎 ${reason}\nأعد توجيه الرسالة إلى هنا، أو أرسل نص القائمة بعد الأمر /قائمة.`);
         return;
       }
       sourceText = source.text || source.caption || "";
@@ -827,7 +832,6 @@ installFatalProcessHandlers({
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);
   console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
-  // Scheduled deal newsletters stay disabled by default to protect paid ScraperAPI credits.
   // Scheduled newsletters are enabled by default; set DEALS_SCHEDULER_ENABLED=false to pause them.
   if (String(process.env.DEALS_SCHEDULER_ENABLED ?? "true").toLowerCase() !== "false") {
     stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {

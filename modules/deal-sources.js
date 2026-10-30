@@ -13,7 +13,7 @@ const SOURCES = Object.freeze({
   carrefour: { host: "www.carrefouregypt.com", base: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers" }
 });
 const INCLUDE = /غسيل|مسحوق|بودر|جل|منعم|كلور|صابون|شامبو|كريم|مناديل|حفاض|فاين|ديتول|فيري|بريل|برسيل|تايد|اريال|آريال|اومو|أومو|كلوركس|دوف|لوكس|بانتين|بامبرز|مولفكس|محارم|غسول|مرطب|عناية|ورقي|مكياج|تجميل|لوشن|سيروم|مزيل عرق|معجون|فازلين|نيفيا/i;
-const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|حذاء|مكيف|ثلاجة|تلفزيون|ايفون|سامسونج جالكسي/i;
+const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|حذاء|ملابس نسائية|ملابس رجالية|ملابس أطفال|فستان|تيشيرت|بنطلون|جاكيت|مكيف|ثلاجة|تلفزيون|شاشة|ايفون|سامسونج جالكسي|غسالة ملابس|بوتاجاز|ميكروويف|مروحة|تكييف|أثاث|كنبة|سرير|مرتبة|لعبة أطفال|ألعاب أطفال|مكمل غذائي|علف|طعام قطط|طعام كلاب|كريم طبخ|كريمة طبخ|شامبو سيارات|منظف سيارات|زيت محرك/i;
 function categoryOf(title) {
   const s = normalizeArabic(title);
   if (/حفاض|بامبرز|مولفكس|مناديل|فاين|محارم|كلينكس|ورقي/.test(s)) return "paper";
@@ -104,7 +104,13 @@ function extractCards(html, sourceName, query = "") {
   let cards = extractStructuredCards(html, sourceName, query);
   const structuredKeys = new Set(cards.map(deal => deal.url + "|" + deal.price));
   let chunks = [];
-  if (sourceName === "amazon") chunks = [...html.matchAll(/<div[^>]+data-component-type=["\x27]s-search-result["\x27][\s\S]*?<\/div>\s*<\/div>/gi)].map(m=>m[0]);
+  if (sourceName === "amazon") {
+    // Amazon result cards contain nested divs, so matching a fixed number of
+    // closing divs can truncate cards when retailer markup changes. Split at
+    // each result-card opening tag so nested title, link, and price remain intact.
+    const starts = [...html.matchAll(/<div\b(?=[^>]*\bdata-component-type=["']s-search-result["'])[^>]*>/gi)];
+    chunks = starts.map((match, index) => html.slice(match.index, starts[index + 1]?.index ?? html.length));
+  }
   else if (sourceName === "jumia") chunks = [...html.matchAll(/<article[^>]+class=["\x27][^"\x27]*prd[^"\x27]*["\x27][\s\S]*?<\/article>/gi)].map(m=>m[0]);
   else chunks = [...html.matchAll(/<article[\s\S]*?<\/article>/gi)].map(m=>m[0]);
   for (const chunk of chunks) {
@@ -154,7 +160,13 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
       const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
       if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
       const html = await response.text();
-      return { source: sourceName, ok: true, deals: extractCards(html, sourceName, query) };
+      const deals = extractCards(html, sourceName, query);
+      const pageSignal = /captcha|robot check|automated access|validatecaptcha|enter the characters you see/i.test(html)
+        ? "captcha_or_block_page"
+        : /data-component-type=["']s-search-result["']|application\/ld\+json/i.test(html)
+          ? "product_markup_present"
+          : html.trim().length === 0 ? "empty_response" : "no_product_markers";
+      return { source: sourceName, ok: true, deals, ...(deals.length === 0 ? { pageSignal } : {}) };
     } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
     finally { clearTimeout(timer); }
   };
@@ -215,11 +227,11 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
       source: r.value.source,
       ok: true,
       extractedCount,
-      ...(extractedCount === 0 ? { reason: "no_products_extracted" } : {})
+      ...(extractedCount === 0 ? { reason: "no_products_extracted", ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}) } : {})
     });
     // A successful HTTP response with no parsed products is diagnostically
     // different from a source that failed to load. Record it without logging HTML.
-    if (extractedCount === 0) errors.push({ source: r.value.source, reason: "no_products_extracted" });
+    if (extractedCount === 0) errors.push({ source: r.value.source, reason: "no_products_extracted", ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}) });
     for (const d of r.value.deals) {
       const key = `${d.url}|${d.price}`;
       if (!seen.has(key)) { seen.add(key); deals.push(d); }

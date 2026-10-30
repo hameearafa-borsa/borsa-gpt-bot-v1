@@ -42,6 +42,20 @@ const { persistPriceList } = require("../modules/price-list-persistence");
     "explicit carton rows must be persisted as carton references");
   assert.ok(references.some(q => /قرنفل 100مل \+25مل هدية/.test(q.params[16])),
     "promotional raw line must survive persistence so comparison logic can reject unsafe base-price matching");
+
+  const findRow = text => rows.find(row => row.raw_line === text);
+  assert.equal(findRow("صانسيلك 350 + بلسم  ق 159 ج")?.package_sale_price, 159,
+    "bundle size must not be mistaken for the explicitly currency-marked price");
+  assert.match(findRow("صانسيلك 350 + بلسم  ق 159 ج")?.product || "", /350.*بلسم/,
+    "normalized product identity must retain the bundle size and bonus product");
+  assert.doesNotMatch(findRow("صانسيلك 350 + بلسم  ق 159 ج")?.product || "", /159/,
+    "normalized product identity must not retain the price as part of the product name");
+  assert.equal(findRow("تريزيمي 400 + بلسم ق 276 ج")?.package_sale_price, 276,
+    "bundle size must not be mistaken for the explicitly currency-marked price");
+  assert.equal(findRow("كلير أكياس 5 مل الكرتونة 346 ج")?.package_sale_price, 346,
+    "carton price must be selected rather than the sachet size");
+  assert.equal(findRow("كامي 110جم 1104 ج العرض على الكرتونة قطعة صابون هدية")?.unit_price_type, "بالكرتونة",
+    "explicit carton promotion wording must classify the row as carton-priced");
   assert.ok(!queries.some(q => /INSERT INTO price_observations/.test(q.sql)),
     "official company catalogs must not be persisted as live group sightings");
   console.log("UNILEVER PRICE-LIST REFERENCE PERSISTENCE TEST: OK (66 reference rows, 66 catalog rows)");

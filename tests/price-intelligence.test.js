@@ -14,6 +14,21 @@ assert.equal(detectUnitPriceType("كامي 110جم 1104 ج — عرض على ا�
 assert.equal(detectUnitPriceType("قطعة صابون هدية 1104 ج"), null,
   "promotional gift wording alone must not imply that the listed price is per piece");
 assert.equal(detectUnitPriceType("أريال 2ك 490ج 4ق", 4), "بالكرتونة");
+// Mixed-unit Unilever monitoring regressions: piece, carton, and ambiguous currency.
+const signalPiece = extractPriceCandidates("سيجنال 120مل ق 42,33 ج");
+assert.equal(signalPiece.length, 1);
+assert.equal(signalPiece[0].package_sale_price, 42.33);
+assert.equal(signalPiece[0].unit_price_type, "بالقطعة");
+
+const clearCarton = extractPriceCandidates("كلير أكياس 5 مل الكرتونة 346 ج");
+assert.equal(clearCarton.length, 1);
+assert.equal(clearCarton[0].package_sale_price, 346);
+assert.equal(clearCarton[0].unit_price_type, "بالكرتونة");
+
+const ambiguousCurrency = extractPriceCandidates("تريزيمي بلسم 600 مل ق 205 ح");
+assert.equal(ambiguousCurrency.length, 1);
+assert.equal(ambiguousCurrency[0].package_sale_price, 205);
+
 
 const rows = extractPriceCandidates(`أريال ٢ك يدوي ٤٩٠ج ٤ق\nبريكس ارضيات ٢٥ جم ١٨.٧٥ ج\nبريكس 1 لتر مستهلك 55 ج`);
 assert.ok(rows.length >= 2);
@@ -83,6 +98,13 @@ assert.equal(mixedCommentList[0].package_sale_price, 490);
 assert.ok(!buildListPrompt(`أريال ٢ك يدوي ٤٩٠ج ٤ق
 ${conversationalComment}`).includes(conversationalComment), "commentary must be removed before optional AI extraction");
 
+
+// A number embedded in obvious casual conversation must not become a price review.
+assert.deepEqual(
+  extractPriceCandidates("هههههه الفيلم دا سمعته 600 مره مفيش فيلم بعده ولا قبله 😂"),
+  [],
+  "a conversational number with laughter and film/story wording is not a product price"
+);
 
 // A bare number such as 503 is not a product or a price observation by itself.
 assert.deepEqual(extractPriceCandidates("503"), []);
@@ -208,6 +230,19 @@ assert.ok(unileverSoapOffer.raw_line.includes("قطعة صابون هدية"),
   "the original source row must preserve the promotional gift wording");
 assert.doesNotMatch(unileverSoapOffer.product, /العرض على الكرتونة|قطعة صابون هدية/u,
   "a carton promotion note should not contaminate the product identity");
+// Full-list unit audit: expected units are derived from the actual October source text.
+const unileverPieceRows = unileverRows.filter(row => row.unit_price_type === "بالقطعة");
+const unileverCartonRows = unileverRows.filter(row => row.unit_price_type === "بالكرتونة");
+assert.equal(unileverPieceRows.length, 51, "all explicitly marked ق rows and the known per-piece sections should remain per-piece");
+assert.equal(unileverCartonRows.length, 15, "the unmarked wholesale sections plus explicit carton rows should remain carton-priced");
+assert.ok(unileverRows.every(row => ["بالقطعة", "بالكرتونة"].includes(row.unit_price_type)), "every accepted Unilever row must have an explicit resolved unit");
+for (const row of unileverRows.filter(row => row.category === "منتجات جلو و فازلين" || row.category === "صابون الحمام")) {
+  assert.equal(row.unit_price_type, "بالكرتونة", `wholesale section row should be carton-priced: ${row.raw_line}`);
+}
+for (const row of unileverRows.filter(row => row.raw_line.startsWith("سيجنال") || row.raw_line.startsWith("كلوز أب") || row.raw_line.startsWith("أكس") || row.raw_line.startsWith("ريكسونا") || row.raw_line.startsWith("دوف") || row.raw_line.startsWith("صانسيلك") || row.raw_line.startsWith("تريزيمي") || row.raw_line.startsWith("تريمي") || row.raw_line.startsWith("كامي شاور") || row.raw_line.startsWith("لايف هاند") || row.raw_line.startsWith("لوكس هاند") || row.raw_line.startsWith("سيف ") || row.raw_line.startsWith("كمفورت"))) {
+  assert.equal(row.unit_price_type, "بالقطعة", `explicit piece-price row should remain per-piece: ${row.raw_line}`);
+}
+
 // Historical comparison preserves product identity when only weight/offer changes.
 const historyBase = {
   brand_key: "pearl",
@@ -231,7 +266,30 @@ assert.equal(classifyObservationChange(historyBase, { ...historyBase, price_kind
 assert.equal(parsePackageType("شكارة 10 ك"), "sack");
 assert.equal(parsePackageType("كيس 50 جم"), "sachet");
 assert.equal(parsePackageType("9 ك"), null);
-assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 5 ك" }), productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 9 ك" }), "weight should not change stable product identity");
+assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 5 ك" }), productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 9 ك" }), "normalized product wording should not alone change the stable identity when dimensions are equal");
+assert.notEqual(
+  productIdentityKey({ ...historyBase, unit_price_type: "بالقطعة" }),
+  productIdentityKey({ ...historyBase, unit_price_type: "بالكرتونة" }),
+  "piece and carton prices must have separate price histories"
+);
+assert.notEqual(
+  productIdentityKey({ ...historyBase, offer_extra_weight_g: null }),
+  productIdentityKey({ ...historyBase, offer_extra_weight_g: 300 }),
+  "a free-extra-weight offer must have a separate identity"
+);
+assert.notEqual(
+  productIdentityKey({ ...historyBase, package_type: null }),
+  productIdentityKey({ ...historyBase, package_type: "sack" }),
+  "sack packaging must not share the ordinary package identity"
+);
+assert.equal(
+  classifyObservationChange(
+    { ...historyBase, unit_price_type: "بالقطعة", product_identity_key: productIdentityKey({ ...historyBase, unit_price_type: "بالقطعة" }) },
+    { ...historyBase, unit_price_type: "بالكرتونة", product_identity_key: productIdentityKey({ ...historyBase, unit_price_type: "بالكرتونة" }) }
+  ),
+  "new_observation",
+  "a piece/carton switch must not be reported as a price change for the same unit"
+);
 
 (async () => {
   const aiReturnsWrongNumbers = {

@@ -28,7 +28,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
       { product: "منتج أول", package_sale_price: 10 },
       { product: "منتج ثان", package_sale_price: 20 },
       { product: "منتج ثالث", package_sale_price: 30 },
-      { product: "A".repeat(149) + "&end", package_sale_price: 40, unit_price_type: "بالكرتونة" }
+      { product: "A".repeat(149) + "&end", package_sale_price: 40, volume_ml: 350, unit_price_type: "بالكرتونة" }
     ] });
     assert.equal(png.toString(), "mock-png");
     assert.match(capturedSvg, /شركة اختبار/);
@@ -37,6 +37,25 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);
     assert.match(capturedSvg, /بالكرتونة/, "carton price type should be visible on rendered list rows");
+    assert.match(capturedSvg, /العبوة \/ السعة/, "package size should have its own labeled middle column");
+    assert.match(capturedSvg, /الصنف/, "product name should have a separate column heading");
+    assert.match(capturedSvg, /السعر/, "price should have a separate column heading");
+    assert.match(capturedSvg, /text-anchor="middle"[^>]*>350 مل</, "package capacity should be centered in its own column");
+    // The image is a company-list view: render only package_sale_price.
+    // Separate wholesale/consumer/list prices remain stored for comparison,
+    // and must never silently replace or be mixed into the displayed list price.
+    await renderPriceListImages({
+      company: "قائمة متعددة الأسعار",
+      items: [
+        { product: "صنف بسعر قطعة", package_sale_price: 42.33, wholesale_carton_price: 346, consumer_price: 55, list_price: 60, unit_price_type: "بالقطعة" },
+        { product: "صنف بسعر كرتونة", package_sale_price: 346, wholesale_carton_price: 999, consumer_price: 888, list_price: 777, unit_price_type: "بالكرتونة" },
+        { product: "صنف ثالث", package_sale_price: 125, wholesale_carton_price: 500, consumer_price: 250, list_price: 300, unit_price_type: "بالكرتونة" }
+      ]
+    });
+    assert.match(capturedSvg, /42\.33 ج\.م/, "the declared package price should be rendered for per-piece rows");
+    assert.match(capturedSvg, /346 ج\.م/, "the declared package price should be rendered for carton rows");
+    assert.doesNotMatch(capturedSvg, /999 ج\.م|888 ج\.م|777 ج\.م|500 ج\.م|250 ج\.م|300 ج\.م/,
+      "separate wholesale, consumer and list prices must not leak into the single-price company-list image");
     const unileverLikeImages = await renderPriceListImages({
       company: "شركة اختبار",
       items: Array.from({ length: 66 }, (_, i) => ({
@@ -45,10 +64,10 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
         unit_price_type: i % 3 === 0 ? "بالقطعة" : "بالكرتونة"
       }))
     });
-    assert.equal(unileverLikeImages.length, 3,
-      "66 products should render as three images at the default 22 products per image");
-    assert.match(capturedSvg, /صفحة 3 من 3/,
-      "the final image should identify itself as page 3 of 3");
+    assert.equal(unileverLikeImages.length, 5,
+      "66 products should render as five images at the default 16 products per image");
+    assert.match(capturedSvg, /صفحة 5 من 5/,
+      "the final image should identify itself as page 5 of 5");
     await assert.doesNotReject(() => renderPriceListImages({
       company: "شركة اختبار",
       items: Array.from({ length: 100 }, (_, i) => ({ product: `منتج ${i + 1}`, package_sale_price: 20 }))

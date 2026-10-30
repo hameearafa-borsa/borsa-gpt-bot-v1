@@ -37,6 +37,13 @@ const amazonStructuredFixture = `<script type="application/ld+json">{"@context":
 const amazonStructuredCards = extractCards(amazonStructuredFixture, "amazon", "اريال");
 assert.equal(amazonStructuredCards.length, 1, "Amazon JSON-LD should be parsed when retailer HTML selectors change");
 assert.equal(amazonStructuredCards[0].price, 99.5);
+const amazonCardHtml = `<div data-component-type="s-search-result" data-asin="B0ABCDEF16"><div><h2><a href="/dp/B0ABCDEF16"><span>اريال مسحوق غسيل 2 كيلو</span></a></h2><div class="a-price"><span class="a-price-whole">129</span></div></div><div><span>تفاصيل إضافية</span></div></div><div data-component-type="s-search-result" data-asin="B0ABCDEF17"><h2><a href="/dp/B0ABCDEF17"><span>مناديل فاين ورقية</span></a></h2><span class="a-offscreen">45.00 جنيه</span></div>`;
+const amazonCardDeals = extractCards(amazonCardHtml, "amazon", "منظفات");
+assert.equal(amazonCardDeals.length, 2, "Amazon nested result cards should survive varying nesting depth");
+assert.equal(amazonCardDeals[0].price, 129);
+assert.equal(amazonCardDeals[1].price, 45);
+assert.ok(amazonCardDeals.every(deal => deal.url.startsWith("https://www.amazon.eg/dp/")));
+
 const noonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"شامبو نيفيا للعناية بالشعر","url":"https://www.noon.com/egypt-ar/product/N1234567","offers":{"@type":"Offer","price":"145","priceCurrency":"EGP"}}</script>`;
 const noonStructuredCards = extractCards(noonStructuredFixture, "noon", "نيفيا");
 assert.equal(noonStructuredCards.length, 1, "Noon JSON-LD should be parsed when retailer HTML selectors change");
@@ -50,6 +57,33 @@ assert.equal(carrefourCards[0].price, 79.99);
 assert.equal(carrefourCards[0].category, "detergent");
 assert.equal(safeProductUrl("https://evil.example/mafegy/ar/p/velvet-gel", "carrefour"), null);
 assert.equal(extractCards(carrefourFixture.replace('"price":"79.99"', '"price":"0"'), "carrefour").length, 0, "invalid prices must be rejected");
+
+const irrelevantProductFixtures = [
+  { source: "amazon", title: "شاشة تلفزيون ذكية مع كريم", url: "https://www.amazon.eg/dp/B0ABCDEF14" },
+  { source: "jumia", title: "فستان نسائي كريم اللون", url: "https://www.jumia.com.eg/product-dress" },
+  { source: "noon", title: "كريم طبخ 500 مل", url: "https://www.noon.com/egypt-ar/product/COOK123" },
+  { source: "carrefour", title: "شامبو سيارات لتنظيف الهيكل", url: "https://www.carrefouregypt.com/mafegy/ar/p/car-shampoo" }
+];
+for (const item of irrelevantProductFixtures) {
+  const fixture = `<script type="application/ld+json">${JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: item.title,
+    url: item.url,
+    offers: { "@type": "Offer", price: "99", priceCurrency: "EGP" }
+  })}</script>`;
+  assert.equal(extractCards(fixture, item.source).length, 0,
+    `out-of-domain product must be excluded: ${item.title}`);
+}
+const relevantPersonalCareFixture = `<script type="application/ld+json">${JSON.stringify({
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: "كريم مرطب نيفيا للعناية بالبشرة",
+  url: "https://www.amazon.eg/dp/B0ABCDEF15",
+  offers: { "@type": "Offer", price: "99", priceCurrency: "EGP" }
+})}</script>`;
+assert.equal(extractCards(relevantPersonalCareFixture, "amazon").length, 1,
+  "relevant personal-care products must remain eligible after tightening exclusions");
 const newsletterFixture = [
   { title: "منظف أول", merchant: "متجر", price: 25, url: "https://www.amazon.eg/dp/B0ABCDEF12" },
   { title: "رابط طويل", merchant: "متجر", price: 35, url: "https://www.amazon.eg/" + "x".repeat(500) }
@@ -201,7 +235,14 @@ for (const edition of [editionAmazon, editionOther]) {
    "successful HTTP responses with empty parser results must be distinguishable from request failures");
  assert.equal(collected.errors.length, 10, "empty extraction should be visible in diagnostics even when HTTP requests succeeded");
  const amazonTargets = [];
- const amazonOnly = await collectDealCandidates({
+ 
+ const blockedPage = await fetchSearch("amazon", "diagnostic test", {
+   fetchImpl: async () => ({ ok: true, status: 200, text: async () => "<html><title>Robot Check</title><body>Automated access</body></html>" })
+ });
+ assert.equal(blockedPage.ok, true);
+ assert.equal(blockedPage.pageSignal, "captcha_or_block_page",
+   "HTTP 200 challenge pages should be distinguished from ordinary empty search results");
+const amazonOnly = await collectDealCandidates({
    edition: "amazon",
    fetchImpl: async url => {
      amazonTargets.push(new URL(String(url)).searchParams.get("url"));

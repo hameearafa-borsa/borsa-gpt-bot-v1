@@ -9,6 +9,7 @@ const { runMigrations } = require("./core/migrations");
 const { loadRegistry } = require("./core/product-registry");
 const { claimMessage, isBotMessage, isLogChat } = require("./core/message-gate");
 const { cacheMessage, getMessageByRef } = require("./core/message-cache");
+const { parseMessageLink, findCachedLinkedMessage } = require("./core/telegram-message-link");
 const { log, makeReport, emitReport, redactString } = require("./core/diagnostics");
 const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
 const { formatTelegramStartupError } = require("./core/telegram-startup-error");
@@ -89,14 +90,6 @@ function messageData(ctx) {
 
 function commandText(text) { return String(text || "").replace(/^\/[^\s@]+(?:@[^\s]+)?\s*/i, "").trim(); }
 function commandName(text) { return String(text || "").match(/^\/([^\s@]+)/)?.[1] || ""; }
-
-function parseMessageLink(value) {
-  const s = String(value || "").trim();
-  const m = s.match(/^https?:\/\/(?:t\.me|telegram\.me)\/(?:c\/(\d+)\/(\d+)|([A-Za-z0-9_]+)\/(\d+))$/i);
-  if (!m) return null;
-  if (m[1] && m[2]) return { chatId: Number(`-100${m[1]}`), messageId: Number(m[2]) };
-  return { username: `@${m[3]}`, messageId: Number(m[4]) };
-}
 
 const recentLogAlerts = new Map();
 async function sendLog(event) {
@@ -479,9 +472,18 @@ bot.on("text", async ctx => {
     let sourceText = args;
     const link = parseMessageLink(args);
     if (link) {
-      const source = link.chatId ? await getMessageByRef(db.pool, link.chatId, link.messageId) : null;
+      const lookup = await findCachedLinkedMessage({
+        pool: db.pool,
+        telegram: ctx.telegram,
+        link,
+        getMessageByRef
+      });
+      const source = lookup.message;
       if (!source) {
-        await ctx.reply("🔎 الرابط مفهوم، لكن الرسالة الأصلية لم تمر على البوت من قبل. أعد توجيه الرسالة هنا أو أرسل نص القائمة بعد الأمر /قائمة.");
+        const reason = lookup.status === "chat_unavailable"
+          ? "لم أتمكن من الوصول إلى القناة أو المجموعة من خلال البوت."
+          : "الرابط صحيح، لكن الرسالة غير محفوظة في ذاكرة البوت السابقة.";
+        await ctx.reply(`🔎 ${reason}\nأعد توجيه الرسالة إلى هنا، أو أرسل نص القائمة بعد الأمر /قائمة.`);
         return;
       }
       sourceText = source.text || source.caption || "";

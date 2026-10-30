@@ -488,7 +488,10 @@ function classifyObservationChange(previous, current) {
   const dimensions = ["weight_g", "volume_ml", "offer_extra_weight_g"];
   const weightChanged = dimensions.some(key => !sameNumber(previous[key], current[key]));
   const packageTypeChanged = String(previous.package_type || "") !== String(current.package_type || "");
-  const unitPriceTypeChanged = String(previous.unit_price_type || "") !== String(current.unit_price_type || "");
+  // Older observations may not have a stored unit classification; only
+  // compare units when both sides are explicitly known.
+  const unitPriceTypeChanged = Boolean(previous.unit_price_type && current.unit_price_type) &&
+    previous.unit_price_type !== current.unit_price_type;
   const packageCountChanged = !sameNumber(previous.pack_count, current.pack_count);
   const packageConfigurationChanged = packageTypeChanged || unitPriceTypeChanged || packageCountChanged;
   const priceChanged = !sameNumber(previous.package_sale_price, current.package_sale_price);

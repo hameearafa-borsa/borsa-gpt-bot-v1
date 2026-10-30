@@ -8,10 +8,15 @@ function parseMessageLink(value) {
   if (!["t.me", "www.t.me", "telegram.me", "www.telegram.me"].includes(url.hostname.toLowerCase())) return null;
   const parts = url.pathname.split("/").filter(Boolean);
   if (parts.length === 3 && parts[0].toLowerCase() === "c" && isDigits(parts[1]) && isDigits(parts[2])) {
-    return { chatId: Number(`-100${parts[1]}`), messageId: Number(parts[2]) };
+    const internalChatId = Number(parts[1]);
+    const messageId = Number(parts[2]);
+    if (!Number.isSafeInteger(internalChatId) || !Number.isSafeInteger(messageId) || internalChatId <= 0 || messageId <= 0) return null;
+    return { chatId: Number(`-100${parts[1]}`), messageId };
   }
   if (parts.length === 2 && /^[A-Za-z0-9_]+$/.test(parts[0]) && isDigits(parts[1])) {
-    return { username: `@${parts[0]}`, messageId: Number(parts[1]) };
+    const messageId = Number(parts[1]);
+    if (!Number.isSafeInteger(messageId) || messageId <= 0) return null;
+    return { username: `@${parts[0]}`, messageId };
   }
   return null;
 }

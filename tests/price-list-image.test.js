@@ -51,7 +51,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
       { product: "منظف", package_sale_price: 200, unit_price_type: "بالكرتونة" }
     ] });
     assert.match(capturedSvg, /بالكرتونة/);
-    assert.match(capturedSvg, /120 مل • بالقطعة|بالقطعة • 120 مل/);
+    assert.match(capturedSvg, /بالقطعة/, "per-piece prices must be explicitly labeled");
     const unileverLikeImages = await renderPriceListImages({
       company: "شركة اختبار",
       items: Array.from({ length: 66 }, (_, i) => ({

@@ -66,7 +66,7 @@ const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard,
   assert.equal(ignoredCalls[1].params[0], "ignored", "rejecting a price should resolve its queue entry too");
   const editedCalls = [];
   const editedDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
-    editedCalls.push({ sql, params }); return { rowCount: 1, rows: [{ id: 42 }] };
+    editedCalls.push({ sql, params }); return { rowCount: 1, rows: [{ ...row, id: 42 }] };
   } }); } };
   const edited = await saveEditedReview({ db: editedDb, id: 42, reviewerId: 7, productText: "منظف مصحح", price: 23, weightG: 500 });
   assert.equal(edited.ok, true);
@@ -76,6 +76,8 @@ const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard,
     "a manually corrected wholesale price must update its dedicated field too");
   assert.match(editedCalls[1].sql, /product_identity_key/);
   assert.match(editedCalls[2].sql, /reviewed_price_products/);
+  assert.equal(editedCalls[2].params[9], "بالقطعة", "editing a review must preserve its original piece/carton unit in reviewer memory");
+  assert.doesNotMatch(editedCalls[0].sql, /unit_price_type\\s*=/, "manual edit must not silently rewrite the commercial unit");
   assert.equal(editedCalls[2].params[1], "منظف مصحح", "manual correction must be remembered under the corrected product identity");
   assert.match(editedCalls[3].sql, /status='accepted'/);
   assert.match(editedCalls[3].sql, /notification_claim_token=NULL, notification_claimed_at=NULL/);

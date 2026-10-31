@@ -113,13 +113,13 @@ function cairoDateParts(date = new Date()) {
 
 function parseCatalogDateRange(value, now = new Date()) {
   const text = normalizeText(value).replace(/[–—]/g, "-");
-  let match = text.match(/(\\d{1,2})\\s+([A-Za-z]{3,9})\\s*-\\s*(\\d{1,2})\\s+([A-Za-z]{3,9})/i);
+  let match = text.match(/(\d{1,2})\s+([A-Za-z]{3,9})\s*-\s*(\d{1,2})\s+([A-Za-z]{3,9})/i);
   let startDay, startMonth, endDay, endMonth;
   if (match) {
     startDay = Number(match[1]); startMonth = MONTHS[match[2].slice(0, 3).toLowerCase()];
     endDay = Number(match[3]); endMonth = MONTHS[match[4].slice(0, 3).toLowerCase()];
   } else {
-    match = text.match(/(\\d{1,2})\\s*-\\s*(\\d{1,2})\\s+([A-Za-z]{3,9})/i);
+    match = text.match(/(\d{1,2})\s*-\s*(\d{1,2})\s+([A-Za-z]{3,9})/i);
     if (!match) return null;
     startDay = Number(match[1]); endDay = Number(match[2]);
     startMonth = endMonth = MONTHS[match[3].slice(0, 3).toLowerCase()];

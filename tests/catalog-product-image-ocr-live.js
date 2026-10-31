@@ -61,19 +61,19 @@ function extractSnippetImageUrls(html, baseUrl) {
   // labels, or metadata rather than ordinary text nodes. Include both text
   // nodes and quoted HTML attribute values in the normalized page evidence.
   const pageEvidence = html
-    .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, tag =>
-      " " + tag.replace(/(?:^|\\s)[\\w:-]+\\s*=\\s*(["'])(.*?)\\1/g, " $2 ") + " "
+      " " + tag.replace(/(?:^|\s)[\w:-]+\s*=\s*(["'])(.*?)\1/g, " $2 ") + " "
     )
     .replace(/&nbsp;|&#160;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&#0*39;|&apos;/gi, "'")
     .replace(/&quot;/gi, '"')
-    .replace(/\\s+/g, " ")
+    .replace(/\s+/g, " ")
     .trim();
   const storePattern = new RegExp(
-    expected.store.replace(/\\s+/g, "\\\\s+"),
+    expected.store.replace(/\s+/g, "\\s+"),
     "i"
   );
   assert.ok(

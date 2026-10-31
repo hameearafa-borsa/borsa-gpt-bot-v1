@@ -13,6 +13,7 @@ const products = [
     currentPrice: "74.99",
     store: "Metro Market",
     pageNumber: 4,
+    storeSlug: "metro-market",
     identityTerms: ["مناديل", "مترو"],
     minIdentityMatches: 2
   },
@@ -23,6 +24,7 @@ const products = [
     currentPrice: "114.95",
     store: "Metro Market",
     pageNumber: 8,
+    storeSlug: "metro-market",
     identityTerms: ["oxi"],
     minIdentityMatches: 1
   }
@@ -67,6 +69,45 @@ function extractSnippetImageUrls(html, baseUrl) {
     }
   }
   return [...candidates];
+}
+
+
+function decodeHtml(value) {
+  return String(value || "").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"')
+    .replace(/&#39;|&#x27;/gi, "'").replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">").replace(/&nbsp;|&#160;/gi, " ");
+}
+
+function htmlText(value) {
+  return decodeHtml(String(value || "").replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
+    .replace(/<style[\\s\\S]*?<\\/style>/gi, " ").replace(/<[^>]+>/g, " "))
+    .replace(/\\s+/g, " ").trim();
+}
+
+function escapeTelegramHtml(value) {
+  return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function extractProductOffer(html, product) {
+  const heading = html.match(/<h1\\b[^>]*>([\\s\\S]*?)<\\/h1>/i);
+  if (!heading) throw new Error("product_title_not_found");
+  const title = htmlText(heading[1]);
+  const headingEnd = html.indexOf(heading[0]) + heading[0].length;
+  const nearby = htmlText(html.slice(headingEnd, headingEnd + 12000));
+  const priceMatch = nearby.match(/(?:^|\\s)(\\d{1,5}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*EGP\\b/i);
+  if (!priceMatch) throw new Error("product_current_price_not_found");
+  const storeEvidence = new RegExp('/stores/' + product.storeSlug + '(?:[/?#"]|$)', 'i').test(html);
+  if (!storeEvidence) throw new Error("product_store_identity_not_found");
+  const productUrl = new URL(product.url);
+  if (productUrl.protocol !== "https:" || productUrl.hostname !== "snapflyer.io" ||
+      !/^\\/eg\\/[a-z0-9-]+\\/products\\/\\d+$/i.test(productUrl.pathname)) {
+    throw new Error("product_offer_url_not_allowed");
+  }
+  const price = priceMatch[1].replace(/,/g, "");
+  const message = '<a href="' + escapeTelegramHtml(productUrl.href) + '">' +
+    escapeTelegramHtml(title + " — " + price + " جنيه") + '</a>';
+  return { title, price, storeVerified: true, url: productUrl.href, telegramHtml: message };
 }
 
 function normalizeOcrText(value) {
@@ -127,8 +168,13 @@ async function verifyProduct(product, ocr) {
   console.log("Product page: " + product.url);
 
   const html = await fetchProductPage(product.url);
-  assert.ok(html.includes(product.title), "Expected product title is missing: " + product.title);
-  assert.ok(html.includes(product.currentPrice), "Expected current price is missing: " + product.currentPrice);
+  const offer = extractProductOffer(html, product);
+  assert.equal(offer.title, product.title, "Page-derived product title must match the expected product");
+  assert.equal(offer.price, product.currentPrice, "Page-derived current price must match the expected offer");
+  assert.equal(offer.storeVerified, true);
+  assert.ok(offer.telegramHtml.includes('href="' + product.url + '"'), "Telegram message must link directly to the individual product page");
+  console.log("Extracted offer: " + offer.title + " | " + offer.price + " EGP");
+  console.log("Telegram HTML preview: " + offer.telegramHtml);
 
   const images = extractSnippetImageUrls(html, product.url);
   assert.ok(images.length, "No safe individual snippet image URL found for " + product.id);

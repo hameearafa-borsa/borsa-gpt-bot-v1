@@ -14,17 +14,17 @@ function decodeHtml(value) {
 
 function extractStoreProductLinks(html, storeKey, baseUrl) {
   const results = [];
-  const pattern = /<a\\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\\s\\S]*?)<\\/a>/gi;
+  const pattern = /<a\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi;
   for (const match of html.matchAll(pattern)) {
     let url;
     try { url = new URL(match[2], baseUrl); } catch { continue; }
     if (url.protocol !== "https:" || url.hostname !== "snapflyer.io" ||
-        !/^\\/eg\\/[a-z0-9-]+\\/products\\/\\d+$/i.test(url.pathname)) continue;
+        !/^\/eg\/[a-z0-9-]+\/products\/\d+$/i.test(url.pathname)) continue;
     const title = normalizeText(decodeHtml(match[4]));
     if (!title || title.length < 3) continue;
     const end = (match.index || 0) + match[0].length;
-    const trailing = normalizeText(decodeHtml(html.slice(end, end + 700).replace(/<a\\b[\\s\\S]*$/i, " ")));
-    const priceMatch = trailing.match(/(?:—|-|–)\\s*(\\d{1,5}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*(?:EGP|ج\\s*\\.?\\s*م\\.?|جنيه)/i);
+    const trailing = normalizeText(decodeHtml(html.slice(end, end + 700).replace(/<a\b[\s\S]*$/i, " ")));
+    const priceMatch = trailing.match(/(?:—|-|–)\s*(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:EGP|ج\s*\.?\s*م\.?|جنيه)/i);
     const candidate = { store: storeKey, title, url: url.href, priceHint: priceMatch ? priceMatch[1].replace(/,/g, "") : null };
     if (isRelevantOffer(candidate)) results.push(candidate);
   }
@@ -33,22 +33,24 @@ function extractStoreProductLinks(html, storeKey, baseUrl) {
 
 function extractCatalogSnippetCandidates(html, storeKey, catalogUrl) {
   const results = [];
-  const anchors = [...html.matchAll(/<a\\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\\s\\S]*?)<\\/a>/gi)];
+  const anchors = [...html.matchAll(/<a\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi)];
   for (let i = 0; i < anchors.length; i++) {
     const match = anchors[i];
     let imageUrl;
     try { imageUrl = new URL(match[2], catalogUrl); } catch { continue; }
     if (imageUrl.protocol !== "https:" || imageUrl.hostname !== "snapflyer.io" ||
-        !/^\\/storage\\/flyers\\/eg\\/(?:bim|kazyon|metro-market)\\/[^?#]*\\/snippets\\/snippet_[a-z0-9]+\\.(?:webp|png|jpe?g)$/i.test(imageUrl.pathname)) continue;
+        !/^\/storage\/flyers\/eg\/(?:bim|kazyon|metro-market)\/[^?#]*\/snippets\/snippet_[a-z0-9]+\.(?:webp|png|jpe?g)$/i.test(imageUrl.pathname)) continue;
 
-    const nextSnippetIndex = anchors.findIndex((candidate, index) => index > i &&
-      /\\/snippets\\/snippet_/i.test(candidate[2]));
+    let nextSnippetIndex = -1;
+    for (let j = i + 1; j < anchors.length; j++) {
+      if (/\/snippets\/snippet_/i.test(anchors[j][2])) { nextSnippetIndex = j; break; }
+    }
     const end = nextSnippetIndex >= 0 ? anchors[nextSnippetIndex].index : Math.min(html.length, match.index + 5000);
     const region = html.slice(match.index + match[0].length, end);
     const text = normalizeText(decodeHtml(region));
-    const priceMatch = text.match(/(\\d{1,5}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*EGP/i);
-    const title = text.split(/\\d{1,5}(?:,\\d{3})*(?:\\.\\d{1,2})?\\s*EGP/i)[0]
-      .replace(/^(?:Image|صفحة\\s*\\d+)\\s*/i, "").trim();
+    const priceMatch = text.match(/(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*EGP/i);
+    const title = text.split(/\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?\s*EGP/i)[0]
+      .replace(/^(?:Image|صفحة\s*\d+)\s*/i, "").trim();
     const candidate = {
       store: storeKey,
       title: title.slice(0, 180),
@@ -56,7 +58,7 @@ function extractCatalogSnippetCandidates(html, storeKey, catalogUrl) {
       snippetUrl: imageUrl.href,
       productUrl: null
     };
-    const productLink = region.match(/href=["'](https:\\/\\/snapflyer\\.io\\/eg\\/[a-z0-9-]+\\/products\\/\\d+)["']/i);
+    const productLink = region.match(/href=["'](https:\/\/snapflyer\.io\/eg\/[a-z0-9-]+\/products\/\d+)["']/i);
     if (productLink) candidate.productUrl = productLink[1];
     if (candidate.title && candidate.priceHint && isRelevantOffer(candidate)) results.push(candidate);
   }
@@ -75,7 +77,7 @@ function extractCatalogSnippetCandidates(html, storeKey, catalogUrl) {
     storePageLinks += storeLinks.length;
 
     const editions = selectOneCatalogPerStore(extractCatalogs(storeHtml, storeKey), new Date());
-    console.log("\\n=== " + store.name + " (" + storeKey + ") ===");
+    console.log("\n=== " + store.name + " (" + storeKey + ") ===");
     console.log("Store-page direct product links: " + storeLinks.length);
     console.log("Current catalog editions discovered: " + editions.length);
 
@@ -96,7 +98,7 @@ function extractCatalogSnippetCandidates(html, storeKey, catalogUrl) {
     }
   }
 
-  console.log("\\nLIVE CATALOG PRODUCT DISCOVERY SUMMARY");
+  console.log("\nLIVE CATALOG PRODUCT DISCOVERY SUMMARY");
   console.log("Store-page direct product links: " + storePageLinks);
   console.log("Catalog snippet + price candidates: " + catalogCandidates);
   console.log("Candidates with individual product URLs: " + linkedCatalogProducts);

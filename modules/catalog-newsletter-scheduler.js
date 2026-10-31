@@ -167,7 +167,7 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
           });
           if (ocrResult.pageCount) result.ocrPages = (result.ocrPages || 0) + ocrResult.pageCount;
         } catch (error) {
-          result.failed++;
+          result.ocrFailed = (result.ocrFailed || 0) + 1;
           await onError(error, { stage: "catalog_ocr", store: storeKey, catalogUrl: catalog.url });
         }
       }

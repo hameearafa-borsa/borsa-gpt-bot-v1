@@ -207,16 +207,16 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     published, sourceErrors: gathered.errors || []
   };
 }
-function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 15 * 60_000 } = {}) {
+function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 2 * 60_000 } = {}) {
   let busy = false;
   let nextAttemptAt = 0;
   let backoffKind = null;
   let activeDay = batchKey();
   const reportedFetchFailures = new Set();
 
-  // A failed source query used to emit the same diagnostic every minute. Keep
-  // trying periodically, but emit only one identical fetch-failure report per
-  // Cairo day. A changed source/status signature is still reported immediately.
+  // Retry a failed edition quickly enough to fit inside its five-minute window.
+  // Keep diagnostics quiet: emit one identical fetch-failure report per Cairo day,
+  // while a changed source/status signature is still reported immediately.
   const scheduledOptions = {
     ...options,
     onError: async (error, details = {}) => {

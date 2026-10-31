@@ -3,13 +3,15 @@ const assert = require("node:assert/strict");
 const {
   createImageOcr,
   normalizeOcrText,
-  MAX_IMAGE_BYTES
+  MAX_IMAGE_BYTES,
+  recognizeWithTesseract
 } = require("../modules/image-ocr");
 
 (async () => {
   assert.equal(normalizeOcrText("  أريال\r\n  ١٢٥ ج  \n\n\nبرسيل "), "أريال\n  ١٢٥ ج\n\nبرسيل");
   assert.equal(normalizeOcrText("السعر\u200f ١٠٠"), "السعر ١٠٠");
   assert.equal(normalizeOcrText("   "), "");
+  assert.throws(() => recognizeWithTesseract(Buffer.from("x"), { pageSegmentationMode: "99" }), /ocr_invalid_page_segmentation_mode/);
 
   let prepared = 0, recognized = 0;
   const ocr = createImageOcr({

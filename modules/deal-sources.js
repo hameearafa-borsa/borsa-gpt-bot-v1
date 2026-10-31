@@ -3,6 +3,7 @@
 const { validateDeal } = require("./deals");
 const { normalizeArabic, toAsciiDigits } = require("../core/normalization");
 const { redactString } = require("../core/diagnostics");
+const { collectSnapFlyerCatalogDeals } = require("./snapflyer-catalog-deals");
 
 let nextScraperKeyIndex = 0;
 const MAX_CONCURRENT_SCRAPER_REQUESTS = 2;
@@ -282,7 +283,7 @@ async function mapWithConcurrency(items, limit, worker) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
   return results;
 }
-async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], edition = "all", fetchImpl } = {}) {
+async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], edition = "all", fetchImpl, snapFlyerFetcher = collectSnapFlyerCatalogDeals, snapFlyerOptions = {} } = {}) {
   const tasks = [];
   // Each newsletter queries only the stores it can publish. This avoids
   // paying for Amazon results during the other-store edition and vice versa.
@@ -329,11 +330,31 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
     // different from a source that failed to load. Record it without logging HTML.
     if (extractedCount === 0) errors.push({ source: r.value.source, reason: "no_products_extracted", ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}) });
     for (const d of r.value.deals) {
-      const key = `${d.url}|${d.price}`;
+      const key = `${d.url}|${d.title}|${d.price}`;
       if (!seen.has(key)) { seen.add(key); deals.push(d); }
     }
   }
+  if (edition === "other_sites" || edition === "all") {
+    try {
+      const catalogResult = await snapFlyerFetcher(snapFlyerOptions);
+      for (const deal of catalogResult.deals || []) {
+        const key = String(deal.url) + "|" + String(deal.title) + "|" + String(deal.price);
+        if (!seen.has(key)) { seen.add(key); deals.push(deal); }
+      }
+      errors.push(...(catalogResult.errors || []));
+      sourceStats.push(...(catalogResult.sourceStats || []));
+      for (const stat of catalogResult.sourceStats || []) {
+        if (!storeCounters.has(stat.source)) storeCounters.set(stat.source, {
+          source: stat.source, queries: 1, transportFailures: stat.ok ? 0 : 1,
+          json: createExtractionCounters().json, html: createExtractionCounters().html
+        });
+      }
+    } catch (error) {
+      errors.push({ source: "snapflyer_catalogs", reason: String(error?.message || "fetch_failed").slice(0, 120) });
+      sourceStats.push({ source: "snapflyer_catalogs", ok: false, stage: "transport", extractedCount: 0, reason: "fetch_failed" });
+    }
+  }
   for (const task of tasks) if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
-  return { deals, errors, sourceStats, sourceSummary: [...storeCounters.values()], sourceCount: tasks.length };
+  return { deals, errors, sourceStats, sourceSummary: [...storeCounters.values()], sourceCount: tasks.length + (edition === "other_sites" || edition === "all" ? 3 : 0) };
 }
 module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, createExtractionCounters, getScraperKeys, fetchSearch, collectDealCandidates };

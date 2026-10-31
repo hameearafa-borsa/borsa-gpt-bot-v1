@@ -155,6 +155,7 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
     }
     eligiblePending.push(snapshot);
   }
+  eligiblePending.sort((a, b) => String(b.first_seen_at || "").localeCompare(String(a.first_seen_at || "")) || Number(b.id) - Number(a.id));
   const selectedPending = selectOneCatalogPerStore(eligiblePending.map(snapshot => ({
     ...snapshot, store: snapshot.store_key
   })), now);

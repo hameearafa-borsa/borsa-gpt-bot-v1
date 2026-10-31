@@ -215,6 +215,20 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(ok.ok,true);
  const bad = await verifyProductUrl("https://evil.example/x", {fetchImpl:async()=>({status:200,url:"https://evil.example/x"})});
  assert.equal(bad.ok,false);
+ const snapFlyerCatalogUrl = "https://snapflyer.io/eg/downtown/offers/kazyon/1711";
+ const snapFlyerVerified = await verifyProductUrl(snapFlyerCatalogUrl, {
+   fetchImpl: async url => ({ status: 200, url: String(url) })
+ });
+ assert.equal(snapFlyerVerified.ok, true, "approved SnapFlyer catalog offer pages must pass URL verification");
+ assert.equal(snapFlyerVerified.finalUrl, snapFlyerCatalogUrl);
+ const unsafeSnapFlyerPath = await verifyProductUrl("https://snapflyer.io/eg/downtown/stores/kazyon", {
+   fetchImpl: async () => ({ status: 200 })
+ });
+ assert.equal(unsafeSnapFlyerPath.ok, false, "SnapFlyer store pages are not publishable product offer links");
+ const unsafeSnapFlyerStore = await verifyProductUrl("https://snapflyer.io/eg/downtown/offers/other-store/1711", {
+   fetchImpl: async () => ({ status: 200 })
+ });
+ assert.equal(unsafeSnapFlyerStore.ok, false, "only the three agreed SnapFlyer stores may pass verification");
  const notModified = await verifyProductUrl("https://www.amazon.eg/dp/B0ABCDEF12", {fetchImpl:async()=>({status:304})});
  assert.equal(notModified.ok,false, "an unhandled 304 response must not count as a verified product URL");
  let redirectCalls = 0;
@@ -241,6 +255,19 @@ for (const edition of [editionAmazon, editionOther]) {
    { merchant: "Amazon.eg", title: "مسحوق غسيل مع هدية", url: "https://www.amazon.eg/dp/B0ABCDEF12", price: 100, category: "detergent" },
    { merchant: "Amazon.eg", title: "مناديل ورقية", url: "https://www.amazon.eg/dp/B0ABCDEF13", price: 30, category: "paper" }
  ];
+ const snapFlyerCandidates = [{
+   merchant: "كازيون",
+   title: "تايد جل غسالات أوتوماتيك 2.35 لتر",
+   url: snapFlyerCatalogUrl,
+   price: 174.95,
+   category: "detergent",
+   source: "snapflyer_catalog"
+ }];
+ const snapFlyerRetained = await verifyDeals(snapFlyerCandidates, {
+   fetchImpl: async url => ({ status: 200, url: String(url) })
+ });
+ assert.equal(snapFlyerRetained.length, 1, "SnapFlyer catalog deals must survive the real newsletter URL-verification stage");
+ assert.equal(snapFlyerRetained[0].verified_url, true);
  const retainedOnBlock = await verifyDeals(candidates, {
    fetchImpl: async () => ({ status: 403, headers: { get: () => null } })
  });

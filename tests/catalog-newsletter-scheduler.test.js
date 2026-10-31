@@ -224,16 +224,19 @@ function makePipelinePool() {
 
   // A Telegram failure moves the snapshot out of the pending queue; the terminal delivery record prevents ambiguous automatic retries.
   const retryPool = makePipelinePool();
+  const failureCatalogHtml = '<a href="/eg/downtown/offers/kazyon/1378"><span>Kazyon flyer December 2026</span></a>';
+  const failureFingerprint = require("../modules/catalog-newsletter").extractCatalogs(failureCatalogHtml, "kazyon")[0].fingerprint;
+  const fetchFailureEdition = async url => url === CATALOG_STORES.kazyon.url ? failureCatalogHtml : fetchPage(url);
   await checkCatalogsOnce({ pool: retryPool, telegram, chatId: -100123, fetchPage });
   await retryPool.query(
     "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
-    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1378", "fp-new", "Kazyon flyer December 2026", "محافظة القاهرة", null, "pending"]
+    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1378", failureFingerprint, "Kazyon flyer December 2026", "محافظة القاهرة", null, "pending"]
   );
   let publishErrors = 0;
   let ambiguousDeliveryAlert = false;
   const failingTelegram = { sendMessage: async () => { throw new Error("telegram unavailable"); } };
   const failedPublish = await checkCatalogsOnce({
-    pool: retryPool, telegram: failingTelegram, chatId: -100123, fetchPage,
+    pool: retryPool, telegram: failingTelegram, chatId: -100123, fetchPage: fetchFailureEdition,
     onError: async (_error, meta) => {
       if (meta.stage === "catalog_publish") {
         publishErrors++;
@@ -250,7 +253,7 @@ function makePipelinePool() {
   const retrySent = [];
   const retry = await checkCatalogsOnce({
     pool: retryPool, telegram: { sendMessage: async (_id, message) => retrySent.push(message) },
-    chatId: -100123, fetchPage
+    chatId: -100123, fetchPage: fetchFailureEdition
   });
   assert.equal(retrySent.length, 0, "an ambiguous Telegram send outcome must not be retried automatically");
   assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
@@ -258,16 +261,19 @@ function makePipelinePool() {
   // Partial delivery: one approved group succeeds while another has an ambiguous Telegram error.
   // The successful group's record must remain published, and neither group is retried automatically.
   const partialPool = makePipelinePool();
+  const partialCatalogHtml = '<a href="/eg/downtown/offers/kazyon/1390"><span>Kazyon flyer January 2027</span></a>';
+  const partialFingerprint = require("../modules/catalog-newsletter").extractCatalogs(partialCatalogHtml, "kazyon")[0].fingerprint;
+  const fetchPartialEdition = async url => url === CATALOG_STORES.kazyon.url ? partialCatalogHtml : fetchPage(url);
   await checkCatalogsOnce({ pool: partialPool, telegram, chatId: -100123, fetchPage });
   await partialPool.query(
     "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
-    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1390", "fp-partial", "Kazyon flyer January 2027", "محافظة القاهرة", null, "pending"]
+    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1390", partialFingerprint, "Kazyon flyer January 2027", "محافظة القاهرة", null, "pending"]
   );
   const partialSent = [];
   const partialResult = await checkCatalogsOnce({
     pool: partialPool,
     chatIds: [-100123, -100456],
-    fetchPage,
+    fetchPage: fetchPartialEdition,
     telegram: {
       sendMessage: async (chatId, message) => {
         if (chatId === -100456) throw new Error("Telegram response lost");
@@ -287,7 +293,7 @@ function makePipelinePool() {
   await checkCatalogsOnce({
     pool: partialPool,
     chatIds: [-100123, -100456],
-    fetchPage,
+    fetchPage: fetchPartialEdition,
     telegram: { sendMessage: async (chatId, message) => partialRetrySent.push({ chatId, message }) }
   });
   assert.equal(partialRetrySent.length, 0, "neither successful nor ambiguous group deliveries should be resent automatically");

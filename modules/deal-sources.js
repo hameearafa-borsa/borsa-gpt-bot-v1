@@ -295,12 +295,17 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   for (let index = 0; index < results.length; index++) {
     const r = results[index];
     const task = tasks[index];
+    if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
+    const aggregate = storeCounters.get(task.source);
+    aggregate.queries++;
     if (r.status !== "fulfilled") {
+      aggregate.transportFailures++;
       errors.push({ source: task.source, reason: "task_rejected" });
       sourceStats.push({ source: task.source, queryIndex: task.queryIndex, ok: false, stage: "transport", extractedCount: 0, reason: "task_rejected" });
       continue;
     }
     if (!r.value.ok) {
+      aggregate.transportFailures++;
       errors.push({ source: r.value.source, reason: r.value.reason });
       sourceStats.push({ source: r.value.source, queryIndex: task.queryIndex, ok: false, stage: "transport", extractedCount: 0, reason: r.value.reason });
       continue;
@@ -309,8 +314,6 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
     const stages = r.value.extractionDiagnostics?.stages || null;
     const stage = extractedCount > 0 ? "validated" : stages && (stages.json.candidates + stages.html.candidates) > 0 ? "candidate_rejection" : "extraction_empty";
     sourceStats.push({ source: r.value.source, queryIndex: task.queryIndex, ok: true, stage, extractedCount, ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}), ...(r.value.extractionDiagnostics ? { extractionDiagnostics: r.value.extractionDiagnostics } : {}) });
-    if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
-    const aggregate = storeCounters.get(task.source); aggregate.queries++;
     if (stages) for (const format of ["json", "html"]) for (const key of Object.keys(aggregate[format])) aggregate[format][key] += Number(stages[format][key] || 0);
     // A successful HTTP response with no parsed products is diagnostically
     // different from a source that failed to load. Record it without logging HTML.
@@ -321,7 +324,6 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
     }
   }
   for (const task of tasks) if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
-  for (const stat of sourceStats) if (!stat.ok) storeCounters.get(stat.source).transportFailures++;
   return { deals, errors, sourceStats, sourceSummary: [...storeCounters.values()], sourceCount: tasks.length };
 }
 module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, createExtractionCounters, getScraperKeys, fetchSearch, collectDealCandidates };

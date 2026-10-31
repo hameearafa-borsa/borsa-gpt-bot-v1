@@ -4,6 +4,8 @@ const {
   CATALOG_STORES, extractCatalogs, selectOneCatalogPerStore, isCatalogExpired, parseCatalogDateRange,
   persistCatalogSnapshots, listPendingCatalogSnapshots, markCatalogSnapshot, formatCatalogNotice
 } = require("./catalog-newsletter");
+const { extractCatalogPageImages, scanCatalogPageImages, persistCatalogOcrPages } = require("./catalog-page-ocr");
+const { createImageOcr } = require("./image-ocr");
 
 const CAIRO_ZONE = "Africa/Cairo";
 const DAILY_HOUR = 10;

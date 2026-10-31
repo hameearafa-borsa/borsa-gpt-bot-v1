@@ -413,6 +413,64 @@ const amazonOnly = await collectDealCandidates({
  assert.ok(otherTargets.every(url => !new URL(url).hostname.includes("amazon")),
    "other-store edition must not spend scraper requests on Amazon");
 
+ let amazonCatalogCalls = 0;
+ const amazonEditionWithCatalogSpy = await collectDealCandidates({
+   edition: "amazon",
+   fetchImpl: async () => ({ ok: true, status: 200, text: async () => "<html></html>" }),
+   snapFlyerFetcher: async () => {
+     amazonCatalogCalls++;
+     return { deals: [], errors: [], sourceStats: [], sourceCount: 3 };
+   }
+ });
+ assert.equal(amazonCatalogCalls, 0, "Amazon-only newsletter must never fetch SnapFlyer catalogs");
+ assert.equal(amazonEditionWithCatalogSpy.sourceCount, 3);
+
+ let otherCatalogCalls = 0;
+ const catalogDeal = {
+   merchant: "كازيون",
+   title: "تايد جل غسالات أوتوماتيك 2.35 لتر",
+   url: "https://snapflyer.io/eg/downtown/offers/kazyon/1711",
+   price: 174.95,
+   category: "detergent",
+   source: "snapflyer_catalog"
+ };
+ const otherEditionWithCatalog = await collectDealCandidates({
+   edition: "other_sites",
+   fetchImpl: async () => ({ ok: true, status: 200, text: async () => "<html></html>" }),
+   snapFlyerFetcher: async () => {
+     otherCatalogCalls++;
+     return {
+       deals: [catalogDeal, { ...catalogDeal, title: "تايد جل للملابس 2.35 لتر" }],
+       errors: [],
+       sourceStats: [
+         { source: "snapflyer_kazyon", ok: true, stage: "validated", extractedCount: 2 },
+         { source: "snapflyer_bim", ok: true, stage: "catalog_page_without_eligible_text_cards", extractedCount: 0 },
+         { source: "snapflyer_metro_market", ok: false, stage: "transport", extractedCount: 0, reason: "fetch_failed" }
+       ],
+       sourceCount: 3
+     };
+   }
+ });
+ assert.equal(otherCatalogCalls, 1, "other-store newsletter must fetch SnapFlyer catalogs exactly once");
+ assert.equal(otherEditionWithCatalog.sourceCount, 10, "seven other-store searches plus three SnapFlyer stores must be counted");
+ assert.equal(otherEditionWithCatalog.deals.length, 2, "same catalog URL and price must not merge distinct product titles");
+ assert.equal(otherEditionWithCatalog.sourceStats.filter(stat => String(stat.source).startsWith("snapflyer_")).length, 3);
+ assert.ok(otherEditionWithCatalog.errors.some(error => error.source === "snapflyer_metro_market"),
+   "one SnapFlyer store failure must remain visible without discarding successful catalog results");
+ assert.ok(otherEditionWithCatalog.deals.every(deal => deal.source === "snapflyer_catalog"));
+
+ let allEditionCatalogCalls = 0;
+ const allEdition = await collectDealCandidates({
+   edition: "all",
+   fetchImpl: async () => ({ ok: true, status: 200, text: async () => "<html></html>" }),
+   snapFlyerFetcher: async () => {
+     allEditionCatalogCalls++;
+     return { deals: [catalogDeal], errors: [], sourceStats: [], sourceCount: 3 };
+   }
+ });
+ assert.equal(allEditionCatalogCalls, 1, "combined collection mode must include SnapFlyer once");
+ assert.equal(allEdition.sourceCount, 13, "combined mode must count three Amazon, seven other-store, and three catalog sources");
+
  if (oldKey1 === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = oldKey1;
  if (oldKey2 === undefined) delete process.env.SCRAPER_API_KEY_2; else process.env.SCRAPER_API_KEY_2 = oldKey2;
  console.log("deal sources + safe URL verification + Cairo scheduler + scraper key rotation/concurrency tests: OK");

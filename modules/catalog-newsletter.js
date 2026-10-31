@@ -153,6 +153,8 @@ function isCatalogExpired(catalog, now = new Date()) {
 }
 
 function selectOneCatalogPerStore(catalogs, now = new Date()) {
+  // Input order is the fallback when no trustworthy date range is available.
+  // Callers pass newest observations first for pending database snapshots.
   const byStore = new Map();
   for (const item of catalogs || []) {
     if (!item || isCatalogExpired(item, now)) continue;

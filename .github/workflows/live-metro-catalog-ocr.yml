@@ -9,7 +9,7 @@ permissions:
 jobs:
   live-metro-page-ocr:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - name: Check out development branch
         uses: actions/checkout@v4
@@ -27,4 +27,4 @@ jobs:
       - name: Install project dependencies
         run: npm ci
       - name: Run real Metro detergent catalog OCR
-        run: node tests/catalog-page-ocr-live.js
+        run: node tests/catalog-page-ocr-crops-live.js

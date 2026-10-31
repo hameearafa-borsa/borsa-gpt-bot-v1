@@ -320,7 +320,11 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
     const stages = r.value.extractionDiagnostics?.stages || null;
     const stage = extractedCount > 0 ? "validated" : stages && (stages.json.candidates + stages.html.candidates) > 0 ? "candidate_rejection" : "extraction_empty";
     sourceStats.push({ source: r.value.source, queryIndex: task.queryIndex, ok: true, stage, extractedCount, ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}), ...(r.value.extractionDiagnostics ? { extractionDiagnostics: r.value.extractionDiagnostics } : {}) });
-    if (stages) for (const format of ["json", "html"]) for (const key of Object.keys(aggregate[format])) aggregate[format][key] += Number(stages[format][key] || 0);
+    if (stages) for (const format of ["json", "html"]) for (const key of Object.keys(aggregate[format])) {
+      if (key === "samples") {
+        for (const sample of stages[format].samples || []) if (aggregate[format].samples.length < 8) aggregate[format].samples.push(sample);
+      } else aggregate[format][key] += Number(stages[format][key] || 0);
+    }
     // A successful HTTP response with no parsed products is diagnostically
     // different from a source that failed to load. Record it without logging HTML.
     if (extractedCount === 0) errors.push({ source: r.value.source, reason: "no_products_extracted", ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}) });

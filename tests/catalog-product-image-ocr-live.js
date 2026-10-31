@@ -8,7 +8,8 @@ const productUrl = "https://snapflyer.io/eg/downtown/products/191790";
 const expected = {
   title: "Metro Tissues 400 Sheets x 3 Packs",
   currentPrice: "74.99",
-  store: "Metro Market"
+  store: "Metro Market",
+  identityTerms: ["مناديل", "مترو"]
 };
 const MAX_HTML_BYTES = 2_000_000;
 
@@ -89,7 +90,31 @@ function extractSnippetImageUrls(html, baseUrl) {
   console.log(result.text || "[NO TEXT RECOGNIZED]");
   console.log("\nOCR characters: " + result.characterCount);
   assert.ok(result.hasText, "OCR returned no text for the individual product image");
-  console.log("LIVE SNAPFLYER INDIVIDUAL-PRODUCT OCR: OK (page metadata and image OCR succeeded)");
+
+  // A non-empty OCR result is not enough: require the advertised price and
+  // multiple Arabic identity signals before calling the product OCR verified.
+  const normalizedOcr = String(result.text || "")
+    .replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[٬،]/g, ",")
+    .replace(/\s+/g, " ")
+    .trim();
+  const normalizedPrice = expected.currentPrice.replace(/,/g, ".");
+  assert.ok(
+    normalizedOcr.includes(normalizedPrice),
+    "OCR text does not contain the expected current price " + expected.currentPrice
+  );
+  const matchedIdentityTerms = expected.identityTerms.filter(term =>
+    normalizedOcr.includes(term)
+  );
+  assert.ok(
+    matchedIdentityTerms.length >= 2,
+    "OCR text does not contain enough product identity evidence; matched: " +
+      matchedIdentityTerms.join(", ")
+  );
+
+  console.log("OCR price match: " + normalizedPrice + " EGP");
+  console.log("OCR identity matches: " + matchedIdentityTerms.join(", "));
+  console.log("LIVE SNAPFLYER INDIVIDUAL-PRODUCT OCR: OK (price and product identity verified)");
 })().catch(error => {
   console.error("LIVE SNAPFLYER INDIVIDUAL-PRODUCT OCR: FAILED");
   console.error(error?.stack || error);

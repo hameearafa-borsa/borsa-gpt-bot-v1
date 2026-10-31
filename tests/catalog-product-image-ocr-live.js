@@ -20,7 +20,7 @@ const products = [
   {
     id: "191822",
     url: "https://snapflyer.io/eg/downtown/products/191822",
-    title: "Oxi Dishwashing Liquid 2.5L",
+    title: "منظف اطباق أوكسي ٢.٥ لتر",
     currentPrice: "114.95",
     store: "Metro Market",
     pageNumber: 8,

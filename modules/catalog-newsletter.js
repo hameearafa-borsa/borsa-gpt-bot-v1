@@ -126,9 +126,16 @@ function parseCatalogDateRange(value, now = new Date()) {
   }
   if (!startMonth || !endMonth || startDay < 1 || endDay < 1 ||
       startDay > 31 || endDay > 31) return null;
-  const currentYear = cairoDateParts(now).year;
-  const startYear = currentYear;
-  const endYear = endMonth < startMonth ? currentYear + 1 : currentYear;
+  const today = cairoDateParts(now);
+  const currentYear = today.year;
+  const currentMonth = today.month;
+  let startYear = currentYear;
+  if (endMonth < startMonth) {
+    if (currentMonth <= endMonth) startYear = currentYear - 1;
+  } else if (currentMonth > endMonth) {
+    startYear = currentYear - 1;
+  }
+  const endYear = endMonth < startMonth ? startYear + 1 : startYear;
   const start = new Date(Date.UTC(startYear, startMonth - 1, startDay));
   const end = new Date(Date.UTC(endYear, endMonth - 1, endDay));
   if (start.getUTCMonth() !== startMonth - 1 || start.getUTCDate() !== startDay ||

@@ -6,6 +6,7 @@ require("dotenv").config(dotenvPath ? { path: dotenvPath } : undefined);
 const { fetchSearch } = require("../modules/deal-sources");
 
 const allSources = [
+  { name: "amazon", query: "مسحوق غسيل منظف" },
   { name: "jumia", query: "مسحوق غسيل منظف" },
   { name: "noon", query: "مسحوق غسيل منظف" },
   { name: "carrefour", query: "" }
@@ -29,7 +30,7 @@ const allSources = [
   }
   const sources = sourceFilter === "all" ? allSources : allSources.filter(source => source.name === sourceFilter);
   if (!sources.length) {
-    console.error("BLOCKED: DEALS_LIVE_SOURCE must be jumia, noon, carrefour, or all.");
+    console.error("BLOCKED: DEALS_LIVE_SOURCE must be amazon, jumia, noon, carrefour, or all.");
     process.exitCode = 2;
     return;
   }

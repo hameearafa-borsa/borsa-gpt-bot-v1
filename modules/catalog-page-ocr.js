@@ -42,9 +42,31 @@ async function fetchCatalogImage(url, { fetchImpl = globalThis.fetch, timeoutMs 
     if (type && !/^image\/(?:webp|png|jpeg)(?:;|$)/i.test(type)) throw new Error("catalog_image_unexpected_content_type");
     const declared = Number(response.headers?.get?.("content-length") || 0);
     if (declared > maxBytes) throw new Error("catalog_image_too_large");
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (!buffer.length || buffer.length > maxBytes) throw new Error("catalog_image_too_large_or_empty");
-    return buffer;
+    if (!response.body || typeof response.body.getReader !== "function") {
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (!buffer.length || buffer.length > maxBytes) throw new Error("catalog_image_too_large_or_empty");
+      return buffer;
+    }
+    const reader = response.body.getReader();
+    const chunks = [];
+    let total = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = Buffer.from(value);
+        total += chunk.length;
+        if (total > maxBytes) {
+          await reader.cancel().catch(() => {});
+          throw new Error("catalog_image_too_large");
+        }
+        chunks.push(chunk);
+      }
+    } finally {
+      reader.releaseLock();
+    }
+    if (!total) throw new Error("catalog_image_too_large_or_empty");
+    return Buffer.concat(chunks, total);
   } finally { clearTimeout(timer); }
 }
 

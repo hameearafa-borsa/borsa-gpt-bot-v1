@@ -4,14 +4,30 @@ const assert = require("node:assert/strict");
 const { safeCatalogPageImageUrl, fetchCatalogImage } = require("../modules/catalog-page-ocr");
 const { createImageOcr } = require("../modules/image-ocr");
 
-const productUrl = "https://snapflyer.io/eg/downtown/products/191790";
-const expected = {
-  title: "Metro Tissues 400 Sheets x 3 Packs",
-  currentPrice: "74.99",
-  store: "Metro Market",
-  identityTerms: ["مناديل", "مترو"]
-};
+const products = [
+  {
+    id: "191790",
+    url: "https://snapflyer.io/eg/downtown/products/191790",
+    title: "Metro Tissues 400 Sheets x 3 Packs",
+    currentPrice: "74.99",
+    store: "Metro Market",
+    pageNumber: 4,
+    identityTerms: ["مناديل", "مترو"],
+    minIdentityMatches: 2
+  },
+  {
+    id: "191822",
+    url: "https://snapflyer.io/eg/downtown/products/191822",
+    title: "Oxi Dishwashing Liquid 2.5L",
+    currentPrice: "114.95",
+    store: "Metro Market",
+    pageNumber: 8,
+    identityTerms: ["oxi"],
+    minIdentityMatches: 1
+  }
+];
 const MAX_HTML_BYTES = 2_000_000;
+const STORE_CATALOG_PATH = "/metro-market/2026-10/flyer_1325/snippets/";
 
 async function fetchProductPage(url) {
   const parsed = new URL(url);
@@ -52,71 +68,85 @@ function extractSnippetImageUrls(html, baseUrl) {
   return [...candidates];
 }
 
-(async () => {
-  console.log("Live SnapFlyer individual-product image OCR experiment");
-  console.log("Product page: " + productUrl);
-  const html = await fetchProductPage(productUrl);
-  assert.ok(html.includes(expected.title), "Expected product title is missing from product page");
-  assert.ok(html.includes(expected.currentPrice), "Expected current price is missing from product page");
-  // SnapFlyer exposes store identity in the product's Open Graph image path,
-  // using a store slug rather than the display name "Metro Market".
-  const images = extractSnippetImageUrls(html, productUrl);
-  assert.ok(images.length, "No safe individual snippet image URL found on product page");
+function normalizeOcrText(value) {
+  return String(value || "")
+    .replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
+    .replace(/[٬،]/g, ",")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+async function verifyProduct(product, ocr) {
+  console.log("\n=== " + product.id + " | " + product.title + " ===");
+  console.log("Product page: " + product.url);
+
+  const html = await fetchProductPage(product.url);
+  assert.ok(html.includes(product.title), "Expected product title is missing: " + product.title);
+  assert.ok(html.includes(product.currentPrice), "Expected current price is missing: " + product.currentPrice);
+
+  const images = extractSnippetImageUrls(html, product.url);
+  assert.ok(images.length, "No safe individual snippet image URL found for " + product.id);
   const storeImage = images.find(url =>
-    new URL(url).pathname.toLowerCase().includes(
-      "/metro-market/2026-10/flyer_1325/snippets/"
-    )
+    new URL(url).pathname.toLowerCase().includes(STORE_CATALOG_PATH)
   );
   assert.ok(
     storeImage,
-    "No product-page snippet image tied to Metro Market catalog 1325"
+    "No product-page snippet image tied to Metro Market catalog 1325 for " + product.id
   );
 
-  console.log("Product metadata: " + expected.title + " | " + expected.store + " | " + expected.currentPrice + " EGP");
+  console.log("Product metadata: " + product.store + " | " + product.currentPrice + " EGP");
   console.log("Individual snippet images found: " + images.length);
   console.log("Validated store/catalog image: " + storeImage);
 
   const image = await fetchCatalogImage(storeImage, { timeoutMs: 30000 });
-  const ocr = createImageOcr({ timeoutMs: 60000, pageSegmentationMode: "6" });
   const result = await ocr.extract(image, {
     storeKey: "metro_market",
-    catalogUrl: productUrl,
-    fingerprint: "snapflyer-product-191790",
-    pageNumber: 4,
-    productId: "191790"
+    catalogUrl: product.url,
+    fingerprint: "snapflyer-product-" + product.id,
+    pageNumber: product.pageNumber,
+    productId: product.id
   });
 
-  console.log("\n--- Individual product image OCR ---");
+  console.log("--- OCR text ---");
   console.log(result.text || "[NO TEXT RECOGNIZED]");
-  console.log("\nOCR characters: " + result.characterCount);
-  assert.ok(result.hasText, "OCR returned no text for the individual product image");
+  console.log("OCR characters: " + result.characterCount);
+  assert.ok(result.hasText, "OCR returned no text for product " + product.id);
 
-  // A non-empty OCR result is not enough: require the advertised price and
-  // multiple Arabic identity signals before calling the product OCR verified.
-  const normalizedOcr = String(result.text || "")
-    .replace(/[٠-٩]/g, digit => String("٠١٢٣٤٥٦٧٨٩".indexOf(digit)))
-    .replace(/[٬،]/g, ",")
-    .replace(/\s+/g, " ")
-    .trim();
-  const normalizedPrice = expected.currentPrice.replace(/,/g, ".");
+  const normalizedOcr = normalizeOcrText(result.text);
+  const normalizedPrice = product.currentPrice.replace(/,/g, ".").toLowerCase();
   assert.ok(
     normalizedOcr.includes(normalizedPrice),
-    "OCR text does not contain the expected current price " + expected.currentPrice
+    "OCR text does not contain expected current price " + product.currentPrice +
+      " for product " + product.id
   );
-  const matchedIdentityTerms = expected.identityTerms.filter(term =>
-    normalizedOcr.includes(term)
+
+  const matchedIdentityTerms = product.identityTerms.filter(term =>
+    normalizedOcr.includes(term.toLowerCase())
   );
   assert.ok(
-    matchedIdentityTerms.length >= 2,
-    "OCR text does not contain enough product identity evidence; matched: " +
-      matchedIdentityTerms.join(", ")
+    matchedIdentityTerms.length >= product.minIdentityMatches,
+    "OCR text does not contain enough product identity evidence for " + product.id +
+      "; matched: " + matchedIdentityTerms.join(", ")
   );
 
   console.log("OCR price match: " + normalizedPrice + " EGP");
   console.log("OCR identity matches: " + matchedIdentityTerms.join(", "));
-  console.log("LIVE SNAPFLYER INDIVIDUAL-PRODUCT OCR: OK (price and product identity verified)");
+  console.log("PRODUCT OCR VERIFIED: " + product.id);
+}
+
+(async () => {
+  console.log("Live SnapFlyer individual-product image OCR experiment");
+  const ocr = createImageOcr({ timeoutMs: 60000, pageSegmentationMode: "6" });
+
+  for (const product of products) {
+    await verifyProduct(product, ocr);
+  }
+
+  console.log("\nLIVE SNAPFLYER MULTI-PRODUCT OCR: OK (" + products.length +
+    " Metro Market products verified)");
 })().catch(error => {
-  console.error("LIVE SNAPFLYER INDIVIDUAL-PRODUCT OCR: FAILED");
+  console.error("LIVE SNAPFLYER MULTI-PRODUCT OCR: FAILED");
   console.error(error?.stack || error);
   process.exitCode = 1;
 });

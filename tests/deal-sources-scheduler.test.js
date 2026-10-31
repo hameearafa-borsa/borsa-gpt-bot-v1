@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, createExtractionCounters, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
-const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff } = require("../modules/deal-scheduler");
+const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, publishDailyDeals } = require("../modules/deal-scheduler");
 const { formatNewsletterMessage } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
@@ -481,6 +481,78 @@ const amazonOnly = await collectDealCandidates({
  });
  assert.equal(allEditionCatalogCalls, 1, "combined collection mode must include SnapFlyer once");
  assert.equal(allEdition.sourceCount, 13, "combined mode must count three Amazon, seven other-store, and three catalog sources");
+
+ // End-to-end publication path for the 6 PM Cairo other-store edition.
+ const publicationQueries = [];
+ const publicationMessages = [];
+ const publicationErrors = [];
+ const publicationPool = {
+   query: async (sql, values = []) => {
+     const normalized = String(sql).replace(/\\s+/g, " ").trim();
+     publicationQueries.push({ sql: normalized, values });
+     if (normalized.startsWith("SELECT channel_kind,status,chat_id FROM deal_publications")) {
+       return { rows: [], rowCount: 0 };
+     }
+     if (normalized.startsWith("SELECT 1 FROM deal_observations")) {
+       return { rows: [], rowCount: 0 };
+     }
+     if (normalized.startsWith("INSERT INTO deal_publications")) {
+       return { rows: [{ id: 9001 }], rowCount: 1 };
+     }
+     if (normalized.startsWith("UPDATE deal_publications")) {
+       return { rows: [], rowCount: 1 };
+     }
+     if (normalized.startsWith("INSERT INTO deal_observations")) {
+       return { rows: [], rowCount: 1 };
+     }
+     throw new Error("Unexpected publication SQL: " + normalized);
+   }
+ };
+ const publicationDeals = [
+   { merchant: "Amazon.eg", title: "مسحوق برسيل 3 كيلو", price: 175, old_price: 210, category: "detergent", url: "https://www.amazon.eg/dp/B0AMAZON123" },
+   { merchant: "كازيون", title: "تايد جل غسالات أوتوماتيك 2.35 لتر", price: 174.95, category: "detergent", url: "https://snapflyer.io/eg/downtown/offers/kazyon/1711", source: "snapflyer_catalog" },
+   { merchant: "مترو ماركت", title: "منظف أطباق أوكسي 2.5 لتر", price: 114.95, category: "detergent", url: "https://snapflyer.io/eg/downtown/offers/metro-market/1532", source: "snapflyer_catalog" },
+   { merchant: "Jumia", title: "مناديل فاين 200 منديل", price: 35, old_price: 42, category: "paper", url: "https://www.jumia.com.eg/fine-tissues-123" },
+   { merchant: "Noon", title: "شامبو دوف للعناية بالشعر", price: 119.5, category: "personal_care", url: "https://www.noon.com/egypt-ar/dove-shampoo-123" }
+ ];
+ let publicationEdition = null;
+ const publicationResult = await publishDailyDeals({
+   pool: publicationPool,
+   telegram: { sendMessage: async (chatId, message, options) => {
+     publicationMessages.push({ chatId, message, options });
+     return { message_id: 9901 };
+   } },
+   chatIds: [-1001234567890],
+   now: new Date("2026-10-12T15:00:00.000Z"), // 6 PM Cairo
+   fetcher: async ({ edition }) => {
+     publicationEdition = edition;
+     return { deals: publicationDeals, errors: [], sourceStats: [], sourceCount: 13 };
+   },
+   verify: async deals => deals.map(deal => ({ ...deal, verified_url: true })),
+   onError: async error => publicationErrors.push(String(error?.message || error))
+ });
+ assert.equal(publicationEdition, "other_sites", "6 PM publication must collect only the other-store edition");
+ assert.equal(publicationResult.kind, "other_sites");
+ assert.equal(publicationMessages.length, 1, "one authorized group should receive one newsletter message");
+ assert.equal(publicationMessages[0].chatId, -1001234567890);
+ assert.ok(publicationMessages[0].message.includes("عروض المتاجر الأخرى المختارة"));
+ assert.ok(publicationMessages[0].message.includes("كازيون"));
+ assert.ok(publicationMessages[0].message.includes("مترو ماركت"));
+ assert.ok(publicationMessages[0].message.includes("Jumia"));
+ assert.ok(publicationMessages[0].message.includes("Noon"));
+ assert.ok(!publicationMessages[0].message.includes("Amazon.eg"));
+ assert.ok(!publicationMessages[0].message.includes("B0AMAZON123"),
+   "Amazon products must never leak into the 6 PM other-store newsletter");
+ assert.equal(publicationResult.published.length, 1);
+ assert.equal(publicationResult.published[0].messageId, 9901);
+ assert.ok(publicationQueries.some(q => q.sql.startsWith("INSERT INTO deal_publications")),
+   "publication must reserve the edition before sending");
+ assert.ok(publicationQueries.some(q => q.sql.startsWith("UPDATE deal_publications SET status='published'")),
+   "successful Telegram delivery must be recorded as published");
+ const persistedOffers = publicationQueries.filter(q => q.sql.startsWith("INSERT INTO deal_observations"));
+ assert.equal(persistedOffers.length, 4,
+   "only the four selected non-Amazon offers should be persisted after successful delivery");
+ assert.deepEqual(publicationErrors, []);
 
  if (oldKey1 === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = oldKey1;
  if (oldKey2 === undefined) delete process.env.SCRAPER_API_KEY_2; else process.env.SCRAPER_API_KEY_2 = oldKey2;

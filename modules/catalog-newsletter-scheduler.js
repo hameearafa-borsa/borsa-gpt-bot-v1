@@ -122,7 +122,26 @@ async function finishDelivery(pool, deliveryId, status, messageId = null, error 
   );
 }
 
-async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = fetchStorePage, onError = async () => {}, now = new Date() }) {
+async function processCatalogOcr({ pool, catalog, fetchPage = fetchStorePage, fetchImage, ocr }) {
+  const html = await fetchPage(catalog.url);
+  const images = extractCatalogPageImages(html, catalog.url);
+  if (!images.length) return { skipped: true, reason: "no_catalog_page_images", pageCount: 0 };
+  const existing = await pool.query(
+    "SELECT page_number,status FROM catalog_ocr_pages WHERE store_key=$1 AND catalog_url=$2 AND fingerprint=$3 ORDER BY page_number",
+    [catalog.store, catalog.url, catalog.fingerprint]
+  );
+  const complete = existing.rows?.length === images.length &&
+    existing.rows.every(row => ["extracted", "empty"].includes(row.status));
+  if (complete) return { skipped: true, reason: "edition_already_scanned", pageCount: images.length };
+  const scan = await scanCatalogPageImages({
+    html, catalogUrl: catalog.url, storeKey: catalog.store, fingerprint: catalog.fingerprint,
+    ...(fetchImage ? { fetchImage } : {}),
+    ...(ocr ? { ocr } : { ocr: createImageOcr() })
+  });
+  return persistCatalogOcrPages(pool, scan);
+}
+
+async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = fetchStorePage, fetchCatalogImage, catalogOcr, onError = async () => {}, now = new Date() }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
   const targets = await resolveChatIds({ pool, chatId, chatIds });
   if (!targets.length) return { skipped: true, reason: "no_active_authorized_groups" };
@@ -139,6 +158,17 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
       checkedStores.add(storeKey);
       currentEditionByStore.set(storeKey, catalogs[0] || null);
       if (!catalogs.length) continue;
+      for (const catalog of catalogs) {
+        try {
+          const ocrResult = await processCatalogOcr({
+            pool, catalog, fetchPage, fetchImage: fetchCatalogImage, ocr: catalogOcr
+          });
+          if (ocrResult.pageCount) result.ocrPages = (result.ocrPages || 0) + ocrResult.pageCount;
+        } catch (error) {
+          result.failed++;
+          await onError(error, { stage: "catalog_ocr", store: storeKey, catalogUrl: catalog.url });
+        }
+      }
       const saved = await persistCatalogSnapshots(pool, catalogs);
       result.baseline += saved.baseline;
       result.changed += saved.changed;
@@ -247,4 +277,4 @@ function startCatalogNewsletterScheduler(options) {
   return () => { stopped = true; if (timer) clearTimeout(timer); };
 }
 
-module.exports = { CAIRO_ZONE, DAILY_HOUR, DAILY_MINUTE, FETCH_TIMEOUT_MS, cairoClock, msUntilNextCheck, fetchStorePage, resolveChatIds, reserveDelivery, finishDelivery, checkCatalogsOnce, startCatalogNewsletterScheduler };
+module.exports = { CAIRO_ZONE, DAILY_HOUR, DAILY_MINUTE, FETCH_TIMEOUT_MS, cairoClock, msUntilNextCheck, fetchStorePage, resolveChatIds, reserveDelivery, finishDelivery, processCatalogOcr, checkCatalogsOnce, startCatalogNewsletterScheduler };

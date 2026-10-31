@@ -57,7 +57,23 @@ function extractSnippetImageUrls(html, baseUrl) {
   const html = await fetchProductPage(productUrl);
   assert.ok(html.includes(expected.title), "Expected product title is missing from product page");
   assert.ok(html.includes(expected.currentPrice), "Expected current price is missing from product page");
-  assert.ok(html.includes(expected.store), "Expected store name is missing from product page");
+  // Store names may be split across nested HTML elements (for example,
+  // <span>Metro</span><span>Market</span>), so validate visible text rather
+  // than requiring one contiguous raw-HTML substring.
+  const visibleText = html
+    .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ")
+    .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&#0*39;|&apos;/gi, "'")
+    .replace(/&quot;/gi, '"')
+    .replace(/\\s+/g, " ")
+    .trim();
+  assert.ok(
+    new RegExp(expected.store.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\  assert.ok(html.includes(expected.store), "Expected store name is missing from product page");").replace(/\\s+/g, "\\\\s+"), "i").test(visibleText),
+    "Expected store name is missing from visible product-page text"
+  );
 
   const images = extractSnippetImageUrls(html, productUrl);
   assert.ok(images.length, "No safe individual snippet image URL found on product page");

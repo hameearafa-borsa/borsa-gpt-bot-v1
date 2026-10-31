@@ -326,7 +326,9 @@ for (const edition of [editionAmazon, editionOther]) {
  const collected = await collectDealCandidates({
    amazonQueries: ["a", "b", "c"],
    otherQueries: ["d", "e", "f"],
-   fetchImpl: concurrencyFetch
+   fetchImpl: concurrencyFetch,
+   // This test isolates ScraperAPI fan-out; SnapFlyer has its own fixture suite.
+   snapFlyerFetcher: async () => ({ deals: [], errors: [], sourceStats: [], sourceCount: 0 })
  });
  assert.equal(requestCount, 10, "all source queries should still be attempted");
  assert.ok(peakRequests <= 2, "ScraperAPI requests must be bounded to two concurrent requests");

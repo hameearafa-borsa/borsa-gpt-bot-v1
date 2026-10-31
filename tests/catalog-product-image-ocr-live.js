@@ -62,7 +62,9 @@ function extractSnippetImageUrls(html, baseUrl) {
   const images = extractSnippetImageUrls(html, productUrl);
   assert.ok(images.length, "No safe individual snippet image URL found on product page");
   const storeImage = images.find(url =>
-    /\\/metro-market\\/2026-10\\/flyer_1325\\/snippets\\//i.test(new URL(url).pathname)
+    new URL(url).pathname.toLowerCase().includes(
+      "/metro-market/2026-10/flyer_1325/snippets/"
+    )
   );
   assert.ok(
     storeImage,

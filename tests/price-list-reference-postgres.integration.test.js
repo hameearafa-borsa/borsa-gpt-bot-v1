@@ -81,6 +81,16 @@ if (!connectionString) {
     assert.equal(catalog.rows[0].count, 66, "all parsed rows must persist in the company catalog");
     assert.equal(references.rowCount, 66, "all accepted company rows must persist as official references");
     assert.equal(liveObservations.rows[0].count, 0, "official list rows must not be mixed into live group observations");
+
+    const unitCounts = await pool.query(
+      `SELECT unit_price_type, COUNT(*)::int AS count
+       FROM price_reference_observations WHERE run_id=$1
+       GROUP BY unit_price_type`,
+      [result.runId]
+    );
+    const countsByUnit = Object.fromEntries(unitCounts.rows.map(row => [row.unit_price_type, row.count]));
+    assert.equal(countsByUnit["بالقطعة"], 51, "all 51 explicitly marked piece prices must remain per-piece references");
+    assert.equal(countsByUnit["بالكرتونة"], 15, "the remaining 15 wholesale rows must remain carton references");
     assert.ok(references.rows.every(row =>
       row.company_label === "شركة يونيليفر" &&
       row.source_period === "أكتوبر 2026" &&

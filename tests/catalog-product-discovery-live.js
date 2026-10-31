@@ -25,7 +25,7 @@ function catalogTextLines(html) {
   const text = decodeHtml(String(html || ""))
     .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
     .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
-    .replace(/<(?:br|\/p|\/div|\/li|\/h[1-6]|\/article|\/section|\/a|\/span|\/strong|\/b)\b[^>]*>/gi, "\n")
+    .replace(/<(?:br|\/p|\/div|\/li|\/h[1-6]|\/article|\/section|\/a)\b[^>]*>/gi, "\n")
     .replace(/<[^>]*>/g, " ");
   return text.split(/[\r\n]+/)
     .map(line => normalizeText(line))

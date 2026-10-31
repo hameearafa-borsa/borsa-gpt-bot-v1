@@ -130,6 +130,26 @@ function extractCatalogProductRecords(html, storeKey, catalogUrl) {
     for (const edition of editions) {
       console.log("Catalog: " + edition.title + " | " + edition.url);
       const catalogHtml = await fetchStorePage(edition.url);
+      const diagnosticText = plainText(catalogHtml);
+      const diagnosticLines = catalogTextLines(catalogHtml);
+      const diagnosticHeading = diagnosticLines.findIndex(line => /Products\\s+on\\s+this\\s+page/i.test(line));
+      console.log("Fetched catalog HTML bytes: " + Buffer.byteLength(catalogHtml, "utf8"));
+      console.log("Raw HTML markers: " + JSON.stringify({
+        productsHeading: /Products\\s+on\\s+this\\s+page/i.test(diagnosticText),
+        persil: /برسيل|persil/i.test(diagnosticText),
+        oxy: /أوكسي|اوكسي|oxy/i.test(diagnosticText),
+        expectedPrice19495: /194[.,]95/.test(diagnosticText),
+        expectedPrice11495: /114[.,]95/.test(diagnosticText),
+        egpCurrency: /EGP|جنيه/i.test(diagnosticText)
+      }));
+      if (diagnosticHeading >= 0) {
+        console.log("Visible lines after products heading (first 35): " +
+          JSON.stringify(diagnosticLines.slice(diagnosticHeading, diagnosticHeading + 36)));
+      } else {
+        const marker = catalogHtml.search(/Products|products|194[.,]95|114[.,]95/i);
+        console.log("Raw HTML diagnostic excerpt: " +
+          (marker >= 0 ? catalogHtml.slice(Math.max(0, marker - 250), marker + 900).replace(/\\s+/g, " ") : "no product/price marker found"));
+      }
       const products = extractCatalogProductRecords(catalogHtml, storeKey, edition.url);
       catalogCandidates += products.length;
       console.log("Relevant text product + price candidates: " + products.length);

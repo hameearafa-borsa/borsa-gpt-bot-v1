@@ -96,7 +96,14 @@ function extractProductOffer(html, product) {
   const headingEnd = html.indexOf(heading[0]) + heading[0].length;
   const nearby = htmlText(html.slice(headingEnd, headingEnd + 12000));
   const priceMatch = nearby.match(/(?:^|\s)(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*EGP\b/i);
-  if (!priceMatch) throw new Error("product_current_price_not_found");
+  if (!priceMatch) {
+    const rawPriceHints = [...html.slice(headingEnd, headingEnd + 12000).matchAll(/.{0,100}(?:EGP|جنيه|ج\\.م|\\bprice\\b).{0,100}/gi)]
+      .slice(0, 12).map(match => htmlText(match[0]));
+    console.error("PRICE EXTRACTION DIAGNOSTIC: current-price pattern did not match.");
+    console.error("Visible text immediately after product H1 (first 2500 chars): " + nearby.slice(0, 2500));
+    console.error("Raw HTML price/currency hints: " + JSON.stringify(rawPriceHints));
+    throw new Error("product_current_price_not_found");
+  }
   const storeEvidence = new RegExp('/stores/' + product.storeSlug + '(?:[/?#"]|$)', 'i').test(html);
   if (!storeEvidence) throw new Error("product_store_identity_not_found");
   const productUrl = new URL(product.url);

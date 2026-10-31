@@ -19,7 +19,7 @@ const imageBase = "https://snapflyer.io/storage/flyers/eg/metro-market/2026-10/f
 
   for (const pageNumber of pageNumbers) {
     const imageUrl = imageBase + pageNumber + ".webp";
-    console.log("\\n=== METRO CATALOG PAGE " + pageNumber + " ===");
+    console.log("\n=== METRO CATALOG PAGE " + pageNumber + " ===");
     console.log("Image: " + imageUrl);
 
     const image = await fetchCatalogImage(imageUrl, { timeoutMs: 30000 });

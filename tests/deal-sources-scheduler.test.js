@@ -377,9 +377,11 @@ const amazonOnly = await collectDealCandidates({
    fetchImpl: async url => {
      otherTargets.push(new URL(String(url)).searchParams.get("url"));
      return { ok: true, status: 200, text: async () => "<html></html>" };
-   }
+   },
+   // Isolate the seven ScraperAPI searches; SnapFlyer has its own catalog tests.
+   snapFlyerFetcher: async () => ({ deals: [], errors: [], sourceStats: [], sourceCount: 0 })
  });
- assert.equal(otherOnly.sourceCount, 7, "other-store edition should make seven non-Amazon searches");
+ assert.equal(otherOnly.sourceCount, 7, "other-store edition should make seven non-Amazon ScraperAPI searches when catalog fetching is isolated");
  assert.equal(otherTargets.length, 7);
  assert.ok(otherTargets.every(url => !new URL(url).hostname.includes("amazon")),
    "other-store edition must not spend scraper requests on Amazon");

@@ -95,9 +95,9 @@ function extractProductOffer(html, product) {
   const title = htmlText(heading[1]);
   const headingEnd = html.indexOf(heading[0]) + heading[0].length;
   const nearby = htmlText(html.slice(headingEnd, headingEnd + 12000));
-  const priceMatch = nearby.match(/(?:^|\s)(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*EGP\b/i);
+  const priceMatch = nearby.match(/(?:^|\s)(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:EGP\b|ج\s*\.?\s*م\.?|جنيه)/i);
   if (!priceMatch) {
-    const rawPriceHints = [...html.slice(headingEnd, headingEnd + 12000).matchAll(/.{0,100}(?:EGP|جنيه|ج\\.م|\\bprice\\b).{0,100}/gi)]
+    const rawPriceHints = [...html.slice(headingEnd, headingEnd + 12000).matchAll(/.{0,100}(?:EGP|جنيه|ج\s*\.?\s*م|\bprice\b).{0,100}/gi)]
       .slice(0, 12).map(match => htmlText(match[0]));
     console.error("PRICE EXTRACTION DIAGNOSTIC: current-price pattern did not match.");
     console.error("Visible text immediately after product H1 (first 2500 chars): " + nearby.slice(0, 2500));

@@ -57,53 +57,23 @@ function extractSnippetImageUrls(html, baseUrl) {
   const html = await fetchProductPage(productUrl);
   assert.ok(html.includes(expected.title), "Expected product title is missing from product page");
   assert.ok(html.includes(expected.currentPrice), "Expected current price is missing from product page");
-  // Store identity may be exposed through image alt text, accessibility
-  // labels, or metadata rather than ordinary text nodes. Include both text
-  // nodes and quoted HTML attribute values in the normalized page evidence.
-  const pageEvidence = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, tag =>
-      " " + tag.replace(/(?:^|\s)[\w:-]+\s*=\s*(["'])(.*?)\1/g, " $2 ") + " "
-    )
-    .replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&")
-    .replace(/&#0*39;|&apos;/gi, "'")
-    .replace(/&quot;/gi, '"')
-    .replace(/\s+/g, " ")
-    .trim();
-  const storePattern = new RegExp(
-    expected.store.replace(/\s+/g, "\\s+"),
-    "i"
-  );
-  if (!storePattern.test(pageEvidence)) {
-    const rawStoreIndex = html.toLowerCase().indexOf("metro");
-    const evidenceStoreIndex = pageEvidence.toLowerCase().indexOf("metro");
-    console.error("Store validation diagnostics:");
-    console.error("HTML bytes: " + Buffer.byteLength(html, "utf8"));
-    console.error("Raw HTML contains 'Metro': " + (rawStoreIndex >= 0));
-    console.error("Normalized evidence contains 'Metro': " + (evidenceStoreIndex >= 0));
-    if (rawStoreIndex >= 0) {
-      console.error("Raw HTML context: " + html.slice(Math.max(0, rawStoreIndex - 180), rawStoreIndex + 260));
-    }
-    if (evidenceStoreIndex >= 0) {
-      console.error("Normalized evidence context: " + pageEvidence.slice(Math.max(0, evidenceStoreIndex - 180), evidenceStoreIndex + 260));
-    }
-    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
-    console.error("HTML title: " + (titleMatch?.[1] || "[missing]"));
-  }
-  assert.ok(
-    storePattern.test(pageEvidence),
-    "Expected store name is missing from product-page text and HTML attributes"
-  );
-
+  // SnapFlyer exposes store identity in the product's Open Graph image path,
+  // using a store slug rather than the display name "Metro Market".
   const images = extractSnippetImageUrls(html, productUrl);
   assert.ok(images.length, "No safe individual snippet image URL found on product page");
+  const storeImage = images.find(url =>
+    /\\/metro-market\\/2026-10\\/flyer_1325\\/snippets\\//i.test(new URL(url).pathname)
+  );
+  assert.ok(
+    storeImage,
+    "No product-page snippet image tied to Metro Market catalog 1325"
+  );
+
   console.log("Product metadata: " + expected.title + " | " + expected.store + " | " + expected.currentPrice + " EGP");
   console.log("Individual snippet images found: " + images.length);
-  console.log("Image URL: " + images[0]);
+  console.log("Validated store/catalog image: " + storeImage);
 
-  const image = await fetchCatalogImage(images[0], { timeoutMs: 30000 });
+  const image = await fetchCatalogImage(storeImage, { timeoutMs: 30000 });
   const ocr = createImageOcr({ timeoutMs: 60000, pageSegmentationMode: "6" });
   const result = await ocr.extract(image, {
     storeKey: "metro_market",

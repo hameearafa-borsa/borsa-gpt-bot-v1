@@ -5,6 +5,10 @@ const {
   selectOneCatalogPerStore
 } = require("../modules/catalog-newsletter");
 const { fetchStorePage } = require("../modules/catalog-newsletter-scheduler");
+const { safeCatalogPageImageUrl, fetchCatalogImage } = require("../modules/catalog-page-ocr");
+const { createImageOcr } = require("../modules/image-ocr");
+
+const MAX_SNIPPETS_PER_CATALOG = 25;
 
 function decodeHtml(value) {
   return String(value || "").replace(/&amp;/gi, "&").replace(/&quot;/gi, '"')
@@ -31,56 +35,44 @@ function extractStoreProductLinks(html, storeKey, baseUrl) {
   return [...new Map(results.map(item => [item.url, item])).values()];
 }
 
-function extractCatalogSnippetCandidates(html, storeKey, catalogUrl) {
-  const results = [];
-  const anchors = [...html.matchAll(/<a\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi)];
-  for (let i = 0; i < anchors.length; i++) {
-    const match = anchors[i];
-    let imageUrl;
-    try { imageUrl = new URL(match[2], catalogUrl); } catch { continue; }
-    if (imageUrl.protocol !== "https:" || imageUrl.hostname !== "snapflyer.io" ||
-        !/^\/storage\/flyers\/eg\/(?:bim|kazyon|metro-market)\/[^?#]*\/snippets\/snippet_[a-z0-9]+\.(?:webp|png|jpe?g)$/i.test(imageUrl.pathname)) continue;
-
-    let nextSnippetIndex = -1;
-    for (let j = i + 1; j < anchors.length; j++) {
-      if (/\/snippets\/snippet_/i.test(anchors[j][2])) { nextSnippetIndex = j; break; }
+// SnapFlyer exposes product-card snippet images as standalone linked image URLs.
+// The product name and current price are printed inside each image, not reliably
+// adjacent to its HTML anchor. Read the image itself instead of guessing a DOM window.
+function extractCatalogSnippetImages(html, catalogUrl) {
+  const urls = new Set();
+  const attrs = /(?:src|data-src|href)\s*=\s*["']([^"']+)["']/gi;
+  for (const match of html.matchAll(attrs)) {
+    const safe = safeCatalogPageImageUrl(decodeHtml(match[1]), catalogUrl);
+    if (safe && /\/snippets\/snippet_[a-z0-9]+\.(?:webp|png|jpe?g)$/i.test(new URL(safe).pathname)) {
+      urls.add(safe);
     }
-    const end = nextSnippetIndex >= 0 ? anchors[nextSnippetIndex].index : Math.min(html.length, match.index + 5000);
-    const previousSnippet = [...anchors.slice(0, i)].reverse().find(anchor =>
-      /\/snippets\/snippet_/i.test(anchor[2]));
-    const beforeRegion = html.slice(previousSnippet ? previousSnippet.index + previousSnippet[0].length : Math.max(0, match.index - 5000), match.index);
-    const afterRegion = html.slice(match.index + match[0].length, end);
-
-    // SnapFlyer may place the title/price before or after the clickable image.
-    // Inspect both sides rather than assuming one fixed HTML order.
-    const parseCardText = region => {
-      const text = normalizeText(decodeHtml(region));
-      const priceMatch = text.match(/(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*EGP/i);
-      if (!priceMatch) return null;
-      const title = text.split(/\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?\s*EGP/i)[0]
-        .replace(/^(?:Image|صفحة\s*\d+)\s*/i, "").trim();
-      const candidate = {
-        store: storeKey,
-        title: title.slice(-180),
-        priceHint: priceMatch[1].replace(/,/g, ""),
-        snippetUrl: imageUrl.href,
-        productUrl: null
-      };
-      const productLink = region.match(/href=["'](https:\/\/snapflyer\.io\/eg\/[a-z0-9-]+\/products\/\d+)["']/i);
-      if (productLink) candidate.productUrl = productLink[1];
-      return candidate.title && isRelevantOffer(candidate) ? candidate : null;
-    };
-    const candidate = parseCardText(afterRegion) || parseCardText(beforeRegion);
-    if (candidate) results.push(candidate);
   }
-  return [...new Map(results.map(item => [item.snippetUrl, item])).values()];
+  return [...urls].slice(0, MAX_SNIPPETS_PER_CATALOG);
+}
+
+function parseSnippetOcr(text, storeKey, catalogUrl, imageUrl) {
+  const raw = String(text || "").replace(/\s+/g, " ").trim();
+  const priceMatch = raw.match(/(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:EGP\b|جنيه|ج\s*\.?\s*م\.?)/i);
+  if (!priceMatch) return null;
+  const title = raw.replace(priceMatch[0], " ").replace(/\s+/g, " ").trim();
+  const candidate = {
+    store: storeKey,
+    title,
+    priceHint: priceMatch[1].replace(/,/g, ""),
+    snippetUrl: imageUrl,
+    catalogUrl,
+    productUrl: null
+  };
+  return title && isRelevantOffer(candidate) ? candidate : null;
 }
 
 (async () => {
-  console.log("Live SnapFlyer catalog-page product discovery diagnostic");
+  console.log("Live SnapFlyer catalog-page product discovery diagnostic (image-backed)");
   let storePageLinks = 0;
   let catalogCandidates = 0;
+  let snippetsScanned = 0;
   let linkedCatalogProducts = 0;
+  const ocr = createImageOcr({ timeoutMs: 60000, pageSegmentationMode: "6" });
 
   for (const [storeKey, store] of Object.entries(CATALOG_STORES)) {
     const storeHtml = await fetchStorePage(store.url);
@@ -100,20 +92,45 @@ function extractCatalogSnippetCandidates(html, storeKey, catalogUrl) {
     for (const edition of editions) {
       console.log("Catalog: " + edition.title + " | " + edition.url);
       const catalogHtml = await fetchStorePage(edition.url);
-      const products = extractCatalogSnippetCandidates(catalogHtml, storeKey, edition.url);
-      catalogCandidates += products.length;
-      linkedCatalogProducts += products.filter(product => product.productUrl).length;
-      console.log("Relevant catalog snippet + price candidates: " + products.length);
-      console.log("Candidates with individual product URLs: " + products.filter(product => product.productUrl).length);
-      for (const product of products.slice(0, 30)) console.log(JSON.stringify(product));
+      const snippetImages = extractCatalogSnippetImages(catalogHtml, edition.url);
+      console.log("Individual product snippet images discovered: " + snippetImages.length);
+      const products = [];
+      for (const imageUrl of snippetImages) {
+        try {
+          const image = await fetchCatalogImage(imageUrl, { timeoutMs: 30000 });
+          const result = await ocr.extract(image, {
+            storeKey,
+            catalogUrl: edition.url,
+            fingerprint: "live-discovery-" + storeKey + "-" + new URL(edition.url).pathname.split("/").pop(),
+            pageNumber: 0,
+            snippetUrl: imageUrl
+          });
+          snippetsScanned++;
+          const candidate = parseSnippetOcr(result.text, storeKey, edition.url, imageUrl);
+          if (candidate) products.push(candidate);
+          else if (result.hasText) {
+            console.log("Snippet OCR (not a relevant verified price candidate): " +
+              JSON.stringify({ imageUrl, text: result.text.slice(0, 220) }));
+          }
+        } catch (error) {
+          console.log("Snippet OCR failed: " + imageUrl + " | " + String(error?.message || error).slice(0, 180));
+        }
+      }
+      const unique = [...new Map(products.map(item => [item.snippetUrl, item])).values()];
+      catalogCandidates += unique.length;
+      linkedCatalogProducts += unique.filter(product => product.productUrl).length;
+      console.log("Relevant catalog snippet + OCR price candidates: " + unique.length);
+      console.log("Candidates with individual product URLs: " + unique.filter(product => product.productUrl).length);
+      for (const product of unique) console.log(JSON.stringify(product));
     }
   }
 
   console.log("\nLIVE CATALOG PRODUCT DISCOVERY SUMMARY");
   console.log("Store-page direct product links: " + storePageLinks);
-  console.log("Catalog snippet + price candidates: " + catalogCandidates);
+  console.log("Catalog snippet images OCR-scanned: " + snippetsScanned);
+  console.log("Relevant catalog snippet + OCR price candidates: " + catalogCandidates);
   console.log("Candidates with individual product URLs: " + linkedCatalogProducts);
-  console.log("This is discovery evidence only; candidates are NOT approved for publication.");
+  console.log("Candidates are discovery evidence only; NOT approved for publication.");
 })().catch(error => {
   console.error("LIVE CATALOG PRODUCT DISCOVERY DIAGNOSTIC: FAILED");
   console.error(error?.stack || error);

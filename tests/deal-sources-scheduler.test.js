@@ -331,6 +331,18 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(collected.sourceCount, 10);
  assert.equal(collected.sourceStats.length, 10, "each source request should report a safe extraction summary");
  assert.equal(collected.sourceSummary.length, 4, "store summaries should aggregate counters by retailer");
+ assert.ok(collected.sourceSummary.every(summary => summary.queries > 0 && summary.transportFailures === 0),
+   "per-store query totals should include every successful request");
+ const failedQuerySummary = await collectDealCandidates({
+   edition: "amazon",
+   amazonQueries: ["one failed request"],
+   fetchImpl: async () => ({ ok: false, status: 404, text: async () => "" })
+ });
+ assert.equal(failedQuerySummary.sourceSummary.length, 1);
+ assert.equal(failedQuerySummary.sourceSummary[0].queries, 1,
+   "per-store query totals must include failed transport attempts");
+ assert.equal(failedQuerySummary.sourceSummary[0].transportFailures, 1,
+   "transport failures must be counted separately from attempted queries");
  assert.ok(collected.sourceStats.every(stat => Number.isInteger(stat.queryIndex) && ["extraction_empty", "candidate_rejection", "validated"].includes(stat.stage)), "each query should expose a safe query index and parser stage");
  assert.ok(collected.sourceStats.every(stat => stat.ok && stat.extractedCount === 0 && stat.stage === "extraction_empty"),
    "successful HTTP responses with empty parser results must be distinguishable from request failures");

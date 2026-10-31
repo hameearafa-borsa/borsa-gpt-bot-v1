@@ -101,6 +101,64 @@ function isRelevantOffer(offer) {
   return RELEVANT_CATEGORIES.includes(category) || RELEVANT_TERMS.test(title);
 }
 
+
+const MONTHS = Object.freeze({ jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 });
+
+function cairoDateParts(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(date);
+  return Object.fromEntries(parts.filter(p => p.type !== "literal").map(p => [p.type, Number(p.value)]));
+}
+
+function parseCatalogDateRange(value, now = new Date()) {
+  const text = normalizeText(value).replace(/[–—]/g, "-");
+  let match = text.match(/(\\d{1,2})\\s+([A-Za-z]{3,9})\\s*-\\s*(\\d{1,2})\\s+([A-Za-z]{3,9})/i);
+  let startDay, startMonth, endDay, endMonth;
+  if (match) {
+    startDay = Number(match[1]); startMonth = MONTHS[match[2].slice(0, 3).toLowerCase()];
+    endDay = Number(match[3]); endMonth = MONTHS[match[4].slice(0, 3).toLowerCase()];
+  } else {
+    match = text.match(/(\\d{1,2})\\s*-\\s*(\\d{1,2})\\s+([A-Za-z]{3,9})/i);
+    if (!match) return null;
+    startDay = Number(match[1]); endDay = Number(match[2]);
+    startMonth = endMonth = MONTHS[match[3].slice(0, 3).toLowerCase()];
+  }
+  if (!startMonth || !endMonth || startDay < 1 || endDay < 1 ||
+      startDay > 31 || endDay > 31) return null;
+  const currentYear = cairoDateParts(now).year;
+  const startYear = currentYear;
+  const endYear = endMonth < startMonth ? currentYear + 1 : currentYear;
+  const start = new Date(Date.UTC(startYear, startMonth - 1, startDay));
+  const end = new Date(Date.UTC(endYear, endMonth - 1, endDay));
+  if (start.getUTCMonth() !== startMonth - 1 || start.getUTCDate() !== startDay ||
+      end.getUTCMonth() !== endMonth - 1 || end.getUTCDate() !== endDay || end < start) return null;
+  const iso = d => d.toISOString().slice(0, 10);
+  return { startDate: iso(start), endDate: iso(end) };
+}
+
+function isCatalogExpired(catalog, now = new Date()) {
+  const range = parseCatalogDateRange(catalog?.displayed_date_range, now);
+  if (!range) return false;
+  const today = cairoDateParts(now);
+  const todayIso = [today.year, String(today.month).padStart(2, "0"), String(today.day).padStart(2, "0")].join("-");
+  return todayIso > range.endDate;
+}
+
+function selectOneCatalogPerStore(catalogs, now = new Date()) {
+  const byStore = new Map();
+  for (const item of catalogs || []) {
+    if (!item || isCatalogExpired(item, now)) continue;
+    const range = parseCatalogDateRange(item.displayed_date_range, now);
+    const current = byStore.get(item.store);
+    const score = range ? range.endDate + "|" + range.startDate : "";
+    const currentRange = current && parseCatalogDateRange(current.displayed_date_range, now);
+    const currentScore = currentRange ? currentRange.endDate + "|" + currentRange.startDate : "";
+    if (!current || (score && (!currentScore || score > currentScore))) byStore.set(item.store, item);
+  }
+  return [...byStore.values()];
+}
+
 function changedCatalogs(previousFingerprints, currentCatalogs) {
   const previous = new Set(previousFingerprints || []);
   return (currentCatalogs || []).filter(c => c && c.fingerprint && !previous.has(c.fingerprint));
@@ -193,6 +251,9 @@ module.exports = {
   safeCatalogUrl,
   catalogUrlBelongsToStore,
   extractCatalogs,
+  parseCatalogDateRange,
+  isCatalogExpired,
+  selectOneCatalogPerStore,
   isRelevantOffer,
   changedCatalogs,
   persistCatalogSnapshots,

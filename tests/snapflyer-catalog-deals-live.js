@@ -1,5 +1,7 @@
 "use strict";
 
+// Live diagnostic: exercise the production catalog text extractor against current store pages.
+
 const { collectSnapFlyerCatalogDeals } = require("../modules/snapflyer-catalog-deals");
 
 (async () => {

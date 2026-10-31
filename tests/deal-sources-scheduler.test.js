@@ -221,6 +221,17 @@ for (const edition of [editionAmazon, editionOther]) {
  });
  assert.equal(snapFlyerVerified.ok, true, "approved SnapFlyer catalog offer pages must pass URL verification");
  assert.equal(snapFlyerVerified.finalUrl, snapFlyerCatalogUrl);
+ const snapFlyerCrossStoreRedirect = await verifyProductUrl(snapFlyerCatalogUrl, {
+   fetchImpl: async () => ({ status: 302, headers: { get: () => "https://www.amazon.eg/dp/B0ABCDEF12" } })
+ });
+ assert.equal(snapFlyerCrossStoreRedirect.ok, false,
+   "SnapFlyer catalog links must not be replaced by redirects to another retailer");
+ assert.equal(snapFlyerCrossStoreRedirect.reason, "snapflyer_catalog_redirect_changed");
+ const snapFlyerOtherCatalogRedirect = await verifyProductUrl(snapFlyerCatalogUrl, {
+   fetchImpl: async () => ({ status: 302, headers: { get: () => "https://snapflyer.io/eg/downtown/offers/bim/1234" } })
+ });
+ assert.equal(snapFlyerOtherCatalogRedirect.ok, false,
+   "SnapFlyer redirects must remain on the exact selected store catalog page");
  const unsafeSnapFlyerPath = await verifyProductUrl("https://snapflyer.io/eg/downtown/stores/kazyon", {
    fetchImpl: async () => ({ status: 200 })
  });

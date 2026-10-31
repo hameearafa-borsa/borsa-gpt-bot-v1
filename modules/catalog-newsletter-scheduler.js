@@ -1,8 +1,8 @@
 "use strict";
 
 const {
-  CATALOG_STORES, extractCatalogs, persistCatalogSnapshots,
-  listPendingCatalogSnapshots, markCatalogSnapshot, formatCatalogNotice
+  CATALOG_STORES, extractCatalogs, selectOneCatalogPerStore, isCatalogExpired, parseCatalogDateRange,
+  persistCatalogSnapshots, listPendingCatalogSnapshots, markCatalogSnapshot, formatCatalogNotice
 } = require("./catalog-newsletter");
 
 const CAIRO_ZONE = "Africa/Cairo";
@@ -122,7 +122,7 @@ async function finishDelivery(pool, deliveryId, status, messageId = null, error 
   );
 }
 
-async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = fetchStorePage, onError = async () => {} }) {
+async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = fetchStorePage, onError = async () => {}, now = new Date() }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
   const targets = await resolveChatIds({ pool, chatId, chatIds });
   if (!targets.length) return { skipped: true, reason: "no_active_authorized_groups" };
@@ -130,9 +130,11 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
   for (const [storeKey, store] of Object.entries(CATALOG_STORES)) {
     try {
       const html = await fetchPage(store.url);
-      const catalogs = extractCatalogs(html, storeKey);
-      if (!catalogs.length) throw new Error("catalog_listing_parse_empty");
+      const extracted = extractCatalogs(html, storeKey);
+      if (!extracted.length) throw new Error("catalog_listing_parse_empty");
+      const catalogs = selectOneCatalogPerStore(extracted, now);
       result.checkedStores++;
+      if (!catalogs.length) continue;
       const saved = await persistCatalogSnapshots(pool, catalogs);
       result.baseline += saved.baseline;
       result.changed += saved.changed;
@@ -144,8 +146,25 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
   }
   if (result.failed === Object.keys(CATALOG_STORES).length) return { ...result, skipped: true, reason: "all_sources_failed" };
 
-  const pending = await listPendingCatalogSnapshots(pool, 20);
+  const pending = await listPendingCatalogSnapshots(pool, 100);
+  const eligiblePending = [];
   for (const snapshot of pending) {
+    if (isCatalogExpired({ displayed_date_range: snapshot.displayed_date_range }, now)) {
+      await markCatalogSnapshot(pool, snapshot.id, "ignored", "Catalog validity period has ended in Africa/Cairo");
+      continue;
+    }
+    eligiblePending.push(snapshot);
+  }
+  const selectedPending = selectOneCatalogPerStore(eligiblePending.map(snapshot => ({
+    ...snapshot, store: snapshot.store_key
+  })), now);
+  const selectedIds = new Set(selectedPending.map(snapshot => snapshot.id));
+  for (const snapshot of eligiblePending) {
+    if (!selectedIds.has(snapshot.id)) {
+      await markCatalogSnapshot(pool, snapshot.id, "ignored", "Superseded by a newer valid catalog for the same store");
+    }
+  }
+  for (const snapshot of selectedPending) {
     for (const targetChatId of targets) {
       let deliveryId;
       try {

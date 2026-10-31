@@ -75,7 +75,7 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
         // retailer or a different catalog/store page.
         if (originalSnapFlyerUrl && (
           next.hostname.toLowerCase() !== originalSnapFlyerUrl.hostname.toLowerCase() ||
-          next.pathname.replace(/\\/$/, "").toLowerCase() !== originalSnapFlyerUrl.pathname.replace(/\\/$/, "").toLowerCase()
+          next.pathname.replace(/\/$/, "").toLowerCase() !== originalSnapFlyerUrl.pathname.replace(/\/$/, "").toLowerCase()
         )) return { ok: false, reason: "snapflyer_catalog_redirect_changed" };
         url = next;
         continue;

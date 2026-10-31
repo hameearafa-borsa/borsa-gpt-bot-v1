@@ -11,6 +11,7 @@ on:
       - owner-approved-group-access
       - chemical-assistant-gemini-reply-once
       - feature/deals-two-newsletters-carrefour-kazyon-2026-10-25
+      - fix/deals-fetch-resilience-2026-10-30
 
 permissions:
   contents: read

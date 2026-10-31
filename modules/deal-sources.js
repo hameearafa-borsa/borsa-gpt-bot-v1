@@ -38,7 +38,7 @@ function safeProductUrl(raw, sourceName) {
     return u.toString();
   } catch { return null; }
 }
-function extractStructuredCards(html, sourceName, query = "") {
+function extractStructuredCards(html, sourceName, query = "", counters = null) {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
   const products = [];
@@ -72,13 +72,18 @@ function extractStructuredCards(html, sourceName, query = "") {
   const merchant = sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "noon" ? "Noon Egypt" : "Carrefour Egypt";
   const cards = [];
   for (const product of products) {
+    const stats = counters?.json;
+    if (stats) stats.candidates++;
     const title = htmlText(product.name || product.title || product.displayName || product.productName || "");
-    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
+    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) stats.rejectedName++; continue; }
     const offers = product.offers || product.offer || {};
     const rawUrl = product.url || product.productUrl || product.canonicalUrl ||
       product.mainEntityOfPage?.["@id"] || product.slug || product.urlKey || offers.url || "";
     const url = safeProductUrl(rawUrl, sourceName);
+    if (!url) { if (stats) stats.rejectedUrl++; continue; }
     const offerList = Array.isArray(offers) ? offers : [offers];
+    const foreignCurrencyOffers = offerList.filter(offer => offer && (offer.priceCurrency || offer.currencyCode) && String(offer.priceCurrency || offer.currencyCode).toUpperCase() !== "EGP");
+    if (stats && foreignCurrencyOffers.length) stats.currencySignals++;
     const prices = [
       ...offerList.filter(offer => !offer.priceCurrency && !offer.currencyCode ||
         String(offer.priceCurrency || offer.currencyCode).toUpperCase() === "EGP")
@@ -92,16 +97,17 @@ function extractStructuredCards(html, sourceName, query = "") {
     ].filter(value => value !== null);
     const price = prices.length ? Math.min(...prices) : null;
     const oldPrice = money(offers.highPrice || product.highPrice || product.oldPrice || product.listPrice || product.wasPrice);
-    if (!url || !price) continue;
+    if (!price) { if (stats) { if (foreignCurrencyOffers.some(offer => money(offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price) !== null)) stats.rejectedCurrency++; else stats.rejectedPrice++; } continue; }
     const deal = { merchant, title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
-    if (validateDeal(deal).ok) cards.push(deal);
+    const validation = validateDeal(deal);
+    if (validation.ok) { cards.push(deal); if (stats) stats.accepted++; } else if (stats) stats.rejectedValidation++;
   }
   return cards;
 }
-function extractCards(html, sourceName, query = "") {
+function extractCards(html, sourceName, query = "", counters = null) {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
-  let cards = extractStructuredCards(html, sourceName, query);
+  let cards = extractStructuredCards(html, sourceName, query, counters);
   const structuredKeys = new Set(cards.map(deal => deal.url + "|" + deal.price));
   let chunks = [];
   if (sourceName === "amazon") {
@@ -119,32 +125,38 @@ function extractCards(html, sourceName, query = "") {
     if (!chunks.length) chunks = [...html.matchAll(/<article[\s\S]*?<\/article>/gi)].map(m => m[0]);
   }
   for (const chunk of chunks) {
+    const stats = counters?.html;
+    if (stats) stats.candidates++;
     const titleMatch = chunk.match(/<h[23][^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/h[23]>/i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*(?:data-qa|data-testid)=["'][^"']*product[-_ ]?name[^"']*["'][^>]*>([\s\S]*?)<\//i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\s\S]*?)<\//i);
     const title = htmlText(titleMatch?.[1] || "");
-    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) continue;
+    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) stats.rejectedName++; continue; }
     const href = chunk.match(/<a[^>]+href=["']([^"']+)["']/i)?.[1];
     const url = safeProductUrl(href || "", sourceName);
+    if (!url) { if (stats) stats.rejectedUrl++; continue; }
     const priceMatch = sourceName === "amazon"
       ? (chunk.match(/class=["']a-price-whole["'][^>]*>([\s\S]*?)<\//i) || chunk.match(/class=["']a-offscreen["'][^>]*>([\s\S]*?)<\//i))
       : (chunk.match(/class=["'][^"']*(?:prc|priceNow|price-now|sellingPrice|selling-price|finalPrice|currentPrice|price)["'][^>]*>([\s\S]*?)<\//i) ||
         chunk.match(/(?:data-qa|data-testid)=["'][^"']*product[-_ ]?price[^"']*["'][^>]*>([\s\S]*?)<\//i) ||
         chunk.match(/itemprop=["']price["'][^>]*content=["']([^"']+)["']/i));
     const price = money(htmlText(priceMatch?.[1] || ""));
+    if (stats && /\b(?:USD|SAR|AED|EUR|GBP)\b|دولار|ريال|درهم|يورو|استرليني/i.test(chunk)) stats.currencySignals++;
     const oldMatch = chunk.match(/class=["'][^"']*(?:old|oldPrice|price-was)[^"']*["'][^>]*>([\s\S]*?)<\//i);
     const oldPrice = money(htmlText(oldMatch?.[1] || ""));
-    if (!url || !price) continue;
+    if (!price) { if (stats) stats.rejectedPrice++; continue; }
     const deal = { merchant: sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "carrefour" ? "Carrefour Egypt" : "Noon Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
-    if (validateDeal(deal).ok) {
-      const key = deal.url + "|" + deal.price;
-      if (!structuredKeys.has(key)) cards.push(deal);
-      structuredKeys.add(key);
-    }
+    const validation = validateDeal(deal);
+    if (validation.ok) { if (stats) stats.accepted++; const key = deal.url + "|" + deal.price; if (!structuredKeys.has(key)) cards.push(deal); structuredKeys.add(key); }
+    else if (stats) stats.rejectedValidation++;
   }
   return cards;
 }
-function extractionDiagnostics(html, sourceName, deals = []) {
+function createExtractionCounters() {
+  const stage = () => ({ candidates: 0, rejectedName: 0, rejectedUrl: 0, rejectedPrice: 0, rejectedCurrency: 0, rejectedValidation: 0, currencySignals: 0, accepted: 0 });
+  return { json: stage(), html: stage() };
+}
+function extractionDiagnostics(html, sourceName, deals = [], counters = null) {
   const scripts = [...html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script>/gi)]
     .filter(match => /application\/(?:ld\+json|json)/i.test(match[1]) ||
       /(?:__NEXT_DATA__|__NUXT__|INITIAL_STATE|APOLLO_STATE)/i.test(match[1]));
@@ -197,7 +209,8 @@ function extractionDiagnostics(html, sourceName, deals = []) {
     productObjectShapes,
     htmlCardChunks,
     htmlTitleMatches,
-    validatedDeals: deals.length
+    validatedDeals: deals.length,
+    stages: counters ? { json: { ...counters.json }, html: { ...counters.html } } : undefined
   };
 }
 function getScraperKeys() {
@@ -225,14 +238,15 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
       const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
       if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
       const html = await response.text();
-      const deals = extractCards(html, sourceName, query);
-      const diagnostics = deals.length === 0 ? extractionDiagnostics(html, sourceName, deals) : undefined;
+      const counters = createExtractionCounters();
+      const deals = extractCards(html, sourceName, query, counters);
+      const diagnostics = extractionDiagnostics(html, sourceName, deals, counters);
       const pageSignal = /captcha|robot check|automated access|validatecaptcha|enter the characters you see/i.test(html)
         ? "captcha_or_block_page"
         : /data-component-type=["']s-search-result["']|application\/(?:ld\+json|json)|__NEXT_DATA__|__NUXT__|data-qa=["'][^"']*product|data-testid=["'][^"']*product|class=["'][^"']*(?:prd|product-card|productCard|product-item)/i.test(html)
           ? "product_markup_present"
           : html.trim().length === 0 ? "empty_response" : "no_product_markers";
-      return { source: sourceName, ok: true, deals, ...(deals.length === 0 ? { pageSignal, extractionDiagnostics: diagnostics } : {}) };
+      return { source: sourceName, ok: true, deals, pageSignal, extractionDiagnostics: diagnostics };
     } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
     finally { clearTimeout(timer); }
   };
@@ -267,36 +281,37 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   // Each newsletter queries only the stores it can publish. This avoids
   // paying for Amazon results during the other-store edition and vice versa.
   if (edition === "all" || edition === "amazon") {
-    for (const q of amazonQueries) tasks.push({ source: "amazon", query: q });
+    amazonQueries.forEach((q, queryIndex) => tasks.push({ source: "amazon", query: q, queryIndex }));
   }
   if (edition === "all" || edition === "other_sites") {
-    for (const q of otherQueries) for (const source of ["jumia", "noon"]) tasks.push({ source, query: q });
-    tasks.push({ source: "carrefour", query: "" });
+    otherQueries.forEach((q, queryIndex) => { for (const source of ["jumia", "noon"]) tasks.push({ source, query: q, queryIndex }); });
+    tasks.push({ source: "carrefour", query: "", queryIndex: 0 });
   }
   if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
   const deals = [], errors = [], sourceStats = [];
+  const storeCounters = new Map();
   const seen = new Set();
   for (let index = 0; index < results.length; index++) {
     const r = results[index];
     const task = tasks[index];
     if (r.status !== "fulfilled") {
       errors.push({ source: task.source, reason: "task_rejected" });
-      sourceStats.push({ source: task.source, ok: false, extractedCount: 0, reason: "task_rejected" });
+      sourceStats.push({ source: task.source, queryIndex: task.queryIndex, ok: false, stage: "transport", extractedCount: 0, reason: "task_rejected" });
       continue;
     }
     if (!r.value.ok) {
       errors.push({ source: r.value.source, reason: r.value.reason });
-      sourceStats.push({ source: r.value.source, ok: false, extractedCount: 0, reason: r.value.reason });
+      sourceStats.push({ source: r.value.source, queryIndex: task.queryIndex, ok: false, stage: "transport", extractedCount: 0, reason: r.value.reason });
       continue;
     }
     const extractedCount = r.value.deals.length;
-    sourceStats.push({
-      source: r.value.source,
-      ok: true,
-      extractedCount,
-      ...(extractedCount === 0 ? { reason: "no_products_extracted", ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}) } : {})
-    });
+    const stages = r.value.extractionDiagnostics?.stages || null;
+    const stage = extractedCount > 0 ? "validated" : stages && (stages.json.candidates + stages.html.candidates) > 0 ? "candidate_rejection" : "extraction_empty";
+    sourceStats.push({ source: r.value.source, queryIndex: task.queryIndex, ok: true, stage, extractedCount, ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}), ...(r.value.extractionDiagnostics ? { extractionDiagnostics: r.value.extractionDiagnostics } : {}) });
+    if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
+    const aggregate = storeCounters.get(task.source); aggregate.queries++;
+    if (stages) for (const format of ["json", "html"]) for (const key of Object.keys(aggregate[format])) aggregate[format][key] += Number(stages[format][key] || 0);
     // A successful HTTP response with no parsed products is diagnostically
     // different from a source that failed to load. Record it without logging HTML.
     if (extractedCount === 0) errors.push({ source: r.value.source, reason: "no_products_extracted", ...(r.value.pageSignal ? { pageSignal: r.value.pageSignal } : {}) });
@@ -305,6 +320,8 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
       if (!seen.has(key)) { seen.add(key); deals.push(d); }
     }
   }
-  return { deals, errors, sourceStats, sourceCount: tasks.length };
+  for (const task of tasks) if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
+  for (const stat of sourceStats) if (!stat.ok) storeCounters.get(stat.source).transportFailures++;
+  return { deals, errors, sourceStats, sourceSummary: [...storeCounters.values()], sourceCount: tasks.length };
 }
-module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, getScraperKeys, fetchSearch, collectDealCandidates };
+module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, createExtractionCounters, getScraperKeys, fetchSearch, collectDealCandidates };

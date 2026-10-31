@@ -144,7 +144,7 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   // Collect and verify once per edition, regardless of the number of target groups.
   const gathered = await fetcher({ edition: kind });
   if (!gathered.deals?.length) {
-    await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
+    await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null };
   }
   const verified = await verify(gathered.deals);

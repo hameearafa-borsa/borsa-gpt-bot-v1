@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
+const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, createExtractionCounters, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
 const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff } = require("../modules/deal-scheduler");
 const { formatNewsletterMessage } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
@@ -70,6 +70,37 @@ assert.equal(typedShapeDiagnostics.productObjectShapes.length, 1);
 assert.equal(typedShapeDiagnostics.productObjectShapes[0].fields.name, "string");
 assert.equal(typedShapeDiagnostics.productObjectShapes[0].nested.offers.price, "string",
   "shape diagnostics must expose field names and types without exposing product values");
+
+
+const jsonRejectFixture = product => `<script type="application/ld+json">${JSON.stringify({ "@type": "Product", ...product })}</script>`;
+const jsonCounters = createExtractionCounters();
+const jsonDiagnosticFixture = [
+  jsonRejectFixture({ name: "هاتف ذكي", url: "https://www.jumia.com.eg/phone", offers: { price: "100", priceCurrency: "EGP" } }),
+  jsonRejectFixture({ name: "مسحوق برسيل للغسيل", url: "https://evil.example/item", offers: { price: "100", priceCurrency: "EGP" } }),
+  jsonRejectFixture({ name: "منظف أرضيات", url: "https://www.jumia.com.eg/cleaner", offers: { price: "120", priceCurrency: "USD" } }),
+  jsonRejectFixture({ name: "مناديل فاين ورقية", url: "https://www.jumia.com.eg/tissues", offers: { price: "35", priceCurrency: "EGP" } })
+].join("");
+const jsonDiagnosticDeals = extractCards(jsonDiagnosticFixture, "jumia", "", jsonCounters);
+assert.equal(jsonDiagnosticDeals.length, 1);
+assert.equal(jsonCounters.json.candidates, 4);
+assert.equal(jsonCounters.json.rejectedName, 1);
+assert.equal(jsonCounters.json.rejectedUrl, 1);
+assert.equal(jsonCounters.json.rejectedCurrency, 1);
+assert.equal(jsonCounters.json.accepted, 1);
+assert.equal(JSON.stringify(jsonCounters).includes("مسحوق"), false, "diagnostics must not expose product values");
+const htmlDiagnosticFixture = `
+<div class="product-card"><a href="/valid-cleaner"><h3 class="product-title">منظف أرضيات متعدد الاستخدامات</h3></a><span class="currentPrice">55 ج.م</span></div>
+<div class="product-card"><a href="https://evil.example/item"><h3 class="product-title">مسحوق برسيل للغسيل</h3></a><span class="currentPrice">100 ج.م</span></div>
+<div class="product-card"><a href="/missing-price"><h3 class="product-title">مناديل فاين ورقية</h3></a></div>
+<div class="product-card"><a href="/irrelevant"><h3 class="product-title">هاتف ذكي حديث</h3></a><span class="currentPrice">900 ج.م</span></div>`;
+const htmlCounters = createExtractionCounters();
+const htmlDiagnosticDeals = extractCards(htmlDiagnosticFixture, "carrefour", "", htmlCounters);
+assert.equal(htmlDiagnosticDeals.length, 1);
+assert.equal(htmlCounters.html.candidates, 4);
+assert.equal(htmlCounters.html.rejectedName, 1);
+assert.equal(htmlCounters.html.rejectedUrl, 1);
+assert.equal(htmlCounters.html.rejectedPrice, 1);
+assert.equal(htmlCounters.html.accepted, 1);
 
 const carrefourFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"فلفيتا جل منظف للملابس السوداء - 1 كيلو","url":"https://www.carrefouregypt.com/mafegy/ar/p/velvet-gel","offers":{"@type":"Offer","price":"79.99","priceCurrency":"EGP"}}</script>`;
 const amazonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"اريال مسحوق غسيل 2 كيلو","url":"https://www.amazon.eg/dp/B0ABCDEF12","offers":{"@type":"Offer","price":"99.50","priceCurrency":"EGP"}}</script>`;
@@ -299,7 +330,9 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.ok(peakRequests <= 2, "ScraperAPI requests must be bounded to two concurrent requests");
  assert.equal(collected.sourceCount, 10);
  assert.equal(collected.sourceStats.length, 10, "each source request should report a safe extraction summary");
- assert.ok(collected.sourceStats.every(stat => stat.ok && stat.extractedCount === 0 && stat.reason === "no_products_extracted"),
+ assert.equal(collected.sourceSummary.length, 4, "store summaries should aggregate counters by retailer");
+ assert.ok(collected.sourceStats.every(stat => Number.isInteger(stat.queryIndex) && ["extraction_empty", "candidate_rejection", "validated"].includes(stat.stage)), "each query should expose a safe query index and parser stage");
+ assert.ok(collected.sourceStats.every(stat => stat.ok && stat.extractedCount === 0 && stat.stage === "extraction_empty"),
    "successful HTTP responses with empty parser results must be distinguishable from request failures");
  assert.equal(collected.errors.length, 10, "empty extraction should be visible in diagnostics even when HTTP requests succeeded");
  const amazonTargets = [];

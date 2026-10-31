@@ -34,6 +34,8 @@ function asciiDigits(value) {
 
 function parseEgpPrice(value) {
   const text = asciiDigits(plainText(value)).replace(/,/g, "");
+  // Do not truncate malformed Arabic-decimal prices (e.g. ١١٤٫٩٥) to 114.
+  if (/\d\s*[٫٬]\s*\d/.test(text)) return null;
   if (!/(?:EGP\b|جنيه|ج\s*\.?\s*م\.?)/i.test(text)) return null;
   const match = text.match(/(?:^|[^\d])(\d{1,6}(?:\.\d{1,2})?)(?=$|[^\d])/);
   if (!match) return null;

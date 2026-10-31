@@ -247,7 +247,7 @@ function makePipelinePool() {
   assert.ok(failedPublish.failed >= 1);
   assert.ok(publishErrors >= 1);
   assert.equal(ambiguousDeliveryAlert, true, "Telegram send errors must explicitly flag ambiguous delivery for manual review");
-  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
+  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === failureFingerprint && r.status === "failed"),
     "terminal delivery failures must leave the pending queue so newer snapshots are not starved");
 
   const retrySent = [];
@@ -256,7 +256,7 @@ function makePipelinePool() {
     chatId: -100123, fetchPage: fetchFailureEdition
   });
   assert.equal(retrySent.length, 0, "an ambiguous Telegram send outcome must not be retried automatically");
-  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
+  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === failureFingerprint && r.status === "failed"),
     "the snapshot is terminally failed and its delivery record prevents automatic retry");
   // Partial delivery: one approved group succeeds while another has an ambiguous Telegram error.
   // The successful group's record must remain published, and neither group is retried automatically.
@@ -285,7 +285,7 @@ function makePipelinePool() {
   assert.equal(partialResult.published, 1, "successful group delivery should be counted");
   assert.ok(partialResult.failed >= 1, "ambiguous group delivery should be counted as failed");
   const partialDeliveries = [...partialPool.rows.values()].filter(row => row.delivery && row.snapshot_id ===
-    [...partialPool.rows.values()].find(snapshot => snapshot.fingerprint === "fp-partial")?.id);
+    [...partialPool.rows.values()].find(snapshot => snapshot.fingerprint === partialFingerprint)?.id);
   assert.equal(partialDeliveries.find(row => row.chat_id === -100123)?.status, "published");
   assert.equal(partialDeliveries.find(row => row.chat_id === -100456)?.status, "failed");
   assert.equal(partialSent.length, 1);

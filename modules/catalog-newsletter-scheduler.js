@@ -127,6 +127,8 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
   const targets = await resolveChatIds({ pool, chatId, chatIds });
   if (!targets.length) return { skipped: true, reason: "no_active_authorized_groups" };
   const result = { targetGroups: targets.length, checkedStores: 0, baseline: 0, changed: 0, unchanged: 0, published: 0, failed: 0, skippedDeliveries: 0 };
+  const checkedStores = new Set();
+  const currentEditionByStore = new Map();
   for (const [storeKey, store] of Object.entries(CATALOG_STORES)) {
     try {
       const html = await fetchPage(store.url);
@@ -134,6 +136,8 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
       if (!extracted.length) throw new Error("catalog_listing_parse_empty");
       const catalogs = selectOneCatalogPerStore(extracted, now);
       result.checkedStores++;
+      checkedStores.add(storeKey);
+      currentEditionByStore.set(storeKey, catalogs[0] || null);
       if (!catalogs.length) continue;
       const saved = await persistCatalogSnapshots(pool, catalogs);
       result.baseline += saved.baseline;
@@ -149,6 +153,11 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
   const pending = await listPendingCatalogSnapshots(pool, 100);
   const eligiblePending = [];
   for (const snapshot of pending) {
+    const currentEdition = checkedStores.has(snapshot.store_key) ? currentEditionByStore.get(snapshot.store_key) : undefined;
+    if (checkedStores.has(snapshot.store_key) && (!currentEdition || currentEdition.fingerprint !== snapshot.fingerprint)) {
+      await markCatalogSnapshot(pool, snapshot.id, "ignored", "No longer the current catalog edition listed by the store");
+      continue;
+    }
     if (isCatalogExpired({ displayed_date_range: snapshot.displayed_date_range }, now)) {
       await markCatalogSnapshot(pool, snapshot.id, "ignored", "Catalog validity period has ended in Africa/Cairo");
       continue;

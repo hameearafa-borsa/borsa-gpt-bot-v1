@@ -5,6 +5,7 @@ on:
     branches:
       - fix/deals-fetch-resilience-2026-10-30
     paths:
+      - ".github/workflows/live-snapflyer-catalog-text.yml"
       - "tests/snapflyer-catalog-deals-live.js"
       - "modules/snapflyer-catalog-deals.js"
       - "modules/catalog-newsletter.js"

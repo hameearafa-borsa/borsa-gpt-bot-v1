@@ -13,7 +13,7 @@ const RELEVANT_CATEGORIES = Object.freeze([
   "detergent", "paper", "personal_care"
 ]);
 
-const RELEVANT_TERMS = /detergent|cleaning|home|personal care|paper|tissue|wipes|shampoo|soap|laundry|dishwash|منظف|تنظيف|مسحوق|غسيل|مناديل|ورقي|شامبو|صابون|عناية|كلور|مطهر|حفاض/i;
+const RELEVANT_TERMS = /detergent|cleaning|home|personal care|paper|tissue|wipes|shampoo|soap|laundry|dishwash|منظف|تنظيف|مسحوق|غسيل|جل\s*غسالات|مناديل|ورقي|شامبو|صابون|عناية|كلور|مطهر|حفاض/i;
 
 function normalizeText(value) {
   return String(value || "").replace(/<script[\s\S]*?<\/script>/gi, " ")

@@ -26,5 +26,9 @@ jobs:
           tesseract --list-langs
       - name: Install project dependencies
         run: npm ci
+      - name: Run complete static and automated test suite
+        run: npm run check && npm test
+      - name: Discover relevant products from all three live store pages
+        run: node tests/catalog-product-discovery-live.js
       - name: Run live individual-product image OCR
         run: node tests/catalog-product-image-ocr-live.js

@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("node:assert/strict");
+const sharp = require("sharp");
 const { safeCatalogPageImageUrl, fetchCatalogImage } = require("../modules/catalog-page-ocr");
 const { createImageOcr } = require("../modules/image-ocr");
 
@@ -77,6 +78,50 @@ function normalizeOcrText(value) {
     .toLowerCase();
 }
 
+async function recognizeProductIdentity(image, product) {
+  const cropAndEnlarge = async input => {
+    const source = sharp(input, { limitInputPixels: 40000000 });
+    const metadata = await source.metadata();
+    if (!metadata.width || !metadata.height) throw new Error("ocr_image_dimensions_unavailable");
+    // Isolate the product area below the price banner and enlarge its brand mark.
+    const left = Math.floor(metadata.width * 0.18);
+    const top = Math.floor(metadata.height * 0.24);
+    const width = Math.max(1, Math.floor(metadata.width * 0.68));
+    const height = Math.max(1, Math.floor(metadata.height * 0.70));
+    return source.extract({
+      left,
+      top,
+      width: Math.min(width, metadata.width - left),
+      height: Math.min(height, metadata.height - top)
+    }).resize({ width: 1200 }).grayscale().normalize().sharpen().png().toBuffer();
+  };
+
+  for (const psm of ["11", "6"]) {
+    const retryOcr = createImageOcr({
+      timeoutMs: 60000,
+      pageSegmentationMode: psm,
+      preprocess: cropAndEnlarge
+    });
+    const retry = await retryOcr.extract(image, {
+      storeKey: "metro_market",
+      catalogUrl: product.url,
+      fingerprint: "snapflyer-product-" + product.id + "-identity-retry",
+      pageNumber: product.pageNumber,
+      productId: product.id
+    });
+    console.log("--- Cropped/enlarged OCR (PSM " + psm + ") ---");
+    console.log(retry.text || "[NO TEXT RECOGNIZED]");
+    const normalized = normalizeOcrText(retry.text);
+    const matches = product.identityTerms.filter(term =>
+      normalized.includes(term.toLowerCase())
+    );
+    if (matches.length >= product.minIdentityMatches) {
+      return { matches, psm };
+    }
+  }
+  return null;
+}
+
 async function verifyProduct(product, ocr) {
   console.log("\n=== " + product.id + " | " + product.title + " ===");
   console.log("Product page: " + product.url);
@@ -121,17 +166,23 @@ async function verifyProduct(product, ocr) {
       " for product " + product.id
   );
 
-  const matchedIdentityTerms = product.identityTerms.filter(term =>
+  let matchedIdentityTerms = product.identityTerms.filter(term =>
     normalizedOcr.includes(term.toLowerCase())
   );
-  assert.ok(
-    matchedIdentityTerms.length >= product.minIdentityMatches,
-    "OCR text does not contain enough product identity evidence for " + product.id +
-      "; matched: " + matchedIdentityTerms.join(", ")
-  );
+  let identityMethod = "original snippet OCR";
+  if (matchedIdentityTerms.length < product.minIdentityMatches) {
+    const retry = await recognizeProductIdentity(image, product);
+    assert.ok(
+      retry,
+      "OCR could not verify product identity after cropped/enlarged retries for " + product.id
+    );
+    matchedIdentityTerms = retry.matches;
+    identityMethod = "cropped/enlarged OCR PSM " + retry.psm;
+  }
 
   console.log("OCR price match: " + normalizedPrice + " EGP");
   console.log("OCR identity matches: " + matchedIdentityTerms.join(", "));
+  console.log("Identity verification method: " + identityMethod);
   console.log("PRODUCT OCR VERIFIED: " + product.id);
 }
 

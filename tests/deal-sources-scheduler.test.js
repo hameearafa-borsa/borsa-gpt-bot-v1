@@ -87,7 +87,9 @@ assert.equal(jsonCounters.json.rejectedName, 1);
 assert.equal(jsonCounters.json.rejectedUrl, 1);
 assert.equal(jsonCounters.json.rejectedCurrency, 1);
 assert.equal(jsonCounters.json.accepted, 1);
-assert.equal(JSON.stringify(jsonCounters).includes("مسحوق"), false, "diagnostics must not expose product values");
+assert.ok(jsonCounters.json.samples.length > 0, "bounded rejection samples should explain candidate rejection");
+assert.ok(jsonCounters.json.samples.length <= 8, "rejection samples must remain bounded");
+assert.ok(jsonCounters.json.samples.every(sample => sample.title.length <= 100), "sample titles must be truncated");
 const htmlDiagnosticFixture = `
 <div class="product-card"><a href="/valid-cleaner"><h3 class="product-title">منظف أرضيات متعدد الاستخدامات</h3></a><span class="currentPrice">55 ج.م</span></div>
 <div class="product-card"><a href="https://evil.example/item"><h3 class="product-title">مسحوق برسيل للغسيل</h3></a><span class="currentPrice">100 ج.م</span></div>

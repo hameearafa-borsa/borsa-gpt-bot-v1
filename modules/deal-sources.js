@@ -38,6 +38,12 @@ function safeProductUrl(raw, sourceName) {
     return u.toString();
   } catch { return null; }
 }
+function addRejectionSample(stats, reason, title, rawUrl) {
+  if (!stats || !Array.isArray(stats.samples) || stats.samples.length >= 8) return;
+  let safeUrl = "";
+  try { const parsed = new URL(String(rawUrl || "")); safeUrl = (parsed.hostname + parsed.pathname).slice(0, 160); } catch {}
+  stats.samples.push({ reason, title: htmlText(title).slice(0, 100), ...(safeUrl ? { url: safeUrl } : {}) });
+}
 function extractStructuredCards(html, sourceName, query = "", counters = null) {
   const source = SOURCES[sourceName];
   if (!source || typeof html !== "string") return [];
@@ -75,12 +81,12 @@ function extractStructuredCards(html, sourceName, query = "", counters = null) {
     const stats = counters?.json;
     if (stats) stats.candidates++;
     const title = htmlText(product.name || product.title || product.displayName || product.productName || "");
-    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) stats.rejectedName++; continue; }
+    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, product.url || product.productUrl || product.canonicalUrl || product.slug || product.urlKey); } continue; }
     const offers = product.offers || product.offer || {};
     const rawUrl = product.url || product.productUrl || product.canonicalUrl ||
       product.mainEntityOfPage?.["@id"] || product.slug || product.urlKey || offers.url || "";
     const url = safeProductUrl(rawUrl, sourceName);
-    if (!url) { if (stats) stats.rejectedUrl++; continue; }
+    if (!url) { if (stats) { stats.rejectedUrl++; addRejectionSample(stats, "url", title, rawUrl); } continue; }
     const offerList = Array.isArray(offers) ? offers : [offers];
     const foreignCurrencyOffers = offerList.filter(offer => offer && (offer.priceCurrency || offer.currencyCode) && String(offer.priceCurrency || offer.currencyCode).toUpperCase() !== "EGP");
     if (stats && foreignCurrencyOffers.length) stats.currencySignals++;
@@ -131,10 +137,10 @@ function extractCards(html, sourceName, query = "", counters = null) {
       chunk.match(/<(?:h[23]|span|div)[^>]*(?:data-qa|data-testid)=["'][^"']*product[-_ ]?name[^"']*["'][^>]*>([\s\S]*?)<\//i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\s\S]*?)<\//i);
     const title = htmlText(titleMatch?.[1] || "");
-    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) stats.rejectedName++; continue; }
+    if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, ""); } continue; }
     const href = chunk.match(/<a[^>]+href=["']([^"']+)["']/i)?.[1];
     const url = safeProductUrl(href || "", sourceName);
-    if (!url) { if (stats) stats.rejectedUrl++; continue; }
+    if (!url) { if (stats) { stats.rejectedUrl++; addRejectionSample(stats, "url", title, href || ""); } continue; }
     const priceMatch = sourceName === "amazon"
       ? (chunk.match(/class=["']a-price-whole["'][^>]*>([\s\S]*?)<\//i) || chunk.match(/class=["']a-offscreen["'][^>]*>([\s\S]*?)<\//i))
       : (chunk.match(/class=["'][^"']*(?:prc|priceNow|price-now|sellingPrice|selling-price|finalPrice|currentPrice|price)["'][^>]*>([\s\S]*?)<\//i) ||
@@ -153,7 +159,7 @@ function extractCards(html, sourceName, query = "", counters = null) {
   return cards;
 }
 function createExtractionCounters() {
-  const stage = () => ({ candidates: 0, rejectedName: 0, rejectedUrl: 0, rejectedPrice: 0, rejectedCurrency: 0, rejectedValidation: 0, currencySignals: 0, accepted: 0 });
+  const stage = () => ({ candidates: 0, rejectedName: 0, rejectedUrl: 0, rejectedPrice: 0, rejectedCurrency: 0, rejectedValidation: 0, currencySignals: 0, accepted: 0, samples: [] });
   return { json: stage(), html: stage() };
 }
 function extractionDiagnostics(html, sourceName, deals = [], counters = null) {

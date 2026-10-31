@@ -16,18 +16,18 @@ function decodeHtml(value) {
 
 function plainText(html) {
   return normalizeText(decodeHtml(String(html || "")
-    .replace(/<script\\b[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style\\b[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]*>/g, " ")));
 }
 
 function catalogTextLines(html) {
   const text = decodeHtml(String(html || ""))
-    .replace(/<script\\b[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style\\b[\\s\\S]*?<\\/style>/gi, " ")
-    .replace(/<(?:br|\\/p|\\/div|\\/li|\\/h[1-6]|\\/article|\\/section|\\/a|\\/span|\\/strong|\\/b)\\b[^>]*>/gi, "\\n")
+    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<(?:br|\/p|\/div|\/li|\/h[1-6]|\/article|\/section|\/a|\/span|\/strong|\/b)\b[^>]*>/gi, "\n")
     .replace(/<[^>]*>/g, " ");
-  return text.split(/[\\r\\n]+/)
+  return text.split(/[\r\n]+/)
     .map(line => normalizeText(line))
     .filter(Boolean);
 }
@@ -62,18 +62,18 @@ function extractStoreProductLinks(html, storeKey, baseUrl) {
  */
 function extractCatalogProductRecords(html, storeKey, catalogUrl) {
   if (typeof html !== "string" || !catalogUrl) return [];
-  const heading = /Products\\s+on\\s+this\\s+page/i.exec(plainText(html));
+  const heading = /Products\s+on\s+this\s+page/i.exec(plainText(html));
   if (!heading) return [];
 
   // Work from the visible text stream, not from assumptions about snippet-image
   // anchors. SnapFlyer exposes the offer title and price as ordinary page text.
   const visible = catalogTextLines(html);
-  const headingIndex = visible.findIndex(line => /Products\\s+on\\s+this\\s+page/i.test(line));
+  const headingIndex = visible.findIndex(line => /Products\s+on\s+this\s+page/i.test(line));
   if (headingIndex < 0) return [];
   const section = [];
   for (const line of visible.slice(headingIndex + 1)) {
-    if (/^(?:Same\\s+Product\\s+in\\s+Other\\s+Stores|Similar\\s+products)$/i.test(line)) break;
-    if (/^No products extracted from this page yet\\.?$/i.test(line)) continue;
+    if (/^(?:Same\s+Product\s+in\s+Other\s+Stores|Similar\s+products)$/i.test(line)) break;
+    if (/^No products extracted from this page yet\.?$/i.test(line)) continue;
     section.push(line);
   }
 
@@ -85,12 +85,12 @@ function extractCatalogProductRecords(html, storeKey, catalogUrl) {
 
     // SnapFlyer places the current price first, followed by the old price and
     // discount. A unit-price line is not the offer price and is never selected.
-    if (/\\/\\s*100\\s*(?:g|ml)|\\/\\s*pc\\b/i.test(line)) continue;
+    if (/\/\s*100\s*(?:g|ml)|\/\s*pc\b/i.test(line)) continue;
     let title = line.slice(0, priceMatch.index).trim();
     if (!title) {
       for (let j = i - 1; j >= 0; j--) {
         const previous = section[j];
-        if (PRICE_RE.test(normalizeDigits(previous)) || /\\/\\s*100\\s*(?:g|ml)|\\/\\s*pc\\b/i.test(previous)) continue;
+        if (PRICE_RE.test(normalizeDigits(previous)) || /\/\s*100\s*(?:g|ml)|\/\s*pc\b/i.test(previous)) continue;
         title = previous.trim();
         break;
       }

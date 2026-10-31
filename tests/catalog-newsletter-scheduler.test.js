@@ -202,17 +202,17 @@ function makePipelinePool() {
       `<a href="/eg/downtown/offers/${slug}/1378"><span>${storeKey} flyer December 2026</span></a>`;
   };
   const second = await checkCatalogsOnce({ pool, telegram, chatIds: [-100123, -100456], fetchPage: fetchTwoNewCatalogs });
-  assert.equal(second.published, Object.keys(CATALOG_STORES).length * 2 * 2, "each new catalog should be delivered to both approved groups");
-  assert.equal(sent.length, Object.keys(CATALOG_STORES).length * 2 * 2);
+  assert.equal(second.published, Object.keys(CATALOG_STORES).length * 1 * 2, "only one catalog per store should be delivered to both approved groups");
+  assert.equal(sent.length, Object.keys(CATALOG_STORES).length * 1 * 2);
   assert.ok(sent.some(item => item.chatId === -100123));
   assert.ok(sent.some(item => item.chatId === -100456));
   assert.ok(sent.some(item => item.message.includes("November 2026")));
-  assert.ok(sent.some(item => item.message.includes("December 2026")));
+  assert.ok(!sent.some(item => item.message.includes("December 2026")), "the second edition for a store must not publish in the same poll");
 
   // Next poll sees the same two catalogs per store and must not publish duplicates.
   const third = await checkCatalogsOnce({ pool, telegram, chatId: -100123, fetchPage: fetchTwoNewCatalogs });
   assert.equal(third.published, 0);
-  assert.equal(sent.length, Object.keys(CATALOG_STORES).length * 2 * 2);
+  assert.equal(sent.length, Object.keys(CATALOG_STORES).length * 1 * 2);
 
   // If every source fails, no stale pending notice is published by this run.
   const allFail = await checkCatalogsOnce({

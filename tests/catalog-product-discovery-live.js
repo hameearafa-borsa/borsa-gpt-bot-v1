@@ -16,9 +16,26 @@ function decodeHtml(value) {
 
 function plainText(html) {
   return normalizeText(decodeHtml(String(html || "")
-    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
+    .replace(/<script\\b[\\s\\S]*?<\\/script>/gi, " ")
+    .replace(/<style\\b[\\s\\S]*?<\\/style>/gi, " ")
     .replace(/<[^>]*>/g, " ")));
+}
+
+function catalogTextLines(html) {
+  const text = decodeHtml(String(html || ""))
+    .replace(/<script\\b[\\s\\S]*?<\\/script>/gi, " ")
+    .replace(/<style\\b[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<(?:br|\\/p|\\/div|\\/li|\\/h[1-6]|\\/article|\\/section|\\/a|\\/span|\\/strong|\\/b)\\b[^>]*>/gi, "\\n")
+    .replace(/<[^>]*>/g, " ");
+  return text.split(/[\\r\\n]+/)
+    .map(line => normalizeText(line))
+    .filter(Boolean);
+}
+
+function normalizeDigits(value) {
+  return String(value || "").replace(/[٠-٩۰-۹]/g, digit =>
+    "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹".indexOf(digit) % 10
+  );
 }
 
 function extractStoreProductLinks(html, storeKey, baseUrl) {
@@ -45,32 +62,42 @@ function extractStoreProductLinks(html, storeKey, baseUrl) {
  */
 function extractCatalogProductRecords(html, storeKey, catalogUrl) {
   if (typeof html !== "string" || !catalogUrl) return [];
-  const heading = /Products\s+on\s+this\s+page/i.exec(html);
+  const heading = /Products\\s+on\\s+this\\s+page/i.exec(plainText(html));
   if (!heading) return [];
-  let section = html.slice(heading.index + heading[0].length);
-  const stop = /Same\s+Product\s+in\s+Other\s+Stores|Similar\s+products|<footer\b/i.exec(section);
-  if (stop) section = section.slice(0, stop.index);
 
-  const anchors = [...section.matchAll(/<a\b([^>]*?)href=["']([^"']+)["']([^>]*)>([\s\S]*?)<\/a>/gi)];
+  // Work from the visible text stream, not from assumptions about snippet-image
+  // anchors. SnapFlyer exposes the offer title and price as ordinary page text.
+  const visible = catalogTextLines(html);
+  const headingIndex = visible.findIndex(line => /Products\\s+on\\s+this\\s+page/i.test(line));
+  if (headingIndex < 0) return [];
+  const section = [];
+  for (const line of visible.slice(headingIndex + 1)) {
+    if (/^(?:Same\\s+Product\\s+in\\s+Other\\s+Stores|Similar\\s+products)$/i.test(line)) break;
+    if (/^No products extracted from this page yet\\.?$/i.test(line)) continue;
+    section.push(line);
+  }
+
   const products = [];
-  for (let i = 0; i < anchors.length; i++) {
-    const anchor = anchors[i];
-    const anchorHtml = anchor[0];
-    // Product cards begin with a linked image. Ignore navigation and text links.
-    if (!/<img\b/i.test(anchorHtml)) continue;
-    const href = decodeHtml(anchor[2]);
-    if (!/\/storage\/flyers\/[^"'?#]+\/snippets\/snippet_[a-z0-9]+\.(?:webp|png|jpe?g)(?:[?#]|$)/i.test(href)) continue;
-
-    const start = anchor.index + anchor[0].length;
-    const end = i + 1 < anchors.length ? anchors[i + 1].index : section.length;
-    const cardText = plainText(section.slice(start, end));
-    const priceMatch = PRICE_RE.exec(cardText);
+  for (let i = 0; i < section.length; i++) {
+    const line = normalizeDigits(section[i]);
+    const priceMatch = PRICE_RE.exec(line);
     if (!priceMatch) continue;
 
-    // Keep only the product title before the first current price. Old prices,
-    // discount percentages and unit-price text are deliberately not treated as offers.
-    const title = cardText.slice(0, priceMatch.index).replace(/[\s|•·—–-]+$/g, "").trim();
-    if (!title) continue;
+    // SnapFlyer places the current price first, followed by the old price and
+    // discount. A unit-price line is not the offer price and is never selected.
+    if (/\\/\\s*100\\s*(?:g|ml)|\\/\\s*pc\\b/i.test(line)) continue;
+    let title = line.slice(0, priceMatch.index).trim();
+    if (!title) {
+      for (let j = i - 1; j >= 0; j--) {
+        const previous = section[j];
+        if (PRICE_RE.test(normalizeDigits(previous)) || /\\/\\s*100\\s*(?:g|ml)|\\/\\s*pc\\b/i.test(previous)) continue;
+        title = previous.trim();
+        break;
+      }
+    }
+    title = title.replace(/^[|•·—–-]+|[|•·—–-]+$/g, "").trim();
+    if (!title || title.length < 3) continue;
+
     const candidate = {
       store: storeKey,
       title,

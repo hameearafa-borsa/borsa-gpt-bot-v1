@@ -1,0 +1,30 @@
+name: Live Metro Catalog OCR
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live-metro-page-ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out development branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install Arabic and English Tesseract OCR
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes tesseract-ocr tesseract-ocr-ara tesseract-ocr-eng
+          tesseract --version
+          tesseract --list-langs
+      - name: Install project dependencies
+        run: npm ci
+      - name: Run real Metro Market page OCR
+        run: node tests/catalog-page-ocr-live.js

@@ -13,8 +13,9 @@ const imageBase = "https://snapflyer.io/storage/flyers/eg/metro-market/2026-10/f
   console.log("Store: metro_market");
   console.log("Catalog: " + catalogUrl);
   console.log("Pages: " + pageNumbers.join(", "));
+  console.log("Per-page OCR timeout: 120 seconds");
 
-  const ocr = createImageOcr({ timeoutMs: 60000 });
+  const ocr = createImageOcr({ timeoutMs: 120000 });
   let pagesWithText = 0;
 
   for (const pageNumber of pageNumbers) {

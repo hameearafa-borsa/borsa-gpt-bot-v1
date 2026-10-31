@@ -441,7 +441,7 @@ const amazonOnly = await collectDealCandidates({
      otherCatalogCalls++;
      return {
        deals: [catalogDeal, { ...catalogDeal, title: "تايد جل للملابس 2.35 لتر" }],
-       errors: [],
+       errors: [{ source: "snapflyer_metro_market", reason: "fetch_failed" }],
        sourceStats: [
          { source: "snapflyer_kazyon", ok: true, stage: "validated", extractedCount: 2 },
          { source: "snapflyer_bim", ok: true, stage: "catalog_page_without_eligible_text_cards", extractedCount: 0 },

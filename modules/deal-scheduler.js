@@ -47,6 +47,7 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
   };
   let url = safeUrl(raw);
   if (!url) return { ok: false, reason: "host_not_allowed" };
+  const originalSnapFlyerUrl = url.hostname.toLowerCase() === "snapflyer.io" ? url : null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -69,6 +70,13 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
         catch { return { ok: false, reason: "redirect_host_not_allowed" }; }
         const next = safeUrl(resolvedLocation);
         if (!next) return { ok: false, reason: "redirect_host_not_allowed" };
+        // SnapFlyer offers intentionally point to the selected catalog page.
+        // Never let a redirect silently replace that destination with another
+        // retailer or a different catalog/store page.
+        if (originalSnapFlyerUrl && (
+          next.hostname.toLowerCase() !== originalSnapFlyerUrl.hostname.toLowerCase() ||
+          next.pathname.replace(/\\/$/, "").toLowerCase() !== originalSnapFlyerUrl.pathname.replace(/\\/$/, "").toLowerCase()
+        )) return { ok: false, reason: "snapflyer_catalog_redirect_changed" };
         url = next;
         continue;
       }

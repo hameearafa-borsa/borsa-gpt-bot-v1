@@ -38,14 +38,14 @@ async function fetchProductPage(url) {
 function extractSnippetImageUrls(html, baseUrl) {
   const candidates = new Set();
   const patterns = [
-    /(?:https?:\\/\\/snapflyer\\.io)?\\/storage\\/flyers\\/[^\\s"'<>\\\\]+/gi,
-    /(?:src|data-src|content)\\s*=\\s*["']([^"']+)["']/gi
+    /(?:https?:\/\/snapflyer\.io)?\/storage\/flyers\/[^\s"'<>\\]+/gi,
+    /(?:src|data-src|content)\s*=\s*["']([^"']+)["']/gi
   ];
   for (const pattern of patterns) {
     for (const match of html.matchAll(pattern)) {
       const raw = (match[1] || match[0]).replace(/&amp;/g, "&");
       const safe = safeCatalogPageImageUrl(raw, baseUrl);
-      if (safe && /\\/snippets\\//i.test(new URL(safe).pathname)) candidates.add(safe);
+      if (safe && /\/snippets\//i.test(new URL(safe).pathname)) candidates.add(safe);
     }
   }
   return [...candidates];
@@ -75,9 +75,9 @@ function extractSnippetImageUrls(html, baseUrl) {
     productId: "191790"
   });
 
-  console.log("\\n--- Individual product image OCR ---");
+  console.log("\n--- Individual product image OCR ---");
   console.log(result.text || "[NO TEXT RECOGNIZED]");
-  console.log("\\nOCR characters: " + result.characterCount);
+  console.log("\nOCR characters: " + result.characterCount);
   assert.ok(result.hasText, "OCR returned no text for the individual product image");
   console.log("LIVE SNAPFLYER INDIVIDUAL-PRODUCT OCR: OK (page metadata and image OCR succeeded)");
 })().catch(error => {

@@ -10,6 +10,9 @@ assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG 
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
 assert.match(dockerSource, /apk add --no-cache font-noto fontconfig/, "production image must install Arabic-capable fonts for SVG rasterization");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");
+assert.match(imageSource, /logoPlacement = "both"/, "combined group logo and watermark must be the default");
+assert.match(imageSource, /id="securityTexture"/, "rendered pages must include a subtle security background");
+assert.match(imageSource, /id="rowWatermark"/, "price rows must include a repeated light watermark");
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
 (async () => {
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: [{ product: "أ", package_sale_price: 10 }] }), /three_valid_products/);
@@ -33,6 +36,9 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.equal(png.toString(), "mock-png");
     assert.match(capturedSvg, /شركة اختبار/);
     assert.match(capturedSvg, /بورصة المنظفات/);
+    assert.match(capturedSvg, /data:image\\/(?:jpeg|png);base64,/, "default output must embed the group logo");
+    assert.match(capturedSvg, /url\\(#securityTexture\\)/, "default output must include the subtle security background");
+    assert.match(capturedSvg, /url\\(#rowWatermark\\)/, "default output must repeat the watermark across price rows");
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);

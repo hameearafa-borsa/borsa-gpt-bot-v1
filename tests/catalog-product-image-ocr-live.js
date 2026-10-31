@@ -76,6 +76,21 @@ function extractSnippetImageUrls(html, baseUrl) {
     expected.store.replace(/\s+/g, "\\s+"),
     "i"
   );
+  if (!storePattern.test(pageEvidence)) {
+    const rawStoreIndex = html.toLowerCase().indexOf("metro");
+    const evidenceStoreIndex = pageEvidence.toLowerCase().indexOf("metro");
+    console.error("Store validation diagnostics:");
+    console.error("HTML bytes: " + Buffer.byteLength(html, "utf8"));
+    console.error("Raw HTML contains 'Metro': " + (rawStoreIndex >= 0));
+    console.error("Normalized evidence contains 'Metro': " + (evidenceStoreIndex >= 0));
+    if (rawStoreIndex >= 0) {
+      console.error("Raw HTML context: " + html.slice(Math.max(0, rawStoreIndex - 180), rawStoreIndex + 260));
+    }
+    if (evidenceStoreIndex >= 0) {
+      console.error("Normalized evidence context: " + pageEvidence.slice(Math.max(0, evidenceStoreIndex - 180), evidenceStoreIndex + 260));
+    }
+    console.error("HTML title: " + (html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || "[missing]"));
+  }
   assert.ok(
     storePattern.test(pageEvidence),
     "Expected store name is missing from product-page text and HTML attributes"

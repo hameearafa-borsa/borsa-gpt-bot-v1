@@ -58,14 +58,14 @@ const regions = [
     });
 
     if (result.hasText) recognizedCards++;
-    console.log("\\n--- " + region.id + " | x=" + left + " y=" + top +
+    console.log("\n--- " + region.id + " | x=" + left + " y=" + top +
       " w=" + (right - left) + " h=" + (bottom - top) +
       " | chars=" + result.characterCount + " | PSM 6 ---");
     console.log(result.text || "[NO TEXT RECOGNIZED]");
   }
 
   assert.ok(recognizedCards > 0, "No text recognized in any complete offer-card crop");
-  console.log("\\nLIVE METRO COMPLETE OFFER-CARD OCR EXPERIMENT: OK (" +
+  console.log("\nLIVE METRO COMPLETE OFFER-CARD OCR EXPERIMENT: OK (" +
     recognizedCards + "/" + regions.length + " regions returned text)");
 })().catch(error => {
   console.error("LIVE METRO COMPLETE OFFER-CARD OCR EXPERIMENT: FAILED");

@@ -297,6 +297,7 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
   const deals = [], errors = [], sourceStats = [];
+  let snapFlyerSourceCount = 0;
   const storeCounters = new Map();
   const seen = new Set();
   for (let index = 0; index < results.length; index++) {
@@ -337,6 +338,7 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   if (edition === "other_sites" || edition === "all") {
     try {
       const catalogResult = await snapFlyerFetcher(snapFlyerOptions);
+      snapFlyerSourceCount = Number.isInteger(catalogResult.sourceCount) && catalogResult.sourceCount > 0 ? catalogResult.sourceCount : 0;
       for (const deal of catalogResult.deals || []) {
         const key = String(deal.url) + "|" + String(deal.title) + "|" + String(deal.price);
         if (!seen.has(key)) { seen.add(key); deals.push(deal); }
@@ -355,6 +357,6 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
     }
   }
   for (const task of tasks) if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
-  return { deals, errors, sourceStats, sourceSummary: [...storeCounters.values()], sourceCount: tasks.length + (edition === "other_sites" || edition === "all" ? 3 : 0) };
+  return { deals, errors, sourceStats, sourceSummary: [...storeCounters.values()], sourceCount: tasks.length + snapFlyerSourceCount };
 }
 module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, createExtractionCounters, getScraperKeys, fetchSearch, collectDealCandidates };

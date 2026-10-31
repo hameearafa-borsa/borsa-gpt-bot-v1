@@ -294,6 +294,22 @@ function makePipelinePool() {
   assert.equal(partialSent.length, 1, "the group that already received the notice must not get a duplicate");
 
 
+
+  // An older pending record must not beat the edition currently listed by that store.
+  const stalePool = makePipelinePool();
+  await stalePool.query(
+    "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
+    ["metro_market", "https://snapflyer.io/eg/downtown/offers/metro-market/1325", "fp-stale", "Metro stale edition", "محافظة القاهرة", null, "pending"]
+  );
+  const staleSent = [];
+  await checkCatalogsOnce({
+    pool: stalePool, telegram: { sendMessage: async (_id, message) => staleSent.push(message) },
+    chatId: -100123, fetchPage
+  });
+  assert.equal([...stalePool.rows.values()].find(row => row.fingerprint === "fp-stale")?.status, "ignored",
+    "a pending edition absent from the current store listing must be retired");
+  assert.equal(staleSent.some(message => message.includes("Metro stale edition")), false);
+
   // Expired pending snapshots are retained in the database but never sent.
   const expiredPool = makePipelinePool();
   await expiredPool.query(

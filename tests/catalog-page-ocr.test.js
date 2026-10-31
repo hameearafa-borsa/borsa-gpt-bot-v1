@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { safeCatalogPageImageUrl, extractCatalogPageImages, scanCatalogPageImages, persistCatalogOcrPages } = require("../modules/catalog-page-ocr");
+const { safeCatalogPageImageUrl, extractCatalogPageImages, fetchCatalogImage, scanCatalogPageImages, persistCatalogOcrPages } = require("../modules/catalog-page-ocr");
 
 const base = "https://snapflyer.io/eg/downtown/offers/metro-market/1489";
 assert.equal(safeCatalogPageImageUrl("/storage/flyers/eg/metro-market/2026-10/flyer_1489/pages/page_2.webp", base),
@@ -12,6 +12,24 @@ const html = '<img src="/storage/flyers/eg/metro-market/2026-10/flyer_1489/pages
 const images = extractCatalogPageImages(html, base);
 assert.deepEqual(images.map(x => x.pageNumber), [1, 2]);
 (async () => {
+  let cancelled = false;
+  const oversizedResponse = {
+    ok: true,
+    headers: { get: name => name === "content-type" ? "image/webp" : null },
+    body: { getReader: () => ({
+      reads: 0,
+      async read() { this.reads++; return this.reads === 1 ? { done: false, value: Buffer.alloc(4) } : this.reads === 2 ? { done: false, value: Buffer.alloc(4) } : { done: true }; },
+      async cancel() { cancelled = true; },
+      releaseLock() {}
+    }) }
+  };
+  await assert.rejects(
+    () => fetchCatalogImage("https://snapflyer.io/storage/flyers/eg/metro-market/page_1.webp", {
+      fetchImpl: async () => oversizedResponse, maxBytes: 5
+    }),
+    /catalog_image_too_large/
+  );
+  assert.equal(cancelled, true, "oversized image stream should be cancelled immediately");
   const fetched = [];
   const ocr = { extract: async (buffer, metadata) => {
     fetched.push({ buffer: buffer.toString(), metadata });

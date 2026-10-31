@@ -36,9 +36,9 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.equal(png.toString(), "mock-png");
     assert.match(capturedSvg, /شركة اختبار/);
     assert.match(capturedSvg, /بورصة المنظفات/);
-    assert.match(capturedSvg, /data:image\\/(?:jpeg|png);base64,/, "default output must embed the group logo");
-    assert.match(capturedSvg, /url\\(#securityTexture\\)/, "default output must include the subtle security background");
-    assert.match(capturedSvg, /url\\(#rowWatermark\\)/, "default output must repeat the watermark across price rows");
+    assert.match(capturedSvg, /data:image\/(?:jpeg|png);base64,/, "default output must embed the group logo");
+    assert.match(capturedSvg, /url\(#securityTexture\)/, "default output must include the subtle security background");
+    assert.match(capturedSvg, /url\(#rowWatermark\)/, "default output must repeat the watermark across price rows");
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);

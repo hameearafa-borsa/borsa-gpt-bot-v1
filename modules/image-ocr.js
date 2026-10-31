@@ -32,8 +32,10 @@ function recognizeWithTesseract(input, options = {}) {
   const executable = options.executable || process.env.TESSERACT_PATH || "tesseract";
   const language = options.language || process.env.OCR_LANGUAGES || "ara+eng";
   const timeoutMs = Number(options.timeoutMs || DEFAULT_TIMEOUT_MS);
+  const pageSegmentationMode = String(options.pageSegmentationMode ?? options.psm ?? "6");
+  if (!/^(?:3|6|11)$/.test(pageSegmentationMode)) throw new Error("ocr_invalid_page_segmentation_mode");
   return new Promise((resolve, reject) => {
-    const child = spawn(executable, ["stdin", "stdout", "-l", language, "--psm", "6"], {
+    const child = spawn(executable, ["stdin", "stdout", "-l", language, "--psm", pageSegmentationMode], {
       stdio: ["pipe", "pipe", "pipe"]
     });
     let stdout = "";

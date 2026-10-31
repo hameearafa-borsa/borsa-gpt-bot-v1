@@ -293,5 +293,23 @@ function makePipelinePool() {
   assert.equal(partialRetrySent.length, 0, "neither successful nor ambiguous group deliveries should be resent automatically");
   assert.equal(partialSent.length, 1, "the group that already received the notice must not get a duplicate");
 
+
+  // Expired pending snapshots are retained in the database but never sent.
+  const expiredPool = makePipelinePool();
+  await expiredPool.query(
+    "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
+    ["metro_market", "https://snapflyer.io/eg/downtown/offers/metro-market/1325", "fp-expired", "Metro October 2026", "محافظة القاهرة", "16 - 31 Oct", "pending"]
+  );
+  const expiredSent = [];
+  const expiredResult = await checkCatalogsOnce({
+    pool: expiredPool, telegram: { sendMessage: async (_id, message) => expiredSent.push(message) },
+    chatId: -100123, fetchPage,
+    now: new Date("2026-11-01T00:30:00.000Z")
+  });
+  assert.equal(expiredSent.some(message => message.includes("Metro October 2026")), false,
+    "an expired pending catalog must not be published");
+  assert.equal([...expiredPool.rows.values()].find(row => row.fingerprint === "fp-expired")?.status, "ignored",
+    "expired snapshots remain stored but leave the pending queue");
+
   console.log("catalog newsletter end-to-end mocked pipeline tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

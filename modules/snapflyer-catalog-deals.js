@@ -41,7 +41,14 @@ function parseEgpPrice(value) {
   return Number.isFinite(price) && price > 0 && price <= 200000 ? price : null;
 }
 
-function categoryOf(title) {\n  const text = String(title || "").toLowerCase();\n  if (/حفاض|بامبرز|مولفكس|مناديل|فاين|محارم|كلينكس|ورقي/.test(text)) return "paper";\n  if (/صابون|شامبو|كريم|غسول|مرطب|دوف|لوكس|بانتين|عناية|مكياج|تجميل|لوشن|سيروم|مزيل عرق|فازلين|نيفيا/.test(text)) return "personal_care";\n  return "detergent";\n}\n\nfunction extractSnapFlyerCatalogDeals(html, storeKey, catalogUrl) {
+function categoryOf(title) {
+  const text = String(title || "").toLowerCase();
+  if (/حفاض|بامبرز|مولفكس|مناديل|فاين|محارم|كلينكس|ورقي/.test(text)) return "paper";
+  if (/صابون|شامبو|كريم|غسول|مرطب|دوف|لوكس|بانتين|عناية|مكياج|تجميل|لوشن|سيروم|مزيل عرق|فازلين|نيفيا/.test(text)) return "personal_care";
+  return "detergent";
+}
+
+function extractSnapFlyerCatalogDeals(html, storeKey, catalogUrl) {
   if (typeof html !== "string" || !CATALOG_STORES[storeKey] || !catalogUrl) return [];
   const deals = [];
   for (const match of html.matchAll(CARD_RE)) {

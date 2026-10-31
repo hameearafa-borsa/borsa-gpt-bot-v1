@@ -79,9 +79,9 @@ function decodeHtml(value) {
 }
 
 function htmlText(value) {
-  return decodeHtml(String(value || "").replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style[\\s\\S]*?<\\/style>/gi, " ").replace(/<[^>]+>/g, " "))
-    .replace(/\\s+/g, " ").trim();
+  return decodeHtml(String(value || "").replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " "))
+    .replace(/\s+/g, " ").trim();
 }
 
 function escapeTelegramHtml(value) {
@@ -90,18 +90,18 @@ function escapeTelegramHtml(value) {
 }
 
 function extractProductOffer(html, product) {
-  const heading = html.match(/<h1\\b[^>]*>([\\s\\S]*?)<\\/h1>/i);
+  const heading = html.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
   if (!heading) throw new Error("product_title_not_found");
   const title = htmlText(heading[1]);
   const headingEnd = html.indexOf(heading[0]) + heading[0].length;
   const nearby = htmlText(html.slice(headingEnd, headingEnd + 12000));
-  const priceMatch = nearby.match(/(?:^|\\s)(\\d{1,5}(?:,\\d{3})*(?:\\.\\d{1,2})?)\\s*EGP\\b/i);
+  const priceMatch = nearby.match(/(?:^|\s)(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*EGP\b/i);
   if (!priceMatch) throw new Error("product_current_price_not_found");
   const storeEvidence = new RegExp('/stores/' + product.storeSlug + '(?:[/?#"]|$)', 'i').test(html);
   if (!storeEvidence) throw new Error("product_store_identity_not_found");
   const productUrl = new URL(product.url);
   if (productUrl.protocol !== "https:" || productUrl.hostname !== "snapflyer.io" ||
-      !/^\\/eg\\/[a-z0-9-]+\\/products\\/\\d+$/i.test(productUrl.pathname)) {
+      !/^\/eg\/[a-z0-9-]+\/products\/\d+$/i.test(productUrl.pathname)) {
     throw new Error("product_offer_url_not_allowed");
   }
   const price = priceMatch[1].replace(/,/g, "");

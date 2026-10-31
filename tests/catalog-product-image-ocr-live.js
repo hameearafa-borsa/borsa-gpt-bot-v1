@@ -89,7 +89,8 @@ function extractSnippetImageUrls(html, baseUrl) {
     if (evidenceStoreIndex >= 0) {
       console.error("Normalized evidence context: " + pageEvidence.slice(Math.max(0, evidenceStoreIndex - 180), evidenceStoreIndex + 260));
     }
-    console.error("HTML title: " + (html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || "[missing]"));
+    const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+    console.error("HTML title: " + (titleMatch?.[1] || "[missing]"));
   }
   assert.ok(
     storePattern.test(pageEvidence),

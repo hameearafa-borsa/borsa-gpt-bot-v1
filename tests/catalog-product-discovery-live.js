@@ -150,6 +150,20 @@ function extractCatalogProductRecords(html, storeKey, catalogUrl) {
         console.log("Raw HTML diagnostic excerpt: " +
           (marker >= 0 ? catalogHtml.slice(Math.max(0, marker - 250), marker + 900).replace(/\s+/g, " ") : "no product/price marker found"));
       }
+      const relevantLineIndexes = diagnosticLines
+        .map((line, index) => ({ line, index }))
+        .filter(item => /برسيل|persil|أوكسي|اوكسي|oxy|\\d{1,5}(?:,\\d{3})?\\.\\d{2}\\s*(?:EGP|جنيه)/i.test(normalizeDigits(item.line)));
+      console.log("Visible product/price line contexts: " + JSON.stringify(
+        relevantLineIndexes.slice(0, 30).map(item => ({
+          index: item.index,
+          lines: diagnosticLines.slice(Math.max(0, item.index - 2), Math.min(diagnosticLines.length, item.index + 3))
+        }))
+      ));
+      for (const markerPattern of [/برسيل|persil/i, /أوكسي|اوكسي|oxy/i, /194[.,]95/, /114[.,]95/]) {
+        const marker = catalogHtml.search(markerPattern);
+        if (marker >= 0) console.log("HTML marker excerpt (" + markerPattern + "): " +
+          catalogHtml.slice(Math.max(0, marker - 350), marker + 650).replace(/\\s+/g, " "));
+      }
       const products = extractCatalogProductRecords(catalogHtml, storeKey, edition.url);
       catalogCandidates += products.length;
       console.log("Relevant text product + price candidates: " + products.length);

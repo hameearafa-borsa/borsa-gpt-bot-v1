@@ -9,7 +9,7 @@ const products = [
   {
     id: "191790",
     url: "https://snapflyer.io/eg/downtown/products/191790",
-    title: "Metro Tissues 400 Sheets x 3 Packs",
+    title: "مناديل مترو 400 منديل × 3 قطع",
     currentPrice: "74.99",
     store: "Metro Market",
     pageNumber: 4,

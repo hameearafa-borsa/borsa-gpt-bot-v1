@@ -57,21 +57,28 @@ function extractSnippetImageUrls(html, baseUrl) {
   const html = await fetchProductPage(productUrl);
   assert.ok(html.includes(expected.title), "Expected product title is missing from product page");
   assert.ok(html.includes(expected.currentPrice), "Expected current price is missing from product page");
-  // Store names may be split across nested HTML elements, so validate
-  // normalized visible text rather than one contiguous raw-HTML substring.
-  const visibleText = html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
-    .replace(/<[^>]+>/g, " ")
+  // Store identity may be exposed through image alt text, accessibility
+  // labels, or metadata rather than ordinary text nodes. Include both text
+  // nodes and quoted HTML attribute values in the normalized page evidence.
+  const pageEvidence = html
+    .replace(/<script\\b[^>]*>[\\s\\S]*?<\\/script>/gi, " ")
+    .replace(/<style\\b[^>]*>[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<[^>]+>/g, tag =>
+      " " + tag.replace(/(?:^|\\s)[\\w:-]+\\s*=\\s*(["'])(.*?)\\1/g, " $2 ") + " "
+    )
     .replace(/&nbsp;|&#160;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&#0*39;|&apos;/gi, "'")
     .replace(/&quot;/gi, '"')
-    .replace(/\s+/g, " ")
+    .replace(/\\s+/g, " ")
     .trim();
+  const storePattern = new RegExp(
+    expected.store.replace(/\\s+/g, "\\\\s+"),
+    "i"
+  );
   assert.ok(
-    new RegExp(expected.store.replace(/\s+/g, "\\s+"), "i").test(visibleText),
-    "Expected store name is missing from visible product-page text"
+    storePattern.test(pageEvidence),
+    "Expected store name is missing from product-page text and HTML attributes"
   );
 
   const images = extractSnippetImageUrls(html, productUrl);

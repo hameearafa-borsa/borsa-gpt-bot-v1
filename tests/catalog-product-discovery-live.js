@@ -46,21 +46,32 @@ function extractCatalogSnippetCandidates(html, storeKey, catalogUrl) {
       if (/\/snippets\/snippet_/i.test(anchors[j][2])) { nextSnippetIndex = j; break; }
     }
     const end = nextSnippetIndex >= 0 ? anchors[nextSnippetIndex].index : Math.min(html.length, match.index + 5000);
-    const region = html.slice(match.index + match[0].length, end);
-    const text = normalizeText(decodeHtml(region));
-    const priceMatch = text.match(/(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*EGP/i);
-    const title = text.split(/\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?\s*EGP/i)[0]
-      .replace(/^(?:Image|صفحة\s*\d+)\s*/i, "").trim();
-    const candidate = {
-      store: storeKey,
-      title: title.slice(0, 180),
-      priceHint: priceMatch ? priceMatch[1].replace(/,/g, "") : null,
-      snippetUrl: imageUrl.href,
-      productUrl: null
+    const previousSnippet = [...anchors.slice(0, i)].reverse().find(anchor =>
+      /\/snippets\/snippet_/i.test(anchor[2]));
+    const beforeRegion = html.slice(previousSnippet ? previousSnippet.index + previousSnippet[0].length : Math.max(0, match.index - 5000), match.index);
+    const afterRegion = html.slice(match.index + match[0].length, end);
+
+    // SnapFlyer may place the title/price before or after the clickable image.
+    // Inspect both sides rather than assuming one fixed HTML order.
+    const parseCardText = region => {
+      const text = normalizeText(decodeHtml(region));
+      const priceMatch = text.match(/(\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?)\s*EGP/i);
+      if (!priceMatch) return null;
+      const title = text.split(/\d{1,5}(?:,\d{3})*(?:\.\d{1,2})?\s*EGP/i)[0]
+        .replace(/^(?:Image|صفحة\s*\d+)\s*/i, "").trim();
+      const candidate = {
+        store: storeKey,
+        title: title.slice(-180),
+        priceHint: priceMatch[1].replace(/,/g, ""),
+        snippetUrl: imageUrl.href,
+        productUrl: null
+      };
+      const productLink = region.match(/href=["'](https:\/\/snapflyer\.io\/eg\/[a-z0-9-]+\/products\/\d+)["']/i);
+      if (productLink) candidate.productUrl = productLink[1];
+      return candidate.title && isRelevantOffer(candidate) ? candidate : null;
     };
-    const productLink = region.match(/href=["'](https:\/\/snapflyer\.io\/eg\/[a-z0-9-]+\/products\/\d+)["']/i);
-    if (productLink) candidate.productUrl = productLink[1];
-    if (candidate.title && candidate.priceHint && isRelevantOffer(candidate)) results.push(candidate);
+    const candidate = parseCardText(afterRegion) || parseCardText(beforeRegion);
+    if (candidate) results.push(candidate);
   }
   return [...new Map(results.map(item => [item.snippetUrl, item])).values()];
 }

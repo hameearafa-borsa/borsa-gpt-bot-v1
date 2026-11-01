@@ -39,4 +39,15 @@ assert.match(index, /renderPriceListImages/, "long lists must use adaptive multi
 assert.match(index, /replyWithMediaGroup/, "multiple pages should be sent as a Telegram media group when supported");
 assert.match(index, /offset \+= 10/, "long price lists must be split into Telegram-safe media groups of at most 10 photos");
 assert.equal(pkg.dependencies.sharp, "^0.35.5", "sharp must be declared as a runtime dependency");
-console.log("price-list command configuration tests: OK");
+(async () => {
+  const fallback = await parser.extractList({ generate: async () => { throw new Error("simulated AI timeout"); } }, [
+    "قائمة أسعار شركة باهي", "شهر أكتوبر 2026",
+    "صابون دوش 60 جم * 48 قطعة 329.28",
+    "جل باهي 1 كجم 12 زجاجة 215.50",
+    "دوف 350 مل ق 121"
+  ].join("\\n"));
+  assert.equal(fallback.method, "deterministic", "AI timeout must preserve a valid local catalog parse");
+  assert.equal(fallback.items.length, 3);
+  assert.ok(fallback.items.every(row => row.decision === "accepted"));
+  console.log("price-list command configuration tests: OK");
+})().catch(error => { console.error(error); process.exitCode = 1; });

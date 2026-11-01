@@ -94,7 +94,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   }
   const baheyImageMeta = await sharp(baheyPng).metadata();
   assert.equal(baheyImageMeta.format, "png");
-  assert.equal(baheyImageMeta.width, 1200);
+  assert.equal(baheyImageMeta.width, 2880, "Bahey PNG should use high-resolution rasterization");
   console.log(`Bahey real-list parser and image test: OK (${baheyRows.length} rows, ${baheyImages.length} PNG page)`);
 
   console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);

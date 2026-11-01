@@ -64,7 +64,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     "باهي 105/115 جم*12 90.18",
     "باهي 185/185 جم*8 91.33",
     "باهي 2 كجم + 300 جم*4 473.34"
-  ].join("\\n");
+  ].join("\n");
   const baheyMetadata = parseListMetadata(baheyFixture);
   const baheyRows = deterministicList(baheyFixture);
   assert.equal(baheyMetadata.company, "شركة باهي");

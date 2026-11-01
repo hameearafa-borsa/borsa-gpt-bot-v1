@@ -3,6 +3,7 @@
 const { extractPriceCandidates, commercialMetrics, fingerprint, productIdentityKey, classifyObservationChange } = require("./price-intelligence");
 const { resolve } = require("../core/product-registry");
 const { identityKey } = require("./price-review");
+const { deterministicList, parseListMetadata } = require("./price-list");
 
 function isOwnMessage({ botUserId, fromId }) { return botUserId != null && String(botUserId) === String(fromId); }
 function isBulkPriceList(text) {
@@ -39,12 +40,51 @@ function isBulkPriceList(text) {
 function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage }) {
   return ["group", "supergroup"].includes(chatType) &&
     !isLogChannel && !isCommand && !ownMessage &&
-    Boolean(String(text || "").trim()) && !isBulkPriceList(text);
+    Boolean(String(text || "").trim());
 }
 
 async function observe({ pool, message, merchantId = null, registry }) {
   const text = message.text || message.caption || "";
-  const candidates = extractPriceCandidates(text);
+  const bulkCatalog = isBulkPriceList(text);
+  let candidates;
+  if (bulkCatalog) {
+    const metadata = parseListMetadata(text);
+    const catalogRows = deterministicList(text);
+    candidates = catalogRows.filter(item => item.decision !== "skipped").map(item => {
+      const wholesalePrice = item.wholesale_carton_price == null ? null : Number(item.wholesale_carton_price);
+      const basePrice = item.package_sale_price == null ? null : Number(item.package_sale_price);
+      const hasSeparateWholesale = wholesalePrice != null && Number.isFinite(wholesalePrice) && wholesalePrice > 0;
+      const selectedPrice = hasSeparateWholesale ? wholesalePrice : basePrice;
+      const declaredWholesale = /جملة|جمله/iu.test(metadata.priceType || "");
+      const unitPriceType = item.unit_price_type || null;
+      const ambiguous = item.decision !== "accepted" ||
+        (hasSeparateWholesale && basePrice != null && Math.abs(basePrice - wholesalePrice) > 0.0001);
+      return {
+        raw_line: item.raw_line,
+        company: item.company || metadata.company || null,
+        section: item.category || item.variant || null,
+        product_text: item.product || [item.company || metadata.company, item.category, item.weight_g ? String(item.weight_g) + " جم" : null].filter(Boolean).join(" "),
+        package_sale_price: selectedPrice,
+        listed_base_price: hasSeparateWholesale && basePrice !== wholesalePrice ? basePrice : null,
+        explicit_wholesale_label_price: hasSeparateWholesale ? wholesalePrice : null,
+        consumer_price: item.consumer_price ?? null,
+        price_kind: declaredWholesale || hasSeparateWholesale ? "wholesale" : "wholesale_candidate",
+        unit_price_type: unitPriceType,
+        weight_g: item.weight_g ?? null,
+        volume_ml: item.volume_ml ?? null,
+        pack_count: item.pack_count ?? null,
+        package_type: item.package_type ?? null,
+        confidence: Number(item.confidence) || 0.5,
+        needs_review: ambiguous || !unitPriceType,
+        trusted_catalog_row: item.decision === "accepted" && !ambiguous && Boolean(unitPriceType),
+        price_selection_reason: hasSeparateWholesale ? "deterministic_catalog_explicit_wholesale_column" :
+          declaredWholesale ? "deterministic_catalog_declared_wholesale" : "deterministic_catalog_price_unit_requires_review"
+      };
+    }).filter(row => Number.isFinite(Number(row.package_sale_price)) && Number(row.package_sale_price) > 0 &&
+      String(row.product_text || "").trim().length >= 2);
+  } else {
+    candidates = extractPriceCandidates(text);
+  }
   const accepted = [];
   const seen = new Set();
   // Infer the commercial context from the whole post, not only from the line
@@ -104,7 +144,7 @@ async function observe({ pool, message, merchantId = null, registry }) {
       : previouslyReviewed
         ? Math.max(candidate.confidence, 0.9)
         : Math.min(candidate.confidence, match.matched ? 0.98 : 0.45);
-    row.decision = row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
+    row.decision = !row.needs_review && row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
     const fp = fingerprint(row);
     if (seen.has(fp)) continue;
     seen.add(fp);

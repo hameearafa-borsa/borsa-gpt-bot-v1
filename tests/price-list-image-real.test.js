@@ -50,5 +50,50 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     assert.equal(m.channels, 4);
     assert.ok(png.length > 1000, "rasterized image should not be an empty/mock buffer");
   }
-  console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);
+
+  const baheyFixture = [
+    "/قائمة",
+    "أسعار شركة باهي",
+    "شهر نوفمبر 2026",
+    "الأسعار جملة",
+    "دوش 60 جم*48 329.28",
+    "دوش 110 جم*48 612.50",
+    "ريفولي 110 جم*48 660.52",
+    "ريفولي 165 جم*24 476.28",
+    "باهي 105/115 جم*20 152.26",
+    "باهي 105/115 جم*12 90.18",
+    "باهي 185/185 جم*8 91.33",
+    "باهي 2 كجم + 300 جم*4 473.34"
+  ].join("\\n");
+  const baheyMetadata = parseListMetadata(baheyFixture);
+  const baheyRows = deterministicList(baheyFixture);
+  assert.equal(baheyMetadata.company, "شركة باهي");
+  assert.equal(baheyMetadata.month, "نوفمبر 2026");
+  assert.equal(baheyMetadata.priceType, "أسعار جملة");
+  assert.equal(baheyRows.length, 8, "all eight transcribed Bahey source rows must be retained");
+  assert.ok(baheyRows.every(row => row.decision === "accepted"), "clear rows in the named wholesale list must be accepted");
+  assert.deepEqual(baheyRows.map(row => row.product), ["دوش", "دوش", "ريفولي", "ريفولي", "باهي", "باهي", "باهي", "باهي"],
+    "weight, carton count, and promotional extra weight must not leak into product identity");
+  assert.deepEqual(baheyRows.map(row => row.pack_count), [48, 48, 48, 24, 20, 12, 8, 4],
+    "compact *N carton counts must be parsed");
+  assert.equal(baheyRows[0].package_label, "60 جم · 48 قطعة");
+  assert.equal(baheyRows[4].package_label, "105/115 جم · 20 قطعة");
+  assert.equal(baheyRows[7].package_label, "2 كجم · 300 جم · 4 قطعة",
+    "promotional extra weight must remain visible in package details");
+  const baheyImages = await renderPriceListImages({
+    company: baheyMetadata.company, items: baheyRows,
+    watermark: "بورصة المنظفات لأصحاب المحلات", month: baheyMetadata.month,
+    priceType: baheyMetadata.priceType
+  });
+  assert.equal(baheyImages.length, 1, "Bahey visual QA should produce at least one image");
+  const baheyPng = baheyImages[0];
+  assert.deepEqual([...baheyPng.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  if (process.env.PRICE_LIST_VISUAL_QA_DIR) {
+    fs.writeFileSync(path.join(process.env.PRICE_LIST_VISUAL_QA_DIR, "bahey-page-1.png"), baheyPng);
+  }
+  const baheyImageMeta = await sharp(baheyPng).metadata();
+  assert.equal(baheyImageMeta.format, "png");
+  assert.equal(baheyImageMeta.width, 1200);
+  console.log(`Bahey real-list parser and image test: OK (${baheyRows.length} rows, ${baheyImages.length} PNG page)`);
+\n  console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

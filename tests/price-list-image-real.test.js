@@ -65,5 +65,53 @@ const { renderPriceListImages } = require("../modules/price-list-image");
       console.log(`Rendered ${placement} logo variant: ${variantImages.length} pages`);
     }
   }
+  // Bahey November 2026 is a second real-source fixture: exercise the deterministic
+  // parser and rasterizer together, including unmarked carton prices and bonus quantities.
+  const baheyFixture = fs.readFileSync(path.join(__dirname, "fixtures-bahey-nov-2026.txt"), "utf8");
+  const baheyMetadata = parseListMetadata(baheyFixture);
+  const baheyParsed = deterministicList(baheyFixture);
+  const baheyAccepted = baheyParsed.filter(row => row.decision === "accepted");
+  const baheyReview = baheyParsed.filter(row => row.decision === "review");
+  const baheySkipped = baheyParsed.filter(row => row.decision === "skipped");
+  assert.equal(baheyMetadata.company, "شركة باهي");
+  assert.equal(baheyMetadata.month, "نوفمبر 2026");
+  assert.equal(baheyMetadata.isCompanyCatalog, true);
+  assert.ok(baheyAccepted.length >= 40, "Bahey readable rows should be retained by deterministic parsing");
+  assert.ok(baheyAccepted.every(row => row.unit_price_type === "بالكرتونة"),
+    "unmarked rows in the named company catalog should be classified as carton prices");
+  for (const [raw, price] of [
+    ["باهى 185 جم 8 كيس 91.33", 91.33],
+    ["برايت 10 لتر 238.14", 238.14],
+    ["باهى 2ك + 300 جم * 4 كيس 473.34", 473.34],
+    ["باهى 1ك + 115جم   * 6 كيس 359.56", 359.56],
+    ["باهى 2.5كجم + 300 جم * 4 كيس 617.41", 617.41],
+    ["برايت مطهر للاسطح 10 لتر 199.43", 199.43]
+  ]) {
+    const row = baheyAccepted.find(item => item.raw_line === raw);
+    assert.ok(row, `Bahey row should be accepted: ${raw}`);
+    assert.equal(row.package_sale_price, price, `Bahey source price should be preserved: ${raw}`);
+  }
+  assert.ok(!baheyParsed.some(row => row.raw_line.includes("ريفولى شاور جل 45 جم * 50 كيس")),
+    "truncated source row without a price must not be invented or rendered");
+  assert.equal(baheyAccepted.length + baheyReview.length + baheySkipped.length, baheyParsed.length);
+  const baheyImages = await renderPriceListImages({
+    company: baheyMetadata.company, items: baheyAccepted,
+    watermark: "بورصة المنظفات لأصحاب المحلات", month: baheyMetadata.month,
+    priceType: baheyMetadata.priceType || "أسعار جملة"
+  });
+  assert.equal(baheyImages.length, Math.ceil(baheyAccepted.length / 16));
+  if (outputDir) {
+    const baheyDir = path.join(outputDir, "bahey-nov-2026");
+    fs.mkdirSync(baheyDir, { recursive: true });
+    for (const [index, png] of baheyImages.entries()) {
+      fs.writeFileSync(path.join(baheyDir, `bahey-nov-2026-page-${index + 1}.png`), png);
+      assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+      const meta = await sharp(png).metadata();
+      assert.equal(meta.format, "png");
+      assert.equal(meta.width, 1200);
+      assert.ok(png.length > 1000);
+    }
+  }
+  console.log(`Bahey visual QA: ${baheyAccepted.length} accepted, ${baheyReview.length} review, ${baheySkipped.length} skipped, ${baheyImages.length} real PNG pages`);
   console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

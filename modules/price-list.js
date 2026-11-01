@@ -219,8 +219,8 @@ function deterministicList(text) {
     const normalizedLine = normalizeArabic(line);
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
     const hasIdentity = metadata.company ? Boolean(displayProductPrefix && /[\u0600-\u06ff]/u.test(displayProductPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
-    const suspiciousCurrency = metadata.company && /\\b\\d+(?:[.,]\\d+)?\\s+ح(?:\\s|$)/u.test(toAsciiDigits(line));
-    const offerSignal = /(?:\\+|هدية|هديه|عرض|اشترِ|اشتري|مجانا)/iu.test(line);
+    const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
+    const offerSignal = /(?:\+|هدية|هديه|عرض|اشترِ|اشتري|مجانا)/iu.test(line);
     // Currency typos and promotional/bundle rows are never auto-approved from OCR alone.
     const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : (suspiciousCurrency || offerSignal || !unitPriceType) ? "review" : "accepted";
     out.push({

@@ -1,12 +1,15 @@
 "use strict";
 
 // Service panel only. Moderation and member-protection controls belong to GroupHelpBot.
+const { SERVICES } = require("../core/service-settings");
+
 const ROWS = [
   [{ text: "🧪 المساعد الكيميائي", callback_data: "panel:chemical" }, { text: "💰 مرصد الأسعار", callback_data: "panel:prices" }],
   [{ text: "📋 قوائم الشركات", callback_data: "panel:lists" }, { text: "🏪 قاعدة بيانات التجار", callback_data: "panel:merchants" }],
   [{ text: "🛍️ العروض والنشرات", callback_data: "panel:deals" }, { text: "🌦️ الطقس", callback_data: "panel:weather" }],
   [{ text: "📊 التقارير", callback_data: "panel:reports" }, { text: "🩺 صحة النظام", callback_data: "panel:health" }],
-  [{ text: "📄 تقارير التشخيص", callback_data: "panel:diagnostics" }]
+  [{ text: "📄 تقارير التشخيص", callback_data: "panel:diagnostics" }],
+  [{ text: "⚙️ إعدادات الخدمات", callback_data: "panel:settings" }, { text: "👥 المجموعات المعتمدة", callback_data: "panel:groups" }]
 ];
 
 function privatePanelKeyboard() {

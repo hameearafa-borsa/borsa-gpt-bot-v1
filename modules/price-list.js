@@ -9,16 +9,24 @@ const WHOLESALE_LABEL = /(?:جمله|جملة|سعر الجمله|سعر الج�
 
 function isListLike(text) {
   const s = toAsciiDigits(String(text || ""));
-  const lines = s.split(/\r?\n/).filter(Boolean).length;
+  const meaningfulLines = s.split(/\r?\n/).map(line => line.trim()).filter(line => line && !isNonPriceCommentLine(line));
+  const lines = meaningfulLines.length;
   const priceHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\s*(?:ج|جنيه|EGP)(?=\s|\||$)/gi) || []).length;
   const pipeCount = (s.match(/\|/g) || []).length;
   const numericHits = (s.match(/[0-9]+(?:[.,][0-9]+)?/g) || []).length;
   const quantityHits = (s.match(/[0-9]+(?:[.,][0-9]+)?\s*(?:كيلو|كجم|جرام|جم|liter|kg|ml|g|لتر|مل|ك|ل)(?=\s|[|•,;:]|$)/giu) || []).length;
-  // Some Telegram clients paste a whole catalog as one long line. Accept only
-  // strong multi-row evidence here; ordinary conversational price mentions stay excluded.
+  const pricedRows = meaningfulLines.filter(line =>
+    /[\u0600-\u06ff]/u.test(line) && getPriceTokens(line).length > 0
+  ).length;
+  // Some Telegram clients paste a whole catalog as one long line. For multiline
+  // input, accept three recognizable product-price rows, or two rows with an
+  // explicit catalog heading/table structure. Ordinary price chatter stays excluded.
   const singleLineCatalog = lines === 1 && numericHits >= 12 &&
     (priceHits >= 8 || pipeCount >= 8 || quantityHits >= 8);
-  return singleLineCatalog || (lines >= 5 && (priceHits >= 3 || pipeCount >= 3));
+  const hasListHeader = /(?:أسعار\s+شركة|الأسعار?\s*(?:بالقطعة|بالكرتونة|جملة|قطاعي)|قائمة\s+أسعار)/iu.test(s);
+  const multiLineCatalog = (lines >= 3 && pricedRows >= 3) ||
+    (lines >= 3 && pricedRows >= 2 && (hasListHeader || pipeCount >= 2));
+  return singleLineCatalog || multiLineCatalog;
 }
 function buildListPrompt(text) {
   return [

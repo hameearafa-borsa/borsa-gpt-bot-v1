@@ -72,7 +72,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.equal(baheyMetadata.priceType, "أسعار جملة");
   assert.equal(baheyRows.length, 8, "all eight transcribed Bahey source rows must be retained");
   assert.ok(baheyRows.every(row => row.decision === "accepted"), "clear rows in the named wholesale list must be accepted");
-  assert.deepEqual(baheyRows.map(row => row.product), ["دوش 60 جم", "دوش 110 جم", "ريفولي 110 جم", "ريفولي 165 جم", "باهي 105/115 جم", "باهي 105/115 جم", "باهي 185/185 جم", "باهي 2 كجم 300 جم"],
+  assert.deepEqual(baheyRows.map(row => row.product), ["دوش 60 جم", "دوش 110 جم", "ريفولي 110 جم", "ريفولي 165 جم", "باهي 105/115 جم", "باهي 105/115 جم", "باهي 185/185 جم", "باهي 2 كجم + 300 جم"],
     "package size must be part of product identity so different sizes are not merged");
   assert.deepEqual(baheyRows.map(row => row.pack_count), [48, 48, 48, 24, 20, 12, 8, 4],
     "compact *N carton counts must be parsed");

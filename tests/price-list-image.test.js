@@ -58,7 +58,7 @@ assert.equal(packageStatus({ product: "معجون 120 مل", volume_ml: 120, uni
       { product: "صابون 100جم", package_sale_price: 20, weight_g: 100, unit_price_type: "بالقطعة" },
       { product: "منظف", package_sale_price: 200, unit_price_type: "بالكرتونة" }
     ] });
-    assert.match(capturedSvg, /بالكرتونة/);
+    assert.doesNotMatch(capturedSvg, /بالكرتونة/, "carton prices stay implicit");
     assert.match(capturedSvg, /بالقطعة/, "per-piece prices must be explicitly labeled");
     const unileverLikeImages = await renderPriceListImages({
       company: "شركة اختبار",

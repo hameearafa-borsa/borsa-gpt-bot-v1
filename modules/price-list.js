@@ -62,6 +62,7 @@ function cleanProductName(line) {
     .replace(/(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$)/giu, " ")
     // The last bare numeric token in a price row is the listed price, not part of the product name.
     .replace(/\s+\d+(?:[.,]\d{1,2})?\s*$/u, " ")
+    .replace(/[\\s*×]+$/u, " ")
     .replace(/\s+/g, " ").trim();
 }
 function parseListMetadata(text) {

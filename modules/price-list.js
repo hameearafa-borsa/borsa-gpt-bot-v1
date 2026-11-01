@@ -60,6 +60,8 @@ function cleanProductName(line) {
     .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
     .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)/giu, " ")
     .replace(/(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$)/giu, " ")
+    // The last bare numeric token in a price row is the listed price, not part of the product name.
+    .replace(/\s+\d+(?:[.,]\d{1,2})?\s*$/u, " ")
     .replace(/\s+/g, " ").trim();
 }
 function parseListMetadata(text) {

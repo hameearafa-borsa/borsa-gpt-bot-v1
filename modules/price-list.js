@@ -145,15 +145,6 @@ function isNonPriceCommentLine(line) {
 function removeNonPriceComments(text) {
   return String(text || "").split(/\r?\n/).filter(line => !isNonPriceCommentLine(line)).join("\n");
 }
-function hasContextualCurrencyTypo(lines, index) {
-  // Treat a trailing ح as a likely typo for ج only when an immediately adjacent
-  // priced row uses an unambiguous Egyptian-pound marker. Never globally rewrite ح.
-  const currencyPrice = /\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)\s*$/iu;
-  return [index - 1, index + 1].some(neighborIndex =>
-    neighborIndex >= 0 && neighborIndex < lines.length &&
-    currencyPrice.test(toAsciiDigits(lines[neighborIndex]))
-  );
-}
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const metadata = parseListMetadata(text);
@@ -220,10 +211,10 @@ function deterministicList(text) {
     const normalizedLine = normalizeArabic(line);
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
     const hasIdentity = metadata.company ? Boolean(displayProductPrefix && /[\u0600-\u06ff]/u.test(displayProductPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
-    const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
     const offerSignal = /(?:هدية|هديه|عرض|اشترِ|اشتري|مجانا|\+[^\n]*(?:بلسم|صابون))/iu.test(line);
-    // Currency typos and promotional/bundle rows are never auto-approved from OCR alone.
-    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : (suspiciousCurrency || offerSignal || !unitPriceType) ? "review" : "accepted";
+    // The catalog uses Egyptian pounds; a trailing ح is a common keyboard typo for ج.
+    // Review ambiguous bundles/promotions, not this harmless currency-letter variation.
+    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : (offerSignal || !unitPriceType) ? "review" : "accepted";
     out.push({
       raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company, package_label: packageLabel,
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,

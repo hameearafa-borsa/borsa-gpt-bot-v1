@@ -14,7 +14,8 @@ const { persistPriceList } = require("../modules/price-list-persistence");
   assert.equal(metadata.month, "أكتوبر 2026");
   assert.equal(metadata.priceType, "أسعار جملة");
   assert.equal(rows.length, 66);
-  assert.equal(rows.filter(row => row.decision === "accepted").length, 66);
+  assert.equal(rows.filter(row => row.decision === "accepted").length, 61);
+  assert.equal(rows.filter(row => row.decision === "review").length, 5);
 
   const queries = [];
   const client = {
@@ -30,11 +31,11 @@ const { persistPriceList } = require("../modules/price-list-persistence");
     parsedList: metadata,
     rows
   });
-  assert.deepEqual(result, { runId: 1234, extracted: 66, accepted: 66, referenceKind: "wholesale" });
-  assert.equal(queries.length, 133, "one run + 66 item rows + 66 accepted reference rows");
+  assert.deepEqual(result, { runId: 1234, extracted: 66, accepted: 61, referenceKind: "wholesale" });
+  assert.equal(queries.length, 128, "one run + 66 item rows + 61 accepted reference rows");
   assert.equal(queries.filter(q => q.sql.includes("INSERT INTO price_list_items")).length, 66);
   const references = queries.filter(q => q.sql.includes("INSERT INTO price_reference_observations"));
-  assert.equal(references.length, 66);
+  assert.equal(references.length, 61);
   assert.ok(references.every(q => q.params[3] === "أسعار جملة" && q.params[4] === "wholesale" && q.sql.includes("'accepted'")));
   assert.ok(references.some(q => /سيجنال 120مل/.test(q.params[16]) && q.params[13] === "بالقطعة"),
     "per-piece toothpaste row and its raw source line must be persisted");
@@ -44,7 +45,7 @@ const { persistPriceList } = require("../modules/price-list-persistence");
     "promotional raw line must survive persistence so comparison logic can reject unsafe base-price matching");
   assert.ok(!queries.some(q => /INSERT INTO price_observations/.test(q.sql)),
     "official company catalogs must not be persisted as live group sightings");
-  console.log("UNILEVER PRICE-LIST REFERENCE PERSISTENCE TEST: OK (66 reference rows, 66 catalog rows)");
+  console.log("UNILEVER PRICE-LIST REFERENCE PERSISTENCE TEST: OK (61 trusted references, 66 catalog rows including 5 review rows)");
 })().catch(error => {
   console.error(error);
   process.exitCode = 1;

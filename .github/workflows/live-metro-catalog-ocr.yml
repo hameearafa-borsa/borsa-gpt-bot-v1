@@ -26,5 +26,7 @@ jobs:
           tesseract --list-langs
       - name: Install project dependencies
         run: npm ci
-      - name: Run real Metro detergent catalog OCR
+      - name: Run real Metro Market page OCR
+        run: node tests/catalog-page-ocr-live.js
+      - name: Run real Metro detergent catalog crop OCR
         run: node tests/catalog-page-ocr-crops-live.js

@@ -289,6 +289,34 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(uncertain.savedRows[0].row.confidence < 0.8);
   assert.equal(savedQueries.length, 7);
 
+  // Deterministic Unilever catalogs must flow into the live observation store,
+  // retaining per-piece/carton unit semantics instead of being dropped as bulk.
+  const unileverMonitorParams = [];
+  const unileverMonitorPool = { async query(sql, params) {
+    if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+    if (sql.includes("INSERT INTO price_observations")) { unileverMonitorParams.push(params); return { rows: [{ id: 300 + unileverMonitorParams.length }], rowCount: 1 }; }
+    throw new Error("unexpected Unilever catalog query");
+  } };
+  const unileverObserved = await observe({ pool: unileverMonitorPool, message: { chatId: -100123, messageId: 470, text: unileverList }, registry });
+  assert.equal(unileverObserved.saved, 66, "all 66 deterministic Unilever rows must reach live price observation persistence");
+  assert.ok(unileverObserved.savedRows.every(item => item.row.decision === "accepted"), "clear unit-labelled or declared-carton rows should be accepted");
+  assert.ok(unileverObserved.savedRows.some(item => item.row.unit_price_type === "بالقطعة"), "per-piece rows must remain distinguishable");
+  assert.ok(unileverObserved.savedRows.some(item => item.row.unit_price_type === "بالكرتونة"), "carton rows must remain distinguishable");
+  assert.ok(unileverMonitorParams.every(params => params[13] === "accepted"), "accepted catalog observations must be persisted as accepted");
+
+  // Known identity memory must never override a deterministic ambiguity flag.
+  const ambiguousKnownPool = { async query(sql) {
+    if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+    if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+    if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 471 }], rowCount: 1 };
+    throw new Error("unexpected known ambiguous product query");
+  } };
+  const ambiguousKnown = await observe({ pool: ambiguousKnownPool, message: { chatId: -100123, messageId: 471, text: "منظف جديد 500 جم 22 ج\nمنظف جديد 500 جم جملة 24 ج" }, registry: [] });
+  assert.ok(ambiguousKnown.savedRows.every(item => item.row.needs_review), "conflicting or inferred price context must retain needs_review");
+  assert.ok(ambiguousKnown.savedRows.every(item => item.row.decision === "pending"), "reviewer memory must not auto-accept a row flagged for review");
   const noDb = await observe({ message: { text: base.text }, registry });
   assert.equal(noDb.saved, 0);
   assert.equal(noDb.silent, true);

@@ -39,14 +39,14 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     fs.mkdirSync(process.env.PRICE_LIST_VISUAL_QA_DIR, { recursive: true });
     images.forEach((png, index) => fs.writeFileSync(path.join(process.env.PRICE_LIST_VISUAL_QA_DIR, `unilever-page-${index + 1}.png`), png));
   }
-  assert.equal(images.length, Math.ceil(accepted.length / 18), "long lists should be split into readable pages");
+  assert.equal(images.length, Math.ceil(accepted.length / 30), "long lists should be split into readable pages");
   for (const png of images) {
     assert.ok(Buffer.isBuffer(png));
     assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "output must have a real PNG signature");
     const m = await sharp(png).metadata();
     assert.equal(m.format, "png");
-    assert.equal(m.width, 1200);
-    assert.ok(m.height >= 250 && m.height <= 1200, "page height should remain readable and shareable");
+    assert.equal(m.width, 2880, "144 DPI output should provide a crisp high-resolution image");
+    assert.ok(m.height >= 1200 && m.height <= 4200, "page height should remain readable and shareable");
     assert.equal(m.channels, 4);
     assert.ok(png.length > 1000, "rasterized image should not be an empty/mock buffer");
   }

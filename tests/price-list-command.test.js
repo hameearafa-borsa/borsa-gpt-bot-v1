@@ -18,7 +18,7 @@ const rows = parser.deterministicList([
   "جل باهي 1 كجم 12 زجاجة 215.50",
   "دوف 350 مل ق 121",
   "مسحوق باهي 2 كجم + 300 جم هدية 4 كيس 468.83"
-].join("\\n"));
+].join("\n"));
 assert.equal(rows.length, 4);
 assert.equal(rows[0].package_sale_price, 329.28);
 assert.equal(rows[0].pack_count, 48);

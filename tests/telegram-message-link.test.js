@@ -4,6 +4,8 @@ const { parseMessageLink, findCachedLinkedMessage } = require("../core/telegram-
 assert.deepEqual(parseMessageLink("https://t.me/c/123456/789"), { chatId: -100123456, messageId: 789 });
 assert.deepEqual(parseMessageLink("https://t.me/example_channel/789"), { username: "@example_channel", messageId: 789 });
 assert.deepEqual(parseMessageLink("https://t.me/example_channel/789?single"), { username: "@example_channel", messageId: 789 });
+assert.deepEqual(parseMessageLink("https://t.me/s/example_channel/789"), { username: "@example_channel", messageId: 789 },
+  "public Telegram /s/ share links should resolve to the underlying channel post");
 assert.equal(parseMessageLink("https://t.me/not-a-message"), null);
 assert.equal(parseMessageLink("https://t.me/example_channel/999999999999999999999"), null);
 assert.equal(parseMessageLink("https://t.me/c/0/789"), null);

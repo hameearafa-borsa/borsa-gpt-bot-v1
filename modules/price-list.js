@@ -86,7 +86,7 @@ function extractPackageLabel(line) {
     .map(match => match[0].replace(/\s+/g, " ").trim());
   const count = ascii.match(/(?:[*×x]\s*(\d+)|(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu);
   const countValue = count ? Number(count[1] || count[2]) : null;
-  return [...sizes, ...(countValue > 0 ? [\${countValue} قطعة] : [])].join(" · ");
+  return [...sizes, ...(countValue > 0 ? [String(countValue) + " قطعة"] : [])].join(" · ");
 }
 function cleanExplicitProductLine(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");

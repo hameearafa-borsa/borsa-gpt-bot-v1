@@ -71,8 +71,8 @@ assert.equal(packageStatus({ product: "معجون 120 مل", volume_ml: 120, uni
         unit_price_type: i % 3 === 0 ? "بالقطعة" : "بالكرتونة"
       }))
     });
-    assert.equal(unileverLikeImages.length, 4,
-      "66 products should render as four images at the default 18 products per image");
+    assert.equal(unileverLikeImages.length, 3,
+      "66 products should render as three taller images at 30 products per image");
     assert.match(capturedSvg, /صفحة 3 من 3/,
       "the final image should identify itself as page 3 of 3");
     await assert.doesNotReject(() => renderPriceListImages({

@@ -45,7 +45,7 @@ assert.equal(packageStatus({ product: "معجون 120 مل", volume_ml: 120, uni
     assert.match(capturedSvg, /<image href=/, "logo must be rendered as an image asset");
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
-    assert.match(capturedSvg, /ج\.م 10/);
+    assert.match(capturedSvg, /\u200eج\.م 10\u200e/, "currency must render before the amount in visual left-to-right order");
     assert.doesNotMatch(capturedSvg, /بالكرتونة/, "carton pricing is implicit and should not be printed");
     assert.match(capturedSvg, /48 قطعة/, "the image must show carton count only");
     assert.doesNotMatch(capturedSvg, /110 جم/, "package size belongs in the product name, not the details column");

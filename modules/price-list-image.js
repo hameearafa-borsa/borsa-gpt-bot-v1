@@ -7,7 +7,7 @@ function escapeXml(value) {
 }
 function priceText(value) {
   const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? `ج.م ${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
+  return Number.isFinite(n) && n > 0 ? `\u200eج.م ${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}\u200e` : "—";
 }
 function splitPages(rows, pageSize) {
   const pages = [];

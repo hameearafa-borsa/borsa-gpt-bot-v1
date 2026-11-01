@@ -80,6 +80,14 @@ function parseListMetadata(text) {
   }
   return { company, month, priceType };
 }
+function extractPackageLabel(line) {
+  const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
+  const sizes = [...ascii.matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu)]
+    .map(match => match[0].replace(/\s+/g, " ").trim());
+  const count = ascii.match(/(?:[*×x]\s*(\d+)|(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu);
+  const countValue = count ? Number(count[1] || count[2]) : null;
+  return [...sizes, ...(countValue > 0 ? [\${countValue} قطعة] : [])].join(" · ");
+}
 function cleanExplicitProductLine(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
   const token = [...ascii.matchAll(PRICE_TOKEN)].find(m => {
@@ -87,12 +95,16 @@ function cleanExplicitProductLine(line) {
     const tail = ascii.slice(end);
     return !/^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
   });
-  if (!token) return cleanProductName(line);
-  return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
+  const withoutPrice = token
+    ? ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length)
+    : ascii;
+  return withoutPrice
+    .replace(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
+    .replace(/(?:[*×x]\s*\d+|(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/giu, " ")
     .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
-    // Keep carton promotion wording in raw_line, not in the normalized product identity.
     .replace(/\s+(?:العرض|عرض)\s+على\s+(?:الكرتونة|الكرتونه)[\s\S]*$/iu, "")
-    .replace(/\s+/g, " ").trim().replace(/^[\s•*._-]+/, "");
+    .replace(/[+*×/]+/gu, " ")
+    .replace(/\s+/g, " ").trim().replace(/^[\s•._-]+/, "");
 }
 function detectUnitPriceHeading(line) {
   const s = normalizeArabic(line);
@@ -160,8 +172,9 @@ function deterministicList(text) {
     if (!priceTokens.length) continue;
     const weightMatch = toAsciiDigits(line).match(WEIGHT_TOKEN);
     const quantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
-    const countMatch = toAsciiDigits(line).match(/(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$)/i);
-    const packCount = countMatch ? Number(countMatch[1]) : null;
+    const countMatch = toAsciiDigits(line).match(/(?:[*×x]\s*(\d+)|(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu);
+    const packCount = countMatch ? Number(countMatch[1] || countMatch[2]) : null;
+    const packageLabel = extractPackageLabel(line);
     const wholesaleIndex = line.search(WHOLESALE_LABEL);
     const consumerIndex = line.search(RETAIL_LABEL);
     const afterWholesale = wholesaleIndex >= 0 ? getPriceTokens(line.slice(wholesaleIndex + line.slice(wholesaleIndex).match(WHOLESALE_LABEL)[0].length))[0]?.value ?? null : null;
@@ -191,7 +204,7 @@ function deterministicList(text) {
     const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
     const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";
     out.push({
-      raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company,
+      raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company, package_label: packageLabel,
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
       pack_count: packCount, package_sale_price: packagePrice, unit_price_type: unitPriceType,
       wholesale_carton_price: afterWholesale, consumer_price: afterConsumer,

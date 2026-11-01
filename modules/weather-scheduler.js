@@ -2,6 +2,7 @@
 
 const { partsAt, dateKeyAt } = require("../core/cairo-time");
 const { getDailyWeatherReport } = require("./weather");
+const { isServiceEnabled } = require("../core/service-settings");
 
 const WEATHER_SLOTS = Object.freeze([{ hour: 11, minute: 0, key: "11" }, { hour: 20, minute: 0, key: "20" }]);
 const GRACE_MINUTES = 5;
@@ -40,6 +41,7 @@ async function reservePublication(pool, date, slotKey, chatId) {
 
 async function publishWeatherSlot({ pool, telegram, now = new Date(), getReport = getDailyWeatherReport, onError = async () => {} }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
+  if (!(await isServiceEnabled(pool, "weather"))) return { skipped: true, reason: "service_disabled" };
   const slot = currentWeatherSlot(now);
   if (!slot) return { skipped: true, reason: "outside_weather_window" };
 
@@ -53,7 +55,10 @@ async function publishWeatherSlot({ pool, telegram, now = new Date(), getReport 
     }
     const groups = await client.query(`SELECT chat_id FROM authorized_chats
       WHERE active=TRUE AND chat_type IN ('group','supergroup') ORDER BY chat_id`);
-    if (!groups.rows?.length) return { skipped: true, reason: "no_active_authorized_groups" };
+    const enabledGroups = [];
+    for (const group of (groups.rows || [])) if (await isServiceEnabled(client, "weather", Number(group.chat_id))) enabledGroups.push(group);
+    groups.rows = enabledGroups;
+    if (!groups.rows.length) return { skipped: true, reason: "no_active_authorized_groups" };
 
     // Fetch and validate the complete four-city bulletin before reserving or sending
     // anything, so a failed city can never produce a partial group post.

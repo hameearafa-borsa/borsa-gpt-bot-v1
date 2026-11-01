@@ -71,6 +71,7 @@ const {
   let duplicateFetches = 0;
   const alreadyPublishedPool = {
     async query(sql) {
+      if (sql.includes("FROM service_settings")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT chat_id FROM authorized_chats")) {
         return { rows: [{ chat_id: "-1001" }, { chat_id: "-1002" }], rowCount: 2 };
       }

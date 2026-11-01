@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const {
-  CATALOG_REGION, CATALOG_STORES, safeCatalogUrl, catalogUrlBelongsToStore, extractCatalogs, isRelevantOffer, changedCatalogs, formatCatalogNotice, persistCatalogSnapshots, listPendingCatalogSnapshots, markCatalogSnapshot
+  CATALOG_REGION, CATALOG_STORES, safeCatalogUrl, catalogUrlBelongsToStore, extractCatalogs, parseCatalogDateRange, isCatalogExpired, selectOneCatalogPerStore, isRelevantOffer, changedCatalogs, formatCatalogNotice, persistCatalogSnapshots, listPendingCatalogSnapshots, markCatalogSnapshot
 } = require("../modules/catalog-newsletter");
 
 assert.deepEqual(Object.keys(CATALOG_STORES).sort(), ["bim", "kazyon", "metro_market"]);
@@ -63,6 +63,29 @@ const meaningfulTitleChange = extractCatalogs(
 assert.notEqual(countdownVariant[0].fingerprint, meaningfulTitleChange[0].fingerprint,
   "meaningful title changes must still be detected when a catalog URL is reused");
 assert.equal(extractCatalogs(html, "unknown").length, 0);
+
+const cairoOct31 = new Date("2026-10-31T12:00:00.000Z");
+assert.deepEqual(parseCatalogDateRange("22 Oct - 1 Nov", cairoOct31), {
+  startDate: "2026-10-22", endDate: "2026-11-01"
+});
+assert.deepEqual(parseCatalogDateRange("16 - 31 Oct", cairoOct31), {
+  startDate: "2026-10-16", endDate: "2026-10-31"
+});
+assert.equal(isCatalogExpired({ displayed_date_range: "16 - 31 Oct" }, cairoOct31), false,
+  "the last validity date remains inclusive in Cairo");
+assert.equal(isCatalogExpired({ displayed_date_range: "16 - 31 Oct" }, new Date("2026-10-31T22:30:00.000Z")), true,
+  "the catalog expires after the Cairo local date has rolled over");
+assert.equal(isCatalogExpired({ displayed_date_range: "22 Oct - 1 Nov" }, cairoOct31), false);
+assert.equal(parseCatalogDateRange("Ends today", cairoOct31), null,
+  "non-date phrases are not treated as a reliable validity range");
+const editions = selectOneCatalogPerStore([
+  { store: "metro_market", id: 1325, displayed_date_range: "16 - 31 Oct" },
+  { store: "metro_market", id: 1489, displayed_date_range: "22 Oct - 1 Nov" },
+  { store: "bim", id: 77, displayed_date_range: null }
+], cairoOct31);
+assert.deepEqual(editions.map(x => x.id), [1489, 77],
+  "choose the valid latest Metro edition and preserve a no-date fallback for BIM");
+
 assert.equal(isRelevantOffer({ title: "Clorox laundry bleach", category: "groceries" }), true);
 assert.equal(isRelevantOffer({ title: "Women's cotton dress", category: "fashion" }), false);
 assert.equal(isRelevantOffer({ title: "Generic item", category: "personal_care" }), true);

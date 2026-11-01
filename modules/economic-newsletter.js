@@ -2,6 +2,7 @@
 
 const https = require("node:https");
 const { partsAt, dateKeyAt } = require("../core/cairo-time");
+const { isServiceEnabled } = require("../core/service-settings");
 
 const CAIRO_ZONE = "Africa/Cairo";
 const DAILY_HOUR = 10;
@@ -180,6 +181,7 @@ async function reserveEconomicPublication(pool, date, chatId) {
 
 async function publishEconomicSlot({ pool, telegram, now = new Date(), getPrices = getEconomicPrices, onError = async () => {} }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
+  if (!(await isServiceEnabled(pool, "economic"))) return { skipped: true, reason: "service_disabled" };
   const slot = currentEconomicSlot(now);
   if (!slot) return { skipped: true, reason: "outside_economic_window" };
   const client = typeof pool.connect === "function" ? await pool.connect() : pool;
@@ -192,7 +194,10 @@ async function publishEconomicSlot({ pool, telegram, now = new Date(), getPrices
     }
     const groups = await client.query(`SELECT chat_id FROM authorized_chats
       WHERE active=TRUE AND chat_type IN ('group','supergroup') ORDER BY chat_id`);
-    if (!groups.rows?.length) return { skipped: true, reason: "no_active_authorized_groups" };
+    const enabledGroups = [];
+    for (const group of (groups.rows || [])) if (await isServiceEnabled(client, "economic", Number(group.chat_id))) enabledGroups.push(group);
+    groups.rows = enabledGroups;
+    if (!groups.rows.length) return { skipped: true, reason: "no_active_authorized_groups" };
 
     // A second Railway instance can enter the same time window after the first
     // instance has already published. Check the durable per-group reservations

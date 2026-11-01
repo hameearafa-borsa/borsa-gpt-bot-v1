@@ -40,19 +40,20 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
       { product: "A".repeat(149) + "&end", package_sale_price: 40, volume_ml: 350, unit_price_type: "بالكرتونة" }
     ] });
     assert.equal(png.toString(), "mock-png");
-    assert.ok(Array.from(capturedSvg).some(ch => { const cp = ch.codePointAt(0); return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF); }), "Arabic company heading must be shaped before SVG rendering");
-    assert.ok(capturedSvg.includes(shapeArabicForSvg("بورصة المنظفات")), "watermark must use shaped Arabic text");
+    assert.ok(capturedSvg.includes("قائمة أسعار"), "Arabic company heading must remain in logical Unicode order");
+    assert.match(capturedSvg, /unicode-bidi="plaintext"/, "SVG should delegate bidirectional text layout to the renderer");
+    assert.ok(capturedSvg.includes("بورصة المنظفات"), "watermark must use shaped Arabic text");
     assert.match(capturedSvg, /data:image\/(?:jpeg|png);base64,/, "default output must embed the group logo");
     assert.match(capturedSvg, /url\(#securityTexture\)/, "default output must include the subtle security background");
     assert.match(capturedSvg, /url\(#rowWatermark\)/, "default output must repeat the watermark across price rows");
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
-    assert.ok(capturedSvg.includes("10") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "price currency label should be shaped while digits remain intact");
-    assert.ok(capturedSvg.includes(shapeArabicForSvg("بالكرتونة")), "carton price type should be visible with shaped Arabic");
-    assert.ok(capturedSvg.includes(shapeArabicForSvg("العبوة / السعة")), "package size should have its own labeled middle column");
-    assert.ok(capturedSvg.includes(shapeArabicForSvg("الصنف")), "product name should have a separate column heading");
-    assert.ok(capturedSvg.includes(shapeArabicForSvg("السعر")), "price should have a separate column heading");
-    assert.ok(capturedSvg.includes("350") && capturedSvg.includes(shapeArabicForSvg("مل")), "package capacity should preserve its number and shape its Arabic unit");
+    assert.ok(capturedSvg.includes("10") && capturedSvg.includes("ج.م"), "price currency label should be shaped while digits remain intact");
+    assert.ok(capturedSvg.includes("بالكرتونة"), "carton price type should be visible with shaped Arabic");
+    assert.ok(capturedSvg.includes("العبوة / السعة"), "package size should have its own labeled middle column");
+    assert.ok(capturedSvg.includes("الصنف"), "product name should have a separate column heading");
+    assert.ok(capturedSvg.includes("السعر"), "price should have a separate column heading");
+    assert.ok(capturedSvg.includes("350") && capturedSvg.includes("مل"), "package capacity should preserve its number and shape its Arabic unit");
     // The image is a company-list view: render only package_sale_price.
     // Separate wholesale/consumer/list prices remain stored for comparison,
     // and must never silently replace or be mixed into the displayed list price.
@@ -78,7 +79,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     });
     assert.equal(unileverLikeImages.length, 5,
       "66 products should render as five images at the default 16 products per image");
-    assert.ok(capturedSvg.includes(shapeArabicForSvg("صفحة 5 من 5")),
+    assert.ok(capturedSvg.includes("صفحة 5 من 5"),
       "the final image should identify itself as page 5 of 5");
     await assert.doesNotReject(() => renderPriceListImages({
       company: "شركة اختبار",

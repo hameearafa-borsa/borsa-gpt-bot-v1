@@ -7,7 +7,7 @@ function escapeXml(value) {
 }
 function priceText(value) {
   const n = Number(value);
-  return Number.isFinite(n) && n > 0 ? `${n.toLocaleString("en-US", { maximumFractionDigits: 2 })} ج.م` : "—";
+  return Number.isFinite(n) && n > 0 ? `ج.م ${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
 }
 function splitPages(rows, pageSize) {
   const pages = [];
@@ -15,12 +15,8 @@ function splitPages(rows, pageSize) {
   return pages;
 }
 function packageStatus(item) {
-  const unit = item.unit_price_type === "بالقطعة" ? "بالقطعة" :
-    item.unit_price_type === "بالكرتونة" ? "بالكرتونة" : "نوع السعر غير محدد";
-  const size = Number(item.weight_g) > 0 ? String(item.weight_g) + " جم" :
-    Number(item.volume_ml) > 0 ? String(item.volume_ml) + " مل" : "";
-  const fallback = [size, Number(item.pack_count) > 0 ? String(item.pack_count) + " قطعة" : ""].filter(Boolean).join(" · ");
-  const details = String(item.package_label || "").trim() || fallback;
+  const details = Number(item.pack_count) > 0 ? String(item.pack_count) + " قطعة" : "";
+  const unit = item.unit_price_type === "بالقطعة" ? "بالقطعة" : "";
   return [details, unit].filter(Boolean).join(" · ");
 }
 function isColumnHeaderLabel(value) {

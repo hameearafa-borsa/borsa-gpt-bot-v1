@@ -7,6 +7,9 @@ const { escapeXml, packageStatus, renderPriceListImage, renderPriceListImages } 
 const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-image.js"), "utf8");
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic UI,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
+assert.match(imageSource, /width = 1440, rowHeight = 58, headerHeight = 220/, "portrait page layout should be taller with a compact header");
+assert.match(imageSource, /density: 144/, "PNG rendering should use high-resolution rasterization");
+assert.match(imageSource, /fill="#111111"/, "product, details, and price text should be black for contrast");
 assert.match(imageSource, /text-anchor="end"/, "Arabic product labels must align to the right edge");
 assert.match(imageSource, /1793378540373\.jpg/, "renderer must resolve the committed Borsa logo");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
@@ -70,7 +73,7 @@ assert.equal(packageStatus({ product: "معجون 120 مل", volume_ml: 120, uni
     });
     assert.equal(unileverLikeImages.length, 4,
       "66 products should render as four images at the default 18 products per image");
-    assert.match(capturedSvg, /صفحة 4 من 4/,
+    assert.match(capturedSvg, /صفحة 3 من 3/,
       "the final image should identify itself as page 3 of 3");
     await assert.doesNotReject(() => renderPriceListImages({
       company: "شركة اختبار",

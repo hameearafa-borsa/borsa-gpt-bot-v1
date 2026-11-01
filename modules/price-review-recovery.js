@@ -13,7 +13,7 @@ async function recoverPendingNotifications({ db, telegram, defaultLogChatId = nu
       `INSERT INTO price_review_queue (observation_id, source_chat_id, log_chat_id)
        SELECT po.id, po.source_chat_id, $1 FROM price_observations po
        LEFT JOIN price_review_queue q ON q.observation_id = po.id
-       WHERE po.decision = 'pending' AND q.observation_id IS NULL
+       WHERE po.decision = 'pending' AND po.observed_at >= NOW() - INTERVAL '24 hours' AND q.observation_id IS NULL
        ON CONFLICT (observation_id) DO NOTHING`, [defaultLogChatId]);
   } catch (error) {
     try { await onError(error, { stage: "rebuild_missing_queue", observationId: null, logChatId: defaultLogChatId }); } catch {}
@@ -22,7 +22,8 @@ async function recoverPendingNotifications({ db, telegram, defaultLogChatId = nu
   const result = await db.query(
     `WITH candidates AS (
        SELECT q.observation_id FROM price_review_queue q
-       WHERE q.status = 'pending' AND q.log_message_id IS NULL
+       JOIN price_observations po ON po.id = q.observation_id
+       WHERE q.status = 'pending' AND po.observed_at >= NOW() - INTERVAL '24 hours' AND q.log_message_id IS NULL
          AND (q.notification_claimed_at IS NULL OR q.notification_claimed_at < NOW() - ($3 * INTERVAL '1 second'))
        ORDER BY q.created_at ASC, q.id ASC LIMIT $2 FOR UPDATE SKIP LOCKED
      ), claimed AS (

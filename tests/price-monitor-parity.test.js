@@ -2,6 +2,7 @@
 const assert = require("node:assert/strict");
 const { deterministicList } = require("../modules/price-list");
 const { observe } = require("../modules/price-monitor");
+const { parsePackageType } = require("../modules/price-intelligence");
 const registry = require("../data/product-registry.json");
 
 const pearl = `أسعار بيرل – أكتوبر
@@ -57,7 +58,7 @@ const pearl = `أسعار بيرل – أكتوبر
     assert.equal(monitor.pack_count, list.pack_count, "pack_count mismatch row " + i);
     assert.equal(monitor.consumer_price, list.consumer_price, "consumer price mismatch row " + i);
     assert.equal(monitor.unit_price_type, list.unit_price_type, "unit mismatch row " + i);
-    assert.equal(monitor.package_type, list.package_type || null, "package type mismatch row " + i);
+    assert.equal(monitor.package_type, parsePackageType(list.raw_line) || null, "package type mismatch row " + i);
     assert.equal(monitor.package_sale_price,
       list.wholesale_carton_price ?? list.package_sale_price,
       "selected monitor price mismatch row " + i);

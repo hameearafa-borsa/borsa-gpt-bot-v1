@@ -29,6 +29,7 @@ const { saveMerchant } = require("./modules/merchant-intelligence");
 const chemical = require("./modules/chemical-assistant");
 const deals = require("./modules/deals");
 const adminPanel = require("./modules/admin-panel");
+const serviceSettings = require("./core/service-settings");
 
 
 
@@ -432,27 +433,29 @@ bot.on("text", async ctx => {
   }
 
   if (cmd === "settings" && ["private", "group", "supergroup"].includes(m.chatType)) {
-    let permitted = false;
-    if (m.chatType === "private") {
-      // The bot owner and creators of active, approved groups can inspect settings in private.
-      permitted = await isPriceReviewer(ctx.telegram, m.userId);
-    } else {
-      permitted = await canManage(ctx.telegram, m.chatId, m.userId);
+    try {
+      if (m.chatType === "private" && isMaster(m.userId)) {
+        const settings = await serviceSettings.getSettings(db.pool, "global", 0);
+        await ctx.reply(adminPanel.settingsText("global", null, settings), { reply_markup: adminPanel.settingsKeyboard(settings, "global") });
+        return;
+      }
+      if (m.chatType === "private") {
+        const groups = await serviceSettings.listOwnedGroups(db.pool, m.userId);
+        if (!groups.length) { await ctx.reply("إعدادات الخاص متاحة لمالك البوت أو منشئ مجموعة معتمدة فقط."); return; }
+        const rows = groups.map(group => [{ text: "⚙️ إعدادات المجموعة " + group.chat_id, callback_data: "owner:group:" + group.chat_id }]);
+        await ctx.reply("اختر المجموعة التي تريد إدارة خدماتها:", { reply_markup: { inline_keyboard: rows } });
+        return;
+      }
+      if (!(await isAuthorizedChat(m.chatId)) || !(await canManage(ctx.telegram, m.chatId, m.userId))) {
+        await ctx.reply("هذا الأمر متاح لمالك البوت أو منشئ هذه المجموعة المعتمدة فقط.");
+        return;
+      }
+      const settings = await serviceSettings.getSettings(db.pool, "group", m.chatId);
+      await ctx.reply(adminPanel.settingsText("group", m.chatId, settings), { reply_markup: adminPanel.settingsKeyboard(settings, "group", m.chatId) });
+    } catch (error) {
+      await ctx.reply("تعذر تحميل إعدادات الخدمات من قاعدة البيانات. لم يتم تغيير أي إعداد.");
+      await sendLog({ module: "admin-panel", stage: "settings_load", severity: "warn", status: "failed", details: { error: redactString(error?.message || "settings load failed") } }).catch(() => {});
     }
-    if (!permitted) {
-      await ctx.reply(m.chatType === "private"
-        ? "إعدادات البوت في الخاص متاحة لمالك البوت ومنشئي المجموعات المعتمدة فقط."
-        : "هذا الأمر متاح لمالك البوت أو منشئ هذه المجموعة فقط.");
-      return;
-    }
-    const approved = m.chatType === "private" ? null : await isAuthorizedChat(m.chatId);
-    const providers = ai.providers.length ? ai.providers.join("، ") : "لا يوجد مزود ذكاء اصطناعي مضبوط";
-    const scopeText = m.chatType === "private"
-      ? "النطاق: إعدادات البوت العامة"
-      : `المجموعة: ${m.chatId}\nحالة اعتماد البوت: ${approved ? "معتمدة" : "غير معتمدة"}`;
-    await ctx.reply(
-      `⚙️ إعدادات Borsa GPT Bot\n\n${scopeText}\nمحركات الذكاء المضبوطة: ${providers}\n\nالأوامر المتاحة: /settings — /chemical — /weather — /pricelist — /help\n\nملاحظة: إعدادات الخدمات مشتركة حاليًا بين المجموعات؛ هذه الشاشة تعرض الحالة والصلاحيات ولا تغيّر مفاتيح API أو إعدادات الإنتاج.`
-    );
     return;
   }
 
@@ -690,47 +693,111 @@ bot.on("text", async ctx => {
 });
 
 
-bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|health|diagnostics)$/, async ctx => {
+bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|health|diagnostics|settings|groups|toggle:[a-z]+|group:-?\d+|group-toggle:-?\d+:[a-z]+)$/, async ctx => {
   const chatId = ctx.callbackQuery?.message?.chat?.id;
   if (ctx.callbackQuery?.message?.chat?.type !== "private" || !isMaster(ctx.from?.id)) {
     await ctx.answerCbQuery("هذه اللوحة متاحة لمالك البوت في الخاص فقط.", { show_alert: true }).catch(() => {});
     return;
   }
-
   const section = ctx.match[1];
-  let body;
   try {
-    if (section === "home") {
-      body = adminPanel.panelText(APP_VERSION, ai.providers || []);
-    } else if (section === "merchants") {
+    if (section === "settings" || section.startsWith("toggle:")) {
+      if (section.startsWith("toggle:")) {
+        const key = section.slice(7);
+        const current = await serviceSettings.getSettings(db.pool, "global", 0);
+        const item = current.find(value => value.key === key);
+        if (!item) throw new Error("UNKNOWN_SERVICE_SETTING");
+        await serviceSettings.setServiceSetting(db.pool, { scope: "global", serviceKey: key, enabled: !item.enabled, actorId: ctx.from.id });
+      }
+      const settings = await serviceSettings.getSettings(db.pool, "global", 0);
+      await ctx.editMessageText(adminPanel.settingsText("global", null, settings), { reply_markup: adminPanel.settingsKeyboard(settings, "global") });
+      await ctx.answerCbQuery(section.startsWith("toggle:") ? "تم حفظ الإعداد وتطبيقه." : "").catch(() => {});
+      return;
+    }
+    if (section === "groups") {
+      const groups = await serviceSettings.listAuthorizedGroups(db.pool);
+      const rows = groups.map(group => [{ text: "👥 " + group.chat_id, callback_data: "panel:group:" + group.chat_id }]);
+      rows.push([{ text: "⬅️ القائمة الرئيسية", callback_data: "panel:home" }]);
+      await ctx.editMessageText(groups.length ? "المجموعات المعتمدة — اختر مجموعة لإدارة خدماتها:" : "لا توجد مجموعات معتمدة حاليًا.", { reply_markup: { inline_keyboard: rows } });
+      await ctx.answerCbQuery().catch(() => {});
+      return;
+    }
+    if (section.startsWith("group:") || section.startsWith("group-toggle:")) {
+      const parts = section.split(":");
+      const targetChatId = Number(parts[1]);
+      const groups = await serviceSettings.listAuthorizedGroups(db.pool);
+      if (!groups.some(group => Number(group.chat_id) === targetChatId)) throw new Error("GROUP_NOT_AUTHORIZED");
+      if (section.startsWith("group-toggle:")) {
+        const key = parts[2];
+        const current = await serviceSettings.getSettings(db.pool, "group", targetChatId);
+        const item = current.find(value => value.key === key);
+        if (!item) throw new Error("UNKNOWN_SERVICE_SETTING");
+        await serviceSettings.setServiceSetting(db.pool, { scope: "group", chatId: targetChatId, serviceKey: key, enabled: !item.enabled, actorId: ctx.from.id });
+      }
+      const settings = await serviceSettings.getSettings(db.pool, "group", targetChatId);
+      await ctx.editMessageText(adminPanel.settingsText("group", targetChatId, settings), { reply_markup: adminPanel.settingsKeyboard(settings, "group", targetChatId) });
+      await ctx.answerCbQuery(section.startsWith("group-toggle:") ? "تم حفظ إعداد المجموعة." : "").catch(() => {});
+      return;
+    }
+    let body;
+    if (section === "home") body = adminPanel.panelText(APP_VERSION, ai.providers || []);
+    else if (section === "merchants") {
       const count = await db.query("SELECT COUNT(*)::int AS count FROM merchants");
-      body = `🏪 قاعدة بيانات التجار\n\nعدد التجار المحفوظين: ${count.rows[0]?.count ?? 0}\n\nالحفظ تلقائي وليس ردًا ظاهرًا في المجموعة: يسجل البوت رقم الهاتف عندما تحتوي رسالة مؤهلة لمرصد الأسعار على رقم هاتف وسياق تجاري واضح مثل السعر أو الجنيه أو المنظفات. تُحفظ بيانات التاجر ومصدر الرسالة في PostgreSQL، وتُحدّث البيانات عند ظهور معلومات جديدة. الرسائل التي لا تستوفي الشروط لا تنشئ سجل تاجر.`;
+      body = "🏪 قاعدة بيانات التجار\n\nعدد التجار المحفوظين: " + (count.rows[0]?.count ?? 0) + "\n\nالحفظ تلقائي وليس ردًا ظاهرًا في المجموعة.";
     } else if (section === "prices") {
       const count = await db.query("SELECT COUNT(*)::int AS count FROM price_observations");
-      body = `💰 مرصد الأسعار\n\nإجمالي ملاحظات الأسعار المسجلة: ${count.rows[0]?.count ?? 0}\n\nيعمل المرصد بصمت، ويتجنب حفظ رسائل البوت نفسه، ويضع السجلات غير الواثقة في مسار المراجعة بدل اعتمادها تلقائيًا.`;
-    } else if (section === "chemical") {
-      body = "🧪 المساعد الكيميائي\n\nالخدمة متاحة عبر /chemical داخل المجموعة المعتمدة. يستخدم مزود Gemini أولًا ثم مزودي الاحتياط المضبوطين عند الحاجة.";
-    } else if (section === "lists") {
-      body = "📋 قوائم الشركات\n\nأرسل /قائمة متبوعًا بنص قائمة الأسعار. تحفظ الصفوف المقبولة كمرجع شركة منفصل، وتُبقى الصفوف غير الواضحة خارج المرجع المعتمد.";
-    } else if (section === "deals") {
-      body = `🛍️ العروض والنشرات\n\nالنشرات المجدولة: ${String(process.env.DEALS_SCHEDULER_ENABLED ?? "true").toLowerCase() !== "false" ? "مفعلة حسب إعداد البيئة" : "متوقفة حسب إعداد البيئة"}. لا يطلق هذا الزر عملية scraping مدفوعة.`;
-    } else if (section === "weather") {
-      body = `🌦️ الطقس\n\nخدمة الطقس متاحة عبر /weather. النشرة المجدولة: ${String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() === "false" ? "متوقفة" : "مفعلة حسب إعداد البيئة"}.`;
-    } else if (section === "reports") {
-      body = "📊 التقارير\n\nتظهر أحداث الحفظ والمراجعة والأخطاء في قناة السجل المشتركة، مع تجنب عرض رسائل حفظ تلقائية للأعضاء.";
-    } else if (section === "health") {
-      body = `🩺 حالة الخدمات\n\nاتصال قاعدة البيانات: ${db.pool ? "مهيأ" : "غير متاح"}\nمزودو الذكاء: ${(ai.providers || []).join("، ") || "لا يوجد مزود مضبوط"}\nالإصدار: ${APP_VERSION}`;
-    } else {
-      body = "📄 التشخيص\n\nالأخطاء والتقارير التشغيلية تُرسل إلى قناة السجل. راجع آخر تقارير السجل لتحديد أي مشكلة قبل النشر.";
-    }
+      body = "💰 مرصد الأسعار\n\nإجمالي ملاحظات الأسعار المسجلة: " + (count.rows[0]?.count ?? 0) + "\n\nيعمل المرصد بصمت ويحول السجلات غير الواثقة للمراجعة.";
+    } else if (section === "chemical") body = "🧪 المساعد الكيميائي\n\nيستخدم Gemini أولًا ثم مزودي الاحتياط المضبوطين عند الحاجة.";
+    else if (section === "lists") body = "📋 قوائم الشركات\n\nأرسل /قائمة متبوعًا بنص قائمة الأسعار.";
+    else if (section === "deals") body = "🛍️ العروض والنشرات\n\nإعدادات التشغيل موجودة في إعدادات الخدمات. لا يطلق هذا الزر عملية scraping مدفوعة.";
+    else if (section === "weather") body = "🌦️ الطقس\n\nإعدادات الخدمة والنشرة موجودة في إعدادات الخدمات.";
+    else if (section === "reports") body = "📊 التقارير\n\nأحداث الحفظ والمراجعة والأخطاء تظهر في قناة السجل المشتركة.";
+    else if (section === "health") body = "🩺 حالة الخدمات\n\nاتصال قاعدة البيانات: " + (db.pool ? "مهيأ" : "غير متاح") + "\nمزودو الذكاء: " + ((ai.providers || []).join("، ") || "لا يوجد") + "\nالإصدار: " + APP_VERSION;
+    else body = "📄 التشخيص\n\nراجع قناة السجل للتقارير التشغيلية.";
     await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() });
     await ctx.answerCbQuery().catch(() => {});
   } catch (error) {
-    await ctx.answerCbQuery("تعذر تحميل بيانات هذه الخدمة. راجع قناة السجل.", { show_alert: true }).catch(() => {});
-    await sendLog({ module: "admin-panel", stage: section, severity: "warn", status: "failed", details: { error: redactString(error?.message || "panel section failed") } }).catch(() => {});
+    await ctx.answerCbQuery("تعذر تنفيذ الإجراء أو تحميل الإعدادات.", { show_alert: true }).catch(() => {});
+    await sendLog({ module: "admin-panel", stage: "callback", severity: "warn", status: "failed", details: { section, error: redactString(error?.message || "panel callback failed") } }).catch(() => {});
   }
 });
 
+bot.action(/^owner:group:(-?\d+)$/, async ctx => {
+  const targetChatId = Number(ctx.match[1]);
+  const groups = await serviceSettings.listOwnedGroups(db.pool, ctx.from.id);
+  if (!groups.some(group => Number(group.chat_id) === targetChatId)) {
+    await ctx.answerCbQuery("هذه المجموعة ليست ضمن صلاحياتك.", { show_alert: true }).catch(() => {});
+    return;
+  }
+  const settings = await serviceSettings.getSettings(db.pool, "group", targetChatId);
+  const rows = settings.map(item => [{ text: (item.enabled ? "🟢 " : "🔴 ") + item.label, callback_data: "owner:toggle:" + targetChatId + ":" + item.key }]);
+  rows.push([{ text: "⬅️ رجوع", callback_data: "owner:back" }]);
+  await ctx.editMessageText(adminPanel.settingsText("group", targetChatId, settings), { reply_markup: { inline_keyboard: rows } });
+  await ctx.answerCbQuery().catch(() => {});
+});
+bot.action(/^owner:toggle:(-?\d+):([a-z]+)$/, async ctx => {
+  const targetChatId = Number(ctx.match[1]), key = ctx.match[2];
+  const groups = await serviceSettings.listOwnedGroups(db.pool, ctx.from.id);
+  if (!groups.some(group => Number(group.chat_id) === targetChatId)) {
+    await ctx.answerCbQuery("هذه المجموعة ليست ضمن صلاحياتك.", { show_alert: true }).catch(() => {});
+    return;
+  }
+  const current = await serviceSettings.getSettings(db.pool, "group", targetChatId);
+  const item = current.find(value => value.key === key);
+  if (!item) { await ctx.answerCbQuery("إعداد غير معروف.", { show_alert: true }).catch(() => {}); return; }
+  await serviceSettings.setServiceSetting(db.pool, { scope: "group", chatId: targetChatId, serviceKey: key, enabled: !item.enabled, actorId: ctx.from.id });
+  const updated = await serviceSettings.getSettings(db.pool, "group", targetChatId);
+  const rows = updated.map(value => [{ text: (value.enabled ? "🟢 " : "🔴 ") + value.label, callback_data: "owner:toggle:" + targetChatId + ":" + value.key }]);
+  rows.push([{ text: "⬅️ رجوع", callback_data: "owner:back" }]);
+  await ctx.editMessageText(adminPanel.settingsText("group", targetChatId, updated), { reply_markup: { inline_keyboard: rows } });
+  await ctx.answerCbQuery("تم حفظ إعداد المجموعة.").catch(() => {});
+});
+bot.action("owner:back", async ctx => {
+  const groups = await serviceSettings.listOwnedGroups(db.pool, ctx.from.id);
+  const rows = groups.map(group => [{ text: "⚙️ " + group.chat_id, callback_data: "owner:group:" + group.chat_id }]);
+  await ctx.editMessageText("اختر المجموعة التي تريد إدارة خدماتها:", { reply_markup: { inline_keyboard: rows } });
+  await ctx.answerCbQuery().catch(() => {});
+});
 bot.action(/^prv:(approve|new|ignore):(\d+)$/, async ctx => {
   // Stop Telegram's callback spinner before database and administrator API checks.
   await ctx.answerCbQuery("جارٍ التحقق من الصلاحية...").catch(() => {});

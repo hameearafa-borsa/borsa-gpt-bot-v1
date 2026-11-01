@@ -490,6 +490,7 @@ const amazonOnly = await collectDealCandidates({
    query: async (sql, values = []) => {
      const normalized = String(sql).replace(/\s+/g, " ").trim();
      publicationQueries.push({ sql: normalized, values });
+     if (normalized.includes("FROM service_settings")) return { rows: [], rowCount: 0 };
      if (normalized.startsWith("SELECT channel_kind,status,chat_id FROM deal_publications")) {
        return { rows: [], rowCount: 0 };
      }

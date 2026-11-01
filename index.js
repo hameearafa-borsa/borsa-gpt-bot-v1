@@ -472,6 +472,8 @@ bot.on("text", async ctx => {
   }
 
   if (cmd === "قائمة" || cmd === "pricelist") {
+    const authorizedListOperator = isMaster(m.userId) || (["group", "supergroup"].includes(m.chatType) && await ctx.telegram.getChatMember(m.chatId, m.userId).then(member => ["administrator", "creator"].includes(member.status)).catch(() => false));
+    if (!authorizedListOperator) { await ctx.reply("هذا الأمر متاح لمشرفي المجموعة ومالك البوت فقط."); return; }
     if (!(await serviceSettings.isServiceEnabled(db.pool, "lists", m.chatId))) { await ctx.reply("خدمة قوائم الشركات متوقفة لهذه المجموعة حاليًا."); return; }
     let sourceText = args;
     const link = parseMessageLink(args);

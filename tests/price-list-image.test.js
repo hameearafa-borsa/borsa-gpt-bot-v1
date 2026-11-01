@@ -54,7 +54,7 @@ assert.equal(packageStatus({ product: "معجون 120 مل", volume_ml: 120, uni
     assert.doesNotMatch(capturedSvg, /110 جم/, "package size belongs in the product name, not the details column");
     assert.doesNotMatch(capturedSvg, /الصنف النهائي السعر/, "column headings must never be rendered as product names");
     assert.match(capturedSvg, /تفاصيل العبوة/, "the middle column must clearly label package details");
-    assert.match(capturedSvg, /x="390"/, "package/status column should sit between product and price, closer to the price");
+    assert.match(capturedSvg, /x="720"/, "package/status column should sit between product and price, closer to the price");
     assert.match(capturedSvg, /opacity="0.10"/, "the brand logo should appear as a visible but subtle background watermark");
     const perPieceImages = await renderPriceListImages({ company: "شركة اختبار", items: [
       { product: "شامبو 120مل", package_sale_price: 30, volume_ml: 120, unit_price_type: "بالقطعة" },

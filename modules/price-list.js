@@ -191,7 +191,11 @@ function deterministicList(text) {
     const consumerIndex = line.search(RETAIL_LABEL);
     const afterWholesale = wholesaleIndex >= 0 ? getPriceTokens(line.slice(wholesaleIndex + line.slice(wholesaleIndex).match(WHOLESALE_LABEL)[0].length))[0]?.value ?? null : null;
     const afterConsumer = consumerIndex >= 0 ? getPriceTokens(line.slice(consumerIndex + line.slice(consumerIndex).match(RETAIL_LABEL)[0].length))[0]?.value ?? null : null;
-    const beforeLabel = priceTokens.find(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
+    const eligiblePriceTokens = priceTokens.filter(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
+    // OCR/catalog rows may contain a bundle size before the actual currency amount.
+    // Prefer the last explicit currency-marked token (e.g. "350 + بلسم 159 ج").
+    const currencyPriceTokens = eligiblePriceTokens.filter(p => /(?:جنيه|ج|EGP)$/iu.test(p.token));
+    const beforeLabel = currencyPriceTokens.at(-1) || eligiblePriceTokens[0];
     const packagePrice = beforeLabel?.value ?? null;
     const rowUnitPriceType = detectUnitPriceType(line);
     // A carton-specific offer note establishes the unit for following rows in the same product section.
@@ -215,9 +219,10 @@ function deterministicList(text) {
     const normalizedLine = normalizeArabic(line);
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
     const hasIdentity = metadata.company ? Boolean(displayProductPrefix && /[\u0600-\u06ff]/u.test(displayProductPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
-    const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
-    const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
-    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";
+    const suspiciousCurrency = metadata.company && /\\b\\d+(?:[.,]\\d+)?\\s+ح(?:\\s|$)/u.test(toAsciiDigits(line));
+    const offerSignal = /(?:\\+|هدية|هديه|عرض|اشترِ|اشتري|مجانا)/iu.test(line);
+    // Currency typos and promotional/bundle rows are never auto-approved from OCR alone.
+    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : (suspiciousCurrency || offerSignal || !unitPriceType) ? "review" : "accepted";
     out.push({
       raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company, package_label: packageLabel,
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,

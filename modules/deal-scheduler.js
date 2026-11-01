@@ -2,6 +2,7 @@
 const { collectDealCandidates } = require("./deal-sources");
 const { filterRecentDeals, distributeDeals, formatNewsletterMessage } = require("./deal-publication");
 const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
+const { isServiceEnabled } = require("../core/service-settings");
 
 function cairoParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
@@ -133,7 +134,10 @@ async function resolveDealChatIds({ pool, chatId, chatIds }) {
 
 async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
-  const targetChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
+  if (!(await isServiceEnabled(pool, "deals"))) return { skipped: true, reason: "service_disabled" };
+  const requestedChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
+  const targetChatIds = [];
+  for (const id of requestedChatIds) if (await isServiceEnabled(pool, "deals", id)) targetChatIds.push(id);
   if (!targetChatIds.length) return { skipped: true, reason: "no_active_authorized_groups" };
   const kind = newsletterKindAt(now);
   if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };

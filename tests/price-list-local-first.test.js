@@ -20,6 +20,27 @@ assert.equal(isListLike("برضو فيه ب 10 و برضو في ب 25"), false, 
   const { deterministicList, detectUnitPriceHeading } = require("../modules/price-list");
   assert.equal(detectUnitPriceHeading("الأسعار بالقطعة"), "بالقطعة");
   assert.equal(detectUnitPriceHeading("الأسعار بالكرتونة"), "بالكرتونة");
+
+  // Company catalogs default to carton prices, while explicit ق rows remain per-piece.
+  const companyCatalog = deterministicList(`قائمة أسعار شركة يونيليفر
+الصنف السعر
+سيجنال 120مل 42,33 ج
+كلوز أب 50مل ق 29,19 ج
+كلير أكياس 5 مل 346 ج
+`);
+  assert.equal(companyCatalog.length, 3);
+  assert.deepEqual(companyCatalog.map(x => x.unit_price_type), ["بالكرتونة", "بالقطعة", "بالكرتونة"]);
+  assert.equal(companyCatalog[0].package_sale_price, 42.33);
+  assert.equal(companyCatalog[1].package_sale_price, 29.19);
+  assert.equal(companyCatalog[2].package_sale_price, 346);
+  assert.equal(companyCatalog[0].company, "شركة يونيليفر");
+  assert.equal(companyCatalog[2].company, "شركة يونيليفر", "column labels must not replace the company identity");
+
+  const bundleCount = deterministicList(`قائمة أسعار شركة اختبار
+منظف 2 ك 4 كيس 120 ج
+منظف 1 ك 6 قطعة 90 ج
+`);
+  assert.deepEqual(bundleCount.map(x => x.pack_count), [4, 6], "explicit package counts should be retained");
   const sectionUnits = deterministicList(`أسعار شركة يونيليفر
 الأسعار بالقطعة
 سيجنال 120مل 42,33 ج

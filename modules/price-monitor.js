@@ -1,6 +1,6 @@
 "use strict";
 
-const { extractPriceCandidates, commercialMetrics, fingerprint, productIdentityKey, classifyObservationChange } = require("./price-intelligence");
+const { extractPriceCandidates, commercialMetrics, fingerprint, productIdentityKey, classifyObservationChange, parsePackageType, parseExtraWeight } = require("./price-intelligence");
 const { resolve } = require("../core/product-registry");
 const { identityKey } = require("./price-review");
 const { deterministicList, parseListMetadata } = require("./price-list");
@@ -73,7 +73,8 @@ async function observe({ pool, message, merchantId = null, registry }) {
         weight_g: item.weight_g ?? null,
         volume_ml: item.volume_ml ?? null,
         pack_count: item.pack_count ?? null,
-        package_type: item.package_type ?? null,
+        package_type: item.package_type || parsePackageType(item.raw_line) || null,
+        offer_extra_weight_g: parseExtraWeight(item.raw_line),
         confidence: Number(item.confidence) || 0.5,
         needs_review: ambiguous || !unitPriceType,
         trusted_catalog_row: item.decision === "accepted" && !ambiguous && Boolean(unitPriceType),

@@ -78,7 +78,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     });
     assert.equal(unileverLikeImages.length, 5,
       "66 products should render as five images at the default 16 products per image");
-    assert.ok(capturedSvg.includes("5") && capturedSvg.includes(shapeArabicForSvg("صفحة")) && capturedSvg.includes("من"),
+    assert.ok(capturedSvg.includes(shapeArabicForSvg("صفحة 5 من 5")),
       "the final image should identify itself as page 5 of 5");
     await assert.doesNotReject(() => renderPriceListImages({
       company: "شركة اختبار",

@@ -73,10 +73,10 @@ function cleanProductName(line) {
 }
 function parseListMetadata(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  let company = null, month = null, priceType = null;
+  let company = null, month = null, priceType = null, isCompanyCatalog = false;
   for (const line of lines) {
     const companyMatch = line.match(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+(شركة\s+.+)$/iu);
-    if (companyMatch) company = companyMatch[1].trim().replace(/[:：]+$/, "");
+    if (companyMatch) { company = companyMatch[1].trim().replace(/[:：]+$/, ""); isCompanyCatalog = /^قائمة\s+/iu.test(line); }
     const monthMatch = line.match(/^(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+(20\d{2})$/iu);
     if (monthMatch) month = `${monthMatch[1]} ${monthMatch[2]}`;
     const titleMonthMatch = line.match(/^(?:أسعار|اسعار)\s+.+?[–—-]\s*(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)(?:\s+(20\d{2}))?$/iu);
@@ -84,7 +84,7 @@ function parseListMetadata(text) {
     if (/الأسعار?\s*(?:هي\s*)?جملة|اسعار\s*جمله/iu.test(line)) priceType = "أسعار جملة";
     else if (/(?:قطاعي|مستهلك|تجزئة)/iu.test(line)) priceType = "أسعار قطاعي";
   }
-  return { company, month, priceType };
+  return { company, month, priceType, isCompanyCatalog };
 }
 function cleanExplicitProductLine(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
@@ -194,7 +194,7 @@ function deterministicList(text) {
     const unitPriceType = rowUnitPriceType || sectionUnitPriceType ||
       // In a named company wholesale catalog, an unmarked price is a carton price.
       // Explicit per-piece markers and section headings take precedence above.
-      (metadata.company ? "بالكرتونة" : null);
+      (metadata.company && (metadata.isCompanyCatalog || metadata.priceType === "أسعار جملة") ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(productPrefix);

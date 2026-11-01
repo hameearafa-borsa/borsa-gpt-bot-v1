@@ -6,6 +6,7 @@ const {
 } = require("./catalog-newsletter");
 const { extractCatalogPageImages, scanCatalogPageImages, persistCatalogOcrPages } = require("./catalog-page-ocr");
 const { createImageOcr } = require("./image-ocr");
+const { isServiceEnabled } = require("../core/service-settings");
 
 const CAIRO_ZONE = "Africa/Cairo";
 const DAILY_HOUR = 10;
@@ -145,7 +146,10 @@ async function processCatalogOcr({ pool, catalog, fetchPage = fetchStorePage, fe
 
 async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = fetchStorePage, fetchCatalogImage, catalogOcr, onError = async () => {}, now = new Date() }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
-  const targets = await resolveChatIds({ pool, chatId, chatIds });
+  if (!(await isServiceEnabled(pool, "catalogs"))) return { skipped: true, reason: "service_disabled" };
+  const requestedTargets = await resolveChatIds({ pool, chatId, chatIds });
+  const targets = [];
+  for (const id of requestedTargets) if (await isServiceEnabled(pool, "catalogs", id)) targets.push(id);
   if (!targets.length) return { skipped: true, reason: "no_active_authorized_groups" };
   const result = { targetGroups: targets.length, checkedStores: 0, baseline: 0, changed: 0, unchanged: 0, published: 0, failed: 0, skippedDeliveries: 0 };
   const checkedStores = new Set();

@@ -46,7 +46,7 @@ assert.equal(pkg.dependencies.sharp, "^0.35.5", "sharp must be declared as a run
     "صابون دوش 60 جم * 48 قطعة 329.28",
     "جل باهي 1 كجم 12 زجاجة 215.50",
     "دوف 350 مل ق 121"
-  ].join("\\n"));
+  ].join("\n"));
   assert.equal(fallback.method, "deterministic", "AI timeout must preserve a valid local catalog parse");
   assert.equal(fallback.items.length, 3);
   assert.ok(fallback.items.every(row => row.decision === "accepted"));

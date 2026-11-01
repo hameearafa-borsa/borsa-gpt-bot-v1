@@ -13,7 +13,7 @@ async function successCase() {
     }
   };
   const result = await runMigrations({ db, rootDir: "/project", readFile: (file, encoding) => { assert.equal(encoding, "utf8"); calls.push({ read: file }); return `-- ${path.basename(file)}`; } });
-  assert.equal(result.applied, 27);
+  assert.equal(result.applied, 28);
   assert.ok(MIGRATION_FILES.includes("016_price_observation_history.sql"), "price-observation history migration must run");
   assert.ok(MIGRATION_FILES.includes("017_price_observation_price_columns.sql"), "price-column audit migration must run");
   assert.ok(MIGRATION_FILES.includes("018_price_observation_consumer_price.sql"), "consumer-price persistence migration must run");
@@ -23,10 +23,11 @@ async function successCase() {
   assert.ok(MIGRATION_FILES.includes("022_price_reference_comparison.sql"), "live/reference comparison migration must run");
   assert.ok(MIGRATION_FILES.includes("023_merchant_source_idempotency.sql"), "merchant source-message idempotency migration must run");
   assert.ok(MIGRATION_FILES.includes("024_reviewed_product_unit_type.sql"), "reviewed product unit-type migration must run");
+  assert.ok(MIGRATION_FILES.includes("026_service_settings.sql"), "persistent service settings migration must run");
   assert.deepEqual(result.files, [...MIGRATION_FILES]);
   assert.equal(calls[0], "BEGIN");
   assert.deepEqual(calls[1], { sql: "SELECT pg_advisory_xact_lock($1)", params: [MIGRATION_LOCK_KEY] });
-  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 28, "lock plus 27 migration statements should run in one transaction");
+  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 29, "lock plus 28 migration statements should run in one transaction");
   assert.equal(calls.at(-1), "COMMIT");
   assert.ok(calls.indexOf("COMMIT") > calls.findIndex(x => x?.read?.endsWith(MIGRATION_FILES.at(-1))));
 }

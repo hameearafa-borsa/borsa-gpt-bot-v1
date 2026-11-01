@@ -55,7 +55,7 @@ function getPriceTokens(line) {
   return [...s.matchAll(PRICE_TOKEN)].map(m => {
     const end = m.index + m[0].length;
     const tail = s.slice(end);
-    const isQuantity = /^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
+    const isQuantity = /^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل|قطعة|قطعه|قطع|ق(?=\s|$)|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/iu.test(tail);
     const explicitCurrency = /(?:جنيه|ج|EGP)\s*$/iu.test(m[0]);
     return { value: parseNumber(m[1]), index: m.index, token: m[0].trim(), isQuantity, explicitCurrency };
   }).filter(x => !x.isQuantity && x.value != null && x.value > 0 && x.value < 100000);
@@ -68,15 +68,15 @@ function cleanProductName(line) {
     .replace(/^[\s•*._-]+/, "")
     .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
     .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)/giu, " ")
-    .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة)/giu, " ")
+    .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/giu, " ")
     .replace(/\s+/g, " ").trim();
 }
 function parseListMetadata(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  let company = null, month = null, priceType = null;
+  let company = null, month = null, priceType = null, isCompanyCatalog = false;
   for (const line of lines) {
-    const companyMatch = line.match(/^(?:أسعار|اسعار)\s+(شركة\s+.+)$/iu);
-    if (companyMatch) company = companyMatch[1].trim().replace(/[:：]+$/, "");
+    const companyMatch = line.match(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+(شركة\s+.+)$/iu);
+    if (companyMatch) { company = companyMatch[1].trim().replace(/[:：]+$/, ""); isCompanyCatalog = /^قائمة\s+/iu.test(line); }
     const monthMatch = line.match(/^(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+(20\d{2})$/iu);
     if (monthMatch) month = `${monthMatch[1]} ${monthMatch[2]}`;
     const titleMonthMatch = line.match(/^(?:أسعار|اسعار)\s+.+?[–—-]\s*(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)(?:\s+(20\d{2}))?$/iu);
@@ -84,7 +84,7 @@ function parseListMetadata(text) {
     if (/الأسعار?\s*(?:هي\s*)?جملة|اسعار\s*جمله/iu.test(line)) priceType = "أسعار جملة";
     else if (/(?:قطاعي|مستهلك|تجزئة)/iu.test(line)) priceType = "أسعار قطاعي";
   }
-  return { company, month, priceType };
+  return { company, month, priceType, isCompanyCatalog };
 }
 function cleanExplicitProductLine(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
@@ -95,9 +95,11 @@ function cleanExplicitProductLine(line) {
   });
   // Remove the explicitly currency-marked price, not an earlier bundle size
   // such as "350" in "صانسيلك 350 + بلسم ق 159 ج".
-  const token = tokens.filter(m => /(?:جنيه|ج|EGP)\s*$/iu.test(m[0])).at(-1) || tokens[0];
+  const token = tokens.filter(m => /(?:جنيه|ج|EGP)\s*$/iu.test(m[0])).at(-1) || tokens.at(-1);
   if (!token) return cleanProductName(line);
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
+    .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g)/giu, " ")
+    .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/giu, " ")
     .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
     // Keep carton promotion wording in raw_line, not in the normalized product identity.
     .replace(/\s+(?:العرض|عرض)\s+على\s+(?:الكرتونة|الكرتونه)[\s\S]*$/iu, "")
@@ -154,14 +156,19 @@ function deterministicList(text) {
     if (!getPriceTokens(line).length && !line.includes("|")) {
       if (/^(?:الأسعار?|اسعار)\s*(?:هي\s*)?(?:جملة|جمله|قطاعي|مستهلك)$/iu.test(line)) continue;
       if (/[:：]$/.test(line) && line.length <= 70) { section = line.replace(/[:：]+$/, "").trim(); continue; }
-      if (/^(?:أسعار|اسعار)\s+شركة\s+/iu.test(line)) { company = line.replace(/^(?:أسعار|اسعار)\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
+      if (/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+شركة\s+/iu.test(line)) { company = line.replace(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
+      const legacyCompanyTitle = line.match(/^(?:أسعار|اسعار)\s+(.+?)\s+[–—-]\s*(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)(?:\s+20\d{2})?$/iu);
+      if (legacyCompanyTitle) { company = legacyCompanyTitle[1].trim(); section = null; continue; }
       if (/اوتوماتيك|automatic/i.test(normalized)) { section = "مسحوق أوتوماتيك"; continue; }
       if (/اوزان|شكاير|شكاره/i.test(normalized)) { section = "أوزان وشكاير"; continue; }
       if (/عبوات صغيره|العبوات الصغيره/i.test(normalized)) { section = "العبوات الصغيرة"; continue; }
       if (line.length >= 2 && line.length <= 100 && !/^\d/.test(toAsciiDigits(line))) {
         const header = line.split(/[–—-]/)[0].trim();
-        if (/^(أسعار|اسعار)/i.test(header)) company = header.replace(/^(أسعار|اسعار)\s*/i, "").trim() || company;
-        else if (header) company = header;
+        if (/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+شركة\s+/iu.test(header)) {
+          company = header.replace(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+/iu, "").trim() || company;
+        } else if (header) {
+          section = header;
+        }
       }
       continue;
     }
@@ -169,7 +176,7 @@ function deterministicList(text) {
     if (!priceTokens.length) continue;
     const weightMatch = toAsciiDigits(line).match(WEIGHT_TOKEN);
     const quantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
-    const countMatch = toAsciiDigits(line).match(/(?:^|\s)(\d+)\s*(?:ق|قط|قطعه|قطعة)(?=\s|$)/i);
+    const countMatch = toAsciiDigits(line).match(/(?:^|[+*x×\s])(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)(?=\s|$)/iu);
     const packCount = countMatch ? Number(countMatch[1]) : null;
     const wholesaleIndex = line.search(WHOLESALE_LABEL);
     const consumerIndex = line.search(RETAIL_LABEL);
@@ -183,7 +190,7 @@ function deterministicList(text) {
     const currencyMarkedPrices = beforeLabel.filter(p => p.explicitCurrency);
     const packagePrice = (currencyMarkedPrices.length
       ? currencyMarkedPrices[currencyMarkedPrices.length - 1]
-      : beforeLabel[0])?.value ?? null;
+      : beforeLabel[beforeLabel.length - 1])?.value ?? null;
     const rowUnitPriceType = detectUnitPriceType(line);
     // A carton-specific offer note establishes the unit for following rows in the same product section.
     if (rowUnitPriceType === "بالكرتونة" && /العرض\s+على\s+الكرتونة|العرض\s+على\s+الكرتونه/iu.test(line)) {
@@ -192,7 +199,7 @@ function deterministicList(text) {
     const unitPriceType = rowUnitPriceType || sectionUnitPriceType ||
       // In a named company wholesale catalog, an unmarked price is a carton price.
       // Explicit per-piece markers and section headings take precedence above.
-      (metadata.company && metadata.priceType === "أسعار جملة" ? "بالكرتونة" : null);
+      (metadata.company && (metadata.isCompanyCatalog || metadata.priceType === "أسعار جملة") ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(productPrefix);

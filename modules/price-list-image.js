@@ -1,13 +1,12 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
-const { render: shapeArabicForSvg } = require("bidi-shaper");
 
 function escapeXml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
 }
 function svgText(value) {
-  return escapeXml(shapeArabicForSvg(String(value ?? ""), { direction: "auto", paragraphs: "split" }));
+  return escapeXml(String(value ?? ""));
 }
 function priceText(value) {
   const n = Number(value);
@@ -59,7 +58,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
       const packageSize = size ? svgText(size) : "";
       const unitLabel = item.unit_price_type === "بالقطعة" ? "بالقطعة" : item.unit_price_type === "بالكرتونة" ? "بالكرتونة" : "";
       const fill = i % 2 ? "#f3f7f5" : "#ffffff";
-      return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><text x="1125" y="${y+14}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" font-weight="700" fill="#000000">${category}</text><g clip-path="url(#productColumnClip)"><text x="1125" y="${y+32}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">${name}</text></g><text x="600" y="${y+27}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="14" font-weight="700" fill="#000000">${packageSize || "—"}</text>${productNote ? `<text x="600" y="${y+43}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="9" fill="#000000">${productNote}</text>` : ""}<text x="72" y="${y+27}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="18" font-weight="700" fill="#000000">${svgText(priceText(item.package_sale_price))}</text>${unitLabel ? `<text x="72" y="${y+43}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" fill="#000000">${svgText(unitLabel)}</text>` : ""}`;
+      return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><text x="1125" y="${y+14}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" unicode-bidi="plaintext" font-size="10" font-weight="700" fill="#000000">${category}</text><g clip-path="url(#productColumnClip)"><text x="1125" y="${y+32}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">${name}</text></g><text x="600" y="${y+27}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="14" font-weight="700" fill="#000000">${packageSize || "—"}</text>${productNote ? `<text x="600" y="${y+43}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="9" fill="#000000">${productNote}</text>` : ""}<text x="72" y="${y+27}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="18" font-weight="700" fill="#000000">${svgText(priceText(item.package_sale_price))}</text>${unitLabel ? `<text x="72" y="${y+43}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" fill="#000000">${svgText(unitLabel)}</text>` : ""}`;
     }).join("");
     const rowBackgroundSvg = (rowSvg.match(/<rect x="36" y="[^"]+" width="1128" height="47" rx="12" fill="[^"]+"\/>/g) || []).join("");
     const rowTextSvg = rowSvg.replace(/<rect x="36" y="[^"]+" width="1128" height="47" rx="12" fill="[^"]+"\/>/g, "");

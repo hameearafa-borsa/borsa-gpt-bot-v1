@@ -39,6 +39,12 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.match(capturedSvg, /data:image\/(?:jpeg|png);base64,/, "default output must embed the group logo");
     assert.match(capturedSvg, /url\(#securityTexture\)/, "default output must include the subtle security background");
     assert.match(capturedSvg, /url\(#rowWatermark\)/, "default output must repeat the watermark across price rows");
+    assert.equal((capturedSvg.match(/transform="rotate\(-22 /g) || []).length, 2,
+      "the group name must appear diagonally in exactly two background positions");
+    assert.match(capturedSvg, /x="58" y="45" width="86" height="86"/,
+      "the group logo must remain at the upper-left of the image");
+    assert.match(capturedSvg, /width="900" height="900"[^>]*opacity="0.05"/,
+      "the logo watermark must remain softly visible in the background");
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);

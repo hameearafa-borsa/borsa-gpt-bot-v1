@@ -7,7 +7,8 @@
     "start": "node index.js",
     "check": "node --check index.js && node --check core/*.js && node --check modules/*.js && node --check tests/*.js",
     "test": "node tests/run-all.js && node tests/links-diagnostics.test.js",
-    "preflight:live": "node tests/preflight-live.js"
+    "preflight:live": "node tests/preflight-live.js",
+    "test:deals-live": "node tests/deal-sources-live.js"
   },
   "engines": {
     "node": ">=24 <25"

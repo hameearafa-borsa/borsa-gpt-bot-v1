@@ -19,8 +19,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(parseStructuredPriceTable(bahiTextCatalog).length, 49, "all Bahi ASC2 product rows must be parsed");
   const unileverList = fs.readFileSync(path.join(__dirname, "fixtures-unilever-oct-2026.txt"), "utf8");
   assert.equal(isBulkPriceList(unileverList), true, "a long Unilever price list is a catalog, not one ordinary price observation");
-  assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
-    "bulk price lists must not generate dozens of individual review messages");
+  assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "bulk price lists must enter the deterministic catalog monitor instead of being discarded");
   assert.equal(isBulkPriceList(base.text), false, "a single product price remains eligible");
   const asc2September = parseStructuredPriceTable("تصفية اسعار سبتمبر ASC2 2026\nالاصناف\tعدد القطع\tالسعر الصافي بعد الخصم 2%\tصافي سعر القطعة\nالصابون الريحة\nدوش 60 جرام 48 313.60 6.50\nدوش 110 جرام 48 570.27 11.90\nعرض التوفير على شراء 2 كرتونه\nباهي 1000جرام 6 367.34 61.20\nعرض التوفير على شراء 3 كرتونه\nباهي  جرام 4 468.83 117.20\nالهاند ووش والشاور جل ريفولي\nشاور جل ريفولي 1 لتر 12 1,147.58 95.60");
   assert.equal(asc2September.length, 5, "structured price table should retain each complete product row");
@@ -137,8 +137,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 في برضو ب٥ج ب١٠ج ب٢٥ج`;
   assert.equal(isBulkPriceList(arielPromoList), true,
     "a multiline detergent list with price followed by pack count must be excluded from individual price monitoring");
-  assert.equal(isEligibleMessage({ ...base, text: arielPromoList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
-    "an entire promotional list must not produce per-row observations, including its incomplete final commentary line");
+  assert.equal(isEligibleMessage({ ...base, text: arielPromoList, isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "a multi-product message must be processed as a catalog and not discarded");
   const oneLineUnilever = unileverList.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
   assert.equal(isBulkPriceList(oneLineUnilever), true,
     "a full catalog pasted as one long Telegram paragraph must not trigger per-product monitoring");
@@ -159,8 +159,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 كمفورت لتر عرض 87.15`;
   assert.equal(isBulkPriceList(unileverSeptemberNoCurrency), true,
     "a company list with many numeric prices but no currency suffix on most rows must be detected as bulk");
-  assert.equal(isEligibleMessage({ ...base, text: unileverSeptemberNoCurrency, isLogChannel: false, isCommand: false, ownMessage: false }), false,
-    "a September-style Unilever catalog must not become many individual monitor observations");
+  assert.equal(isEligibleMessage({ ...base, text: unileverSeptemberNoCurrency, isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "a September-style Unilever catalog must be eligible for deterministic catalog monitoring");
   assert.equal(isOwnMessage({ botUserId: 123, fromId: "123" }), true);
   assert.equal(isOwnMessage({ botUserId: 123, fromId: 456 }), false);
 

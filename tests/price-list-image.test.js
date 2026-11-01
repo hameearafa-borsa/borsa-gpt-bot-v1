@@ -11,7 +11,7 @@ assert.doesNotMatch(imageSource, /bidi-shaper|shapeArabicForSvg/, "Arabic must r
 assert.match(imageSource, /unicode-bidi="plaintext"/, "SVG text must use paragraph-aware bidi resolution");
 const mixedLogical = "دوف 350 مل — 121.00 ج.م";
 assert.ok(mixedLogical.includes("121.00"), "numeric price must remain intact in mixed Arabic text");
-assert.doesNotMatch(mixedLogical, /[\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/, "source text must not be converted to Arabic presentation forms");
+assert.doesNotMatch(mixedLogical, /[\uFB50-\uFDFF\uFE70-\uFEFF]/, "source text must not be converted to Arabic presentation forms");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
 assert.match(dockerSource, /apk add --no-cache font-noto fontconfig/, "production image must install Arabic-capable fonts for SVG rasterization");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");

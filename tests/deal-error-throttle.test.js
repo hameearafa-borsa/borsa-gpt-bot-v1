@@ -7,6 +7,7 @@ const { publishDailyDeals } = require("../modules/deal-scheduler");
   let notificationWrites = 0;
   const pool = {
     async query(sql) {
+      if (sql.includes("FROM service_settings")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT channel_kind,status FROM deal_publications")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO deal_error_notifications")) {
         notificationWrites++;

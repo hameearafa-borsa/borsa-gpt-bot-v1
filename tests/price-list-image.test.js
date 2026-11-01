@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
-const { escapeXml, renderPriceListImage, renderPriceListImages } = require("../modules/price-list-image");
+const { escapeXml, packageStatus, renderPriceListImage, renderPriceListImages } = require("../modules/price-list-image");
 const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-image.js"), "utf8");
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic UI,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
@@ -14,6 +14,7 @@ assert.match(dockerSource, /font-noto-arabic/, "production image must install No
 assert.match(dockerSource, /font-noto-naskh-arabic/, "production image must install Noto Naskh Arabic fonts");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
+assert.equal(packageStatus({ weight_g: 110, pack_count: 48, unit_price_type: "بالكرتونة" }), "110 جم · 48 قطعة · بالكرتونة", "package details must preserve size, carton count and price unit");
 (async () => {
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: [{ product: "أ", package_sale_price: 10 }] }), /three_valid_products/);
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: Array.from({length: 101}, (_, i) => ({ product: `منتج ${i}`, package_sale_price: 10 })) }), /exceeds_100_products/);
@@ -31,7 +32,9 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
       { product: "منتج أول", package_sale_price: 10 },
       { product: "منتج ثان", package_sale_price: 20 },
       { product: "منتج ثالث", package_sale_price: 30 },
-      { product: "A".repeat(149) + "&end", package_sale_price: 40, unit_price_type: "بالكرتونة" }
+      { product: "A".repeat(149) + "&end", package_sale_price: 40, unit_price_type: "بالكرتونة" },
+      { product: "صابون دوش", package_sale_price: 612.5, weight_g: 110, pack_count: 48, unit_price_type: "بالكرتونة" },
+      { product: "الصنف النهائي السعر", package_sale_price: 1, unit_price_type: "بالكرتونة" }
     ] });
     assert.equal(png.toString(), "mock-png");
     assert.match(capturedSvg, /شركة اختبار/);
@@ -42,7 +45,9 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /10 ج\.م/);
     assert.match(capturedSvg, /بالكرتونة/, "carton price type should be visible in the package/status column");
-    assert.match(capturedSvg, /العبوة \/ السعر/, "the new middle column must have a clear heading");
+    assert.match(capturedSvg, /110 جم · 48 قطعة · بالكرتونة/, "the image must show both package size and carton count");
+    assert.doesNotMatch(capturedSvg, /الصنف النهائي السعر/, "column headings must never be rendered as product names");
+    assert.match(capturedSvg, /تفاصيل العبوة/, "the middle column must clearly label package details");
     assert.match(capturedSvg, /x="390"/, "package/status column should sit between product and price, closer to the price");
     assert.match(capturedSvg, /opacity="0.10"/, "the brand logo should appear as a visible but subtle background watermark");
     const perPieceImages = await renderPriceListImages({ company: "شركة اختبار", items: [

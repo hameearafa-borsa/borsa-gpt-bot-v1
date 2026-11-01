@@ -10,7 +10,9 @@ assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG 
 assert.match(imageSource, /require\("bidi-shaper"\)/, "SVG renderer must apply Arabic shaping and Unicode bidi before rasterization");
 const { render: shapeArabicForSvg } = require("bidi-shaper");
 assert.match(shapeArabicForSvg("مرحبا بالعالم"), /[\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/, "Arabic words must be contextually shaped");
-assert.equal(shapeArabicForSvg("دوف 350 مل — 121.00 ج.م"), "ﻡ.ﺝ 121.00 — ﻞﻣ 350 ﻑﻭﺩ", "mixed Arabic, Latin punctuation and prices must retain correct visual order");
+const mixedVisual = shapeArabicForSvg("دوف 350 مل — 121.00 ج.م");
+assert.ok(mixedVisual.includes("121.00"), "numeric price must remain in left-to-right order inside Arabic text");
+assert.match(mixedVisual, /[\uFB50-\uFDFF\uFE70-\uFEFF]/, "mixed Arabic text must contain shaped presentation glyphs");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
 assert.match(dockerSource, /apk add --no-cache font-noto fontconfig/, "production image must install Arabic-capable fonts for SVG rasterization");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");

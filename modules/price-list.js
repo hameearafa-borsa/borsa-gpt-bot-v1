@@ -59,7 +59,7 @@ function cleanProductName(line) {
     .replace(/^[\s•*._-]+/, "")
     .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
     .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)/giu, " ")
-    .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة)/giu, " ")
+    .replace(/\b\d+\s*(?:قطعة|قطعه|قط|ق)/giu, " ")
     .replace(/\s+/g, " ").trim();
 }
 function parseListMetadata(text) {
@@ -157,7 +157,7 @@ function deterministicList(text) {
     if (!priceTokens.length) continue;
     const weightMatch = toAsciiDigits(line).match(WEIGHT_TOKEN);
     const quantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
-    const countMatch = toAsciiDigits(line).match(/(?:^|\s)(\d+)\s*(?:ق|قط|قطعه|قطعة)(?=\s|$)/i);
+    const countMatch = toAsciiDigits(line).match(/(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$)/i);
     const packCount = countMatch ? Number(countMatch[1]) : null;
     const wholesaleIndex = line.search(WHOLESALE_LABEL);
     const consumerIndex = line.search(RETAIL_LABEL);

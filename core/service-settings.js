@@ -30,7 +30,7 @@ async function getSettings(pool, scope, chatId = 0) {
     [target.scope, target.chatId]
   );
   const saved = new Map((result.rows || []).map(row => [row.service_key, row.enabled === true]));
-  return SERVICES.filter(item => item.scope === "both" || item.scope === scope)
+  return SERVICES.filter(item => scope === "global" || item.scope === "both" || item.scope === scope)
     .map(item => ({ ...item, enabled: saved.has(item.key) ? saved.get(item.key) : true }));
 }
 async function setServiceSetting(pool, { scope, chatId = 0, serviceKey, enabled, actorId }) {

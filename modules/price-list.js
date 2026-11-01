@@ -55,7 +55,7 @@ function getPriceTokens(line) {
   return [...s.matchAll(PRICE_TOKEN)].map(m => {
     const end = m.index + m[0].length;
     const tail = s.slice(end);
-    const isQuantity = /^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
+    const isQuantity = /^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل|قطعة|قطعه|قطع|ق(?=\s|$)|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/iu.test(tail);
     const explicitCurrency = /(?:جنيه|ج|EGP)\s*$/iu.test(m[0]);
     return { value: parseNumber(m[1]), index: m.index, token: m[0].trim(), isQuantity, explicitCurrency };
   }).filter(x => !x.isQuantity && x.value != null && x.value > 0 && x.value < 100000);
@@ -68,14 +68,14 @@ function cleanProductName(line) {
     .replace(/^[\s•*._-]+/, "")
     .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
     .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)/giu, " ")
-    .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة)/giu, " ")
+    .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/giu, " ")
     .replace(/\s+/g, " ").trim();
 }
 function parseListMetadata(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   let company = null, month = null, priceType = null;
   for (const line of lines) {
-    const companyMatch = line.match(/^(?:أسعار|اسعار)\s+(شركة\s+.+)$/iu);
+    const companyMatch = line.match(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+(شركة\s+.+)$/iu);
     if (companyMatch) company = companyMatch[1].trim().replace(/[:：]+$/, "");
     const monthMatch = line.match(/^(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+(20\d{2})$/iu);
     if (monthMatch) month = `${monthMatch[1]} ${monthMatch[2]}`;
@@ -169,7 +169,7 @@ function deterministicList(text) {
     if (!priceTokens.length) continue;
     const weightMatch = toAsciiDigits(line).match(WEIGHT_TOKEN);
     const quantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
-    const countMatch = toAsciiDigits(line).match(/(?:^|\s)(\d+)\s*(?:ق|قط|قطعه|قطعة)(?=\s|$)/i);
+    const countMatch = toAsciiDigits(line).match(/(?:^|[+*x×\s])(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)(?=\s|$)/iu);
     const packCount = countMatch ? Number(countMatch[1]) : null;
     const wholesaleIndex = line.search(WHOLESALE_LABEL);
     const consumerIndex = line.search(RETAIL_LABEL);
@@ -183,7 +183,7 @@ function deterministicList(text) {
     const currencyMarkedPrices = beforeLabel.filter(p => p.explicitCurrency);
     const packagePrice = (currencyMarkedPrices.length
       ? currencyMarkedPrices[currencyMarkedPrices.length - 1]
-      : beforeLabel[0])?.value ?? null;
+      : beforeLabel[beforeLabel.length - 1])?.value ?? null;
     const rowUnitPriceType = detectUnitPriceType(line);
     // A carton-specific offer note establishes the unit for following rows in the same product section.
     if (rowUnitPriceType === "بالكرتونة" && /العرض\s+على\s+الكرتونة|العرض\s+على\s+الكرتونه/iu.test(line)) {
@@ -192,7 +192,7 @@ function deterministicList(text) {
     const unitPriceType = rowUnitPriceType || sectionUnitPriceType ||
       // In a named company wholesale catalog, an unmarked price is a carton price.
       // Explicit per-piece markers and section headings take precedence above.
-      (metadata.company && metadata.priceType === "أسعار جملة" ? "بالكرتونة" : null);
+      (metadata.company ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(productPrefix);
@@ -205,7 +205,7 @@ function deterministicList(text) {
     const hasIdentity = metadata.company ? Boolean(productPrefix && /[\u0600-\u06ff]/u.test(productPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
     const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
     const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
-    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";
+    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : (suspiciousCurrency && !contextualCurrencyTypo) ? "review" : "accepted";
     out.push({
       raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company,
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,

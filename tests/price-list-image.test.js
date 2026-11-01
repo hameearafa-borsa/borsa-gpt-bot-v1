@@ -47,9 +47,9 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.match(capturedSvg, /url\(#rowWatermark\)/, "default output must repeat the watermark across price rows");
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
-    assert.match(capturedSvg, /10 ج\.م/);
+    assert.ok(capturedSvg.includes("10") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "price currency label should be shaped while digits remain intact");
     assert.ok(capturedSvg.includes(shapeArabicForSvg("بالكرتونة")), "carton price type should be visible with shaped Arabic");
-    assert.match(capturedSvg, /العبوة \/ السعة/, "package size should have its own labeled middle column");
+    assert.ok(capturedSvg.includes(shapeArabicForSvg("العبوة / السعة")), "package size should have its own labeled middle column");
     assert.ok(capturedSvg.includes(shapeArabicForSvg("الصنف")), "product name should have a separate column heading");
     assert.ok(capturedSvg.includes(shapeArabicForSvg("السعر")), "price should have a separate column heading");
     assert.ok(capturedSvg.includes("350") && capturedSvg.includes(shapeArabicForSvg("مل")), "package capacity should preserve its number and shape its Arabic unit");
@@ -64,9 +64,9 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
         { product: "صنف ثالث", package_sale_price: 125, wholesale_carton_price: 500, consumer_price: 250, list_price: 300, unit_price_type: "بالكرتونة" }
       ]
     });
-    assert.match(capturedSvg, /42\.33 ج\.م/, "the declared package price should be rendered for per-piece rows");
-    assert.match(capturedSvg, /346 ج\.م/, "the declared package price should be rendered for carton rows");
-    assert.doesNotMatch(capturedSvg, /999 ج\.م|888 ج\.م|777 ج\.م|500 ج\.م|250 ج\.م|300 ج\.م/,
+    assert.ok(capturedSvg.includes("42.33") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "the declared package price should be rendered for per-piece rows");
+    assert.ok(capturedSvg.includes("346") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "the declared package price should be rendered for carton rows");
+    assert.doesNotMatch(capturedSvg, /999|888|777|500|250|300/, "separate wholesale, consumer and list prices must not leak into the single-price company-list image");
       "separate wholesale, consumer and list prices must not leak into the single-price company-list image");
     const unileverLikeImages = await renderPriceListImages({
       company: "شركة اختبار",

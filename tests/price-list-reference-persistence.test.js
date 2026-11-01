@@ -42,7 +42,7 @@ const { persistPriceList } = require("../modules/price-list-persistence");
   assert.ok(references.some(q => /كلير أكياس 5 مل الكرتونة/.test(q.params[16]) && q.params[13] === "بالكرتونة"),
     "explicit carton rows must be persisted as carton references");
   const itemRows = queries.filter(q => q.sql.includes("INSERT INTO price_list_items"));
-  assert.ok(itemRows.some(q => /قرنفل 100مل \\+25مل هدية/.test(q.params[11])),
+  assert.ok(itemRows.some(q => /قرنفل 100مل \+25مل هدية/.test(q.params[11])),
     "promotional raw line must survive catalog persistence even while held for review");
   assert.ok(!queries.some(q => /INSERT INTO price_observations/.test(q.sql)),
     "official company catalogs must not be persisted as live group sightings");

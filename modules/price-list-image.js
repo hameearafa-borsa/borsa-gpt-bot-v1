@@ -23,7 +23,7 @@ function packageStatus(item) {
   return [size, count, unit].filter(Boolean).join(" · ");
 }
 function isColumnHeaderLabel(value) {
-  const normalized = String(value || "").replace(/[^\\p{L}]/gu, "");
+  const normalized = String(value || "").replace(/[^\p{L}]/gu, "");
   return ["الصنفالنهائيسعر", "الصنفالسعر", "الصنف"].includes(normalized);
 }
 

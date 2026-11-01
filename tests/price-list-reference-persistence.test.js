@@ -41,8 +41,9 @@ const { persistPriceList } = require("../modules/price-list-persistence");
     "per-piece toothpaste row and its raw source line must be persisted");
   assert.ok(references.some(q => /كلير أكياس 5 مل الكرتونة/.test(q.params[16]) && q.params[13] === "بالكرتونة"),
     "explicit carton rows must be persisted as carton references");
-  assert.ok(references.some(q => /قرنفل 100مل \+25مل هدية/.test(q.params[16])),
-    "promotional raw line must survive persistence so comparison logic can reject unsafe base-price matching");
+  const itemRows = queries.filter(q => q.sql.includes("INSERT INTO price_list_items"));
+  assert.ok(itemRows.some(q => /قرنفل 100مل \\+25مل هدية/.test(q.params[11])),
+    "promotional raw line must survive catalog persistence even while held for review");
   assert.ok(!queries.some(q => /INSERT INTO price_observations/.test(q.sql)),
     "official company catalogs must not be persisted as live group sightings");
   console.log("UNILEVER PRICE-LIST REFERENCE PERSISTENCE TEST: OK (61 trusted references, 66 catalog rows including 5 review rows)");

@@ -80,6 +80,11 @@ function parseListMetadata(text) {
   }
   return { company, month, priceType };
 }
+function extractPackageSizes(line) {
+  const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
+  return [...ascii.matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))/giu)]
+    .map(match => match[0].replace(/\s+/g, " ").trim());
+}
 function extractPackageLabel(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
   const sizes = [...ascii.matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu)]
@@ -198,15 +203,18 @@ function deterministicList(text) {
       // Explicit per-piece markers and section headings take precedence above.
       (metadata.company && metadata.priceType === "أسعار جملة" ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
+    const identitySizes = metadata.company && /(?:[*×x]\s*\d+|(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu.test(toAsciiDigits(line))
+      ? extractPackageSizes(line) : [];
+    const displayProductPrefix = [productPrefix, ...identitySizes].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
-    const identityText = normalizeArabic(productPrefix);
+    const identityText = normalizeArabic(displayProductPrefix);
     const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));
     const product = metadata.company
-      ? productPrefix
+      ? displayProductPrefix
       : [company, section, productPrefix, weightLabel].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const normalizedLine = normalizeArabic(line);
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
-    const hasIdentity = metadata.company ? Boolean(productPrefix && /[\u0600-\u06ff]/u.test(productPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
+    const hasIdentity = metadata.company ? Boolean(displayProductPrefix && /[\u0600-\u06ff]/u.test(displayProductPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
     const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
     const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
     const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";

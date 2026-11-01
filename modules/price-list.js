@@ -98,7 +98,7 @@ function cleanExplicitProductLine(line) {
   const token = tokens.filter(m => /(?:جنيه|ج|EGP)\s*$/iu.test(m[0])).at(-1) || tokens.at(-1);
   if (!token) return cleanProductName(line);
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
-    .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g|لتر|ل|ml|مل)/giu, " ")
+    .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g)/giu, " ")
     .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/giu, " ")
     .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
     // Keep carton promotion wording in raw_line, not in the normalized product identity.

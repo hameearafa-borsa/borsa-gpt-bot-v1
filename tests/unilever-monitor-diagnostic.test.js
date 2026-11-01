@@ -11,6 +11,22 @@ const registry = require("../data/product-registry.json");
   assert.equal(isBulkPriceList(source), true, "Unilever fixture must enter bulk catalog monitoring");
   const metadata = parseListMetadata(source);
   const parsed = deterministicList(source);
+  const row = text => parsed.find(item => item.raw_line === text);
+  assert.equal(row("صانسيلك 350 + بلسم  ق 159 ج")?.package_sale_price, 159,
+    "bundle quantity must not be mistaken for the listed currency price");
+  assert.equal(row("تريزيمي 400 + بلسم ق 276 ج")?.package_sale_price, 276,
+    "bundle size must not be mistaken for the listed currency price");
+  for (const raw of [
+    "سيجنال قرنفل 100مل +25مل هدية ق 57,5 ج",
+    "صانسيلك 350 + بلسم  ق 159 ج",
+    "تريزيمي 400 + بلسم ق 276 ج",
+    "تريزيمي بلسم 600 مل ق 205 ح",
+    "كامي 110جم 1104 ج العرض على الكرتونة قطعة صابون هدية"
+  ]) {
+    assert.equal(row(raw)?.decision, "review", "ambiguous offer/currency row must require review: " + raw);
+  }
+  assert.equal(parsed.filter(x => x.decision === "review").length >= 5, true,
+    "Unilever offers and suspicious currency rows must not all be auto-approved");
   const inserts = [];
   const pool = { async query(sql, params) {
     if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };

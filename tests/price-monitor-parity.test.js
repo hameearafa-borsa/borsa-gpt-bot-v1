@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { deterministicList } = require("../modules/price-list");
-const { observe } = require("../modules/price-monitor");
+const { observe, isBulkPriceList } = require("../modules/price-monitor");
 const { parsePackageType } = require("../modules/price-intelligence");
 const registry = require("../data/product-registry.json");
 
@@ -24,6 +24,10 @@ const pearl = `أسعار بيرل – أكتوبر
 • 30 جم: 3.79 | جملة 75.95 | مستهلك 5`;
 
 (async () => {
+  assert.equal(isBulkPriceList(pearl), true, "a titled multi-line Pearl price catalog must use the deterministic list parser");
+  const singleLinePaste = "أسعار بيرل – أكتوبر | مسحوق 9 ك 505 ج | جملة 487 ج | مستهلك 525 ج | مسحوق 5 ك 308 ج | جملة 290 ج | مستهلك 325 ج";
+  assert.equal(isBulkPriceList(singleLinePaste), false, "an unsplittable one-line paste must not be misrouted into the line-oriented bulk parser");
+
   const expected = deterministicList(pearl);
   const inserts = [];
   const pool = { async query(sql, params) {

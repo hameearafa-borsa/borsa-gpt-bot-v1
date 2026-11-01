@@ -769,7 +769,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|h
         await serviceSettings.setServiceSetting(db.pool, { scope: "group", chatId: targetChatId, serviceKey: key, enabled: !item.enabled, actorId: ctx.from.id });
       }
       const settings = await serviceSettings.getSettings(db.pool, "group", targetChatId);
-      await ctx.editMessageText(adminPanel.settingsText("group", targetChatId, settings), { reply_markup: adminPanel.settingsKeyboard(settings, "group", targetChatId) });
+      await ctx.editMessageText(adminPanel.settingsText("group", targetChatId, settings), { reply_markup: adminPanel.settingsKeyboard(settings, "admin-group", targetChatId) });
       await ctx.answerCbQuery(section.startsWith("group-toggle:") ? "تم حفظ إعداد المجموعة." : "").catch(() => {});
       return;
     }

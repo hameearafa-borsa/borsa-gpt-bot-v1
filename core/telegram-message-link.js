@@ -13,10 +13,12 @@ function parseMessageLink(value) {
     if (!Number.isSafeInteger(internalChatId) || !Number.isSafeInteger(messageId) || internalChatId <= 0 || messageId <= 0) return null;
     return { chatId: Number(`-100${parts[1]}`), messageId };
   }
-  if (parts.length === 2 && /^[A-Za-z0-9_]+$/.test(parts[0]) && isDigits(parts[1])) {
-    const messageId = Number(parts[1]);
+  // Telegram public preview/share links may include an /s/ segment.
+  const publicParts = parts.length === 3 && parts[0].toLowerCase() === "s" ? parts.slice(1) : parts;
+  if (publicParts.length === 2 && /^[A-Za-z0-9_]+$/.test(publicParts[0]) && isDigits(publicParts[1])) {
+    const messageId = Number(publicParts[1]);
     if (!Number.isSafeInteger(messageId) || messageId <= 0) return null;
-    return { username: `@${parts[0]}`, messageId };
+    return { username: `@${publicParts[0]}`, messageId };
   }
   return null;
 }

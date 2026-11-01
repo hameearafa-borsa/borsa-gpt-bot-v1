@@ -12,6 +12,7 @@ const parser = require("../modules/price-list");
 const metadata = parser.parseListMetadata("قائمة أسعار شركة باهي\nشهر أكتوبر 2026");
 assert.equal(metadata.company, "شركة باهي");
 assert.equal(metadata.month, "أكتوبر 2026");
+assert.equal(metadata.isCompanyCatalog, true, "explicit company catalog heading enables carton defaults");
 const rows = parser.deterministicList([
   "قائمة أسعار شركة باهي", "شهر أكتوبر 2026",
   "صابون دوش 60 جم * 48 قطعة 329.28",

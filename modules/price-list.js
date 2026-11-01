@@ -93,18 +93,25 @@ function cleanExplicitProductLine(line) {
   const token = [...ascii.matchAll(PRICE_TOKEN)].find(m => {
     const end = m.index + m[0].length;
     const tail = ascii.slice(end);
-    return !/^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
+    return !/^\\s*(?:كيلو|كجم|ك(?=\\s|:)|kg|جرام|جم|g|لتر|ل(?=\\s|:)|ml|مل)/i.test(tail);
   });
   const withoutPrice = token
     ? ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length)
     : ascii;
+  const hasCompactCount = /(?:[*×x]\\s*\\d+|(?:^|\\s)\\d+\\s*(?:قطعة|قطعه|قط|ق)(?=\\s|$))/iu.test(ascii);
+  if (!hasCompactCount) {
+    return withoutPrice
+      .replace(/(?:^|\\s)ق\\s*(?=\\s|$)/giu, " ")
+      .replace(/\\s+(?:العرض|عرض)\\s+على\\s+(?:الكرتونة|الكرتونه)[\\s\\S]*$/iu, "")
+      .replace(/\\s+/g, " ").trim().replace(/^[\\s•*._-]+/, "");
+  }
   return withoutPrice
-    .replace(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
-    .replace(/(?:[*×x]\s*\d+|(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/giu, " ")
-    .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
-    .replace(/\s+(?:العرض|عرض)\s+على\s+(?:الكرتونة|الكرتونه)[\s\S]*$/iu, "")
+    .replace(/\\d+(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+(?:[.,]\\d+)?)*\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
+    .replace(/(?:[*×x]\\s*\\d+|(?:^|\\s)\\d+\\s*(?:قطعة|قطعه|قط|ق)(?=\\s|$))/giu, " ")
+    .replace(/(?:^|\\s)ق\\s*(?=\\s|$)/giu, " ")
+    .replace(/\\s+(?:العرض|عرض)\\s+على\\s+(?:الكرتونة|الكرتونه)[\\s\\S]*$/iu, "")
     .replace(/[+*×/]+/gu, " ")
-    .replace(/\s+/g, " ").trim().replace(/^[\s•._-]+/, "");
+    .replace(/\\s+/g, " ").trim().replace(/^[\\s•._-]+/, "");
 }
 function detectUnitPriceHeading(line) {
   const s = normalizeArabic(line);

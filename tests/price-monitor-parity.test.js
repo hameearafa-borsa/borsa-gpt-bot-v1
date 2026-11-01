@@ -96,5 +96,46 @@ const pearl = `أسعار بيرل – أكتوبر
   assert.equal(replay.saved, 0);
   assert.equal(duplicateInserts, 0);
 
+  // Identical text sent as a new Telegram message is a new observation, not a replay.
+  const newMessageInserts = [];
+  const newMessagePool = { async query(sql, params) {
+    if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+    if (sql.includes("INSERT INTO price_observations")) {
+      newMessageInserts.push(params);
+      return { rows: [{ id: newMessageInserts.length }], rowCount: 1 };
+    }
+    throw new Error("Unexpected query: " + sql);
+  } };
+  const newMessage = await observe({
+    pool: newMessagePool,
+    message: { chatId: -1001, messageId: 7002, text: pearl },
+    registry
+  });
+  assert.equal(newMessage.saved, expected.length, "same text under a new Telegram message ID must remain a new observation");
+
+  // Simulate two workers racing after both have passed the pre-insert duplicate SELECT.
+  // The database unique index + ON CONFLICT DO NOTHING must allow only one insert per source row.
+  const insertedSourceRows = new Set();
+  const concurrentPool = { async query(sql, params) {
+    if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+    if (sql.includes("INSERT INTO price_observations")) {
+      const key = [params[3], params[4], params[6]].join(":");
+      if (insertedSourceRows.has(key)) return { rows: [], rowCount: 0 };
+      insertedSourceRows.add(key);
+      return { rows: [{ id: insertedSourceRows.size }], rowCount: 1 };
+    }
+    throw new Error("Unexpected query: " + sql);
+  } };
+  const [workerA, workerB] = await Promise.all([
+    observe({ pool: concurrentPool, message: { chatId: -1001, messageId: 7003, text: pearl }, registry }),
+    observe({ pool: concurrentPool, message: { chatId: -1001, messageId: 7003, text: pearl }, registry })
+  ]);
+  assert.equal(workerA.saved + workerB.saved, expected.length, "concurrent retries must insert each source row once");
+  assert.equal(insertedSourceRows.size, expected.length);
+
   console.log("price-monitor-parity tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

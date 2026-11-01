@@ -12,13 +12,14 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   const parsed = deterministicList(fixture);
   const accepted = parsed.filter(row => row.decision === "accepted");
   const review = parsed.filter(row => row.decision === "review");
+  const renderRows = parsed.filter(row => row.decision !== "skipped");
   assert.equal(metadata.company, "شركة يونيليفر");
   assert.equal(metadata.month, "أكتوبر 2026");
   assert.equal(metadata.priceType, "أسعار جملة");
   assert.equal(new Set(accepted.map(row => row.company)).size, 1, "sections must not be mistaken for different companies");
   assert.equal(parsed.length, 66, "every readable row in the current Unilever fixture must be retained");
-  assert.equal(accepted.length, 66, "wholesale catalog rows should infer carton pricing when no per-piece marker exists, including the contextually corrected currency suffix");
-  assert.equal(review.length, 0, "the only suspicious currency suffix is resolved by adjacent rows that use ج");
+  assert.equal(accepted.length, 61, "only unambiguous rows should be auto-accepted");
+  assert.equal(review.length, 5, "bundle offers and suspicious currency suffixes must be held for review");
   assert.equal(parsed.filter(row => row.decision === "skipped").length, 0, "no priced row should be silently skipped");
   assert.ok(accepted.every(row => row.unit_price_type === "بالقطعة" || row.unit_price_type === "بالكرتونة"),
     "accepted rows must have a verified per-piece or carton sale unit");
@@ -30,16 +31,18 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     "unmarked rows in a named wholesale catalog must be recorded as carton prices");
   assert.ok(accepted.some(row => /لوكس 115جم/.test(row.raw_line) && row.unit_price_type === "بالكرتونة"),
     "the carton offer note in the soap section should establish carton pricing for following soap rows");
-  assert.ok(accepted.some(row => /205 ح/.test(row.raw_line) && row.package_sale_price === 205), "the contextual currency typo should retain its source text and numeric price");
+  assert.ok(review.some(row => /205 ح/.test(row.raw_line) && row.package_sale_price === 205), "the suspicious currency suffix should retain its source text and numeric price for review");
+  assert.equal(parsed.find(row => row.raw_line === "صانسيلك 350 + بلسم  ق 159 ج")?.package_sale_price, 159);
+  assert.equal(parsed.find(row => row.raw_line === "تريزيمي 400 + بلسم ق 276 ج")?.package_sale_price, 276);
 
   const brandPath = path.join(__dirname, "..", "1793378540373.jpg");
   assert.ok(fs.existsSync(brandPath), "the committed Borsa logo must be present for real image rendering");
-  const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
+  const images = await renderPriceListImages({ company: metadata.company, items: renderRows, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
   if (process.env.PRICE_LIST_VISUAL_QA_DIR) {
     fs.mkdirSync(process.env.PRICE_LIST_VISUAL_QA_DIR, { recursive: true });
     images.forEach((png, index) => fs.writeFileSync(path.join(process.env.PRICE_LIST_VISUAL_QA_DIR, `unilever-page-${index + 1}.png`), png));
   }
-  assert.equal(images.length, Math.ceil(accepted.length / 30), "long lists should be split into readable pages");
+  assert.equal(images.length, Math.ceil(renderRows.length / 30), "long lists should be split into readable pages");
   for (const png of images) {
     assert.ok(Buffer.isBuffer(png));
     assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "output must have a real PNG signature");

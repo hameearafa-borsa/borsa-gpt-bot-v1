@@ -306,6 +306,43 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(unileverObserved.savedRows.some(item => item.row.unit_price_type === "بالكرتونة"), "carton rows must remain distinguishable");
   assert.ok(unileverMonitorParams.every(params => params[13] === "accepted"), "accepted catalog observations must be persisted as accepted");
 
+  // Pearl multi-column catalog: select the wholesale column, preserve base/consumer columns,
+  // and keep rows reviewable when piece/carton semantics are not explicit.
+  const pearlCatalogText = `أسعار بيرل – أكتوبر
+..... أوتوماتيك
+• 9 ك: 505.31 | جملة 487.40 | مستهلك 525
+• 5 ك: 308.43 | جملة 915.87 | مستهلك 325
+• 2.5 ك: 179.15 | جملة 716.63 | مستهلك 200
+..... أوزان وشكاير
+• شكارة 10 ك: 618.35 | مستهلك 630
+• شكارة 7 ك: 432.84 | مستهلك 450
+• 2 ك: 129.22 | جملة 516.90 | مستهلك 145
+• 1.5 ك: 98.96 | جملة 395.85 | مستهلك 110
+• 1 ك: 66.28 | جملة 265.15 | مستهلك 75
+.. العبوات الصغيرة
+• 290 جم: 22.03 | جملة 176.29 | مستهلك 25
+• 160 جم: 12 | جملة 144.06 | مستهلك 15
+• 120 جم: 8.46 | جملة 135.49 | مستهلك 10
+• 50 جم: 3.96 | جملة 47.52 | مستهلك 5
+• 30 جم: 3.79 | جملة 75.95 | مستهلك 5`;
+  const pearlMonitorParams = [];
+  const pearlMonitorPool = { async query(sql, params) {
+    if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+    if (sql.includes("INSERT INTO price_observations")) { pearlMonitorParams.push(params); return { rows: [{ id: 500 + pearlMonitorParams.length }], rowCount: 1 }; }
+    throw new Error("unexpected Pearl catalog query");
+  } };
+  const pearlCatalogObserved = await observe({ pool: pearlMonitorPool, message: { chatId: -100123, messageId: 472, text: pearlCatalogText }, registry });
+  assert.equal(pearlCatalogObserved.saved, 13, "all 13 Pearl catalog rows must reach price monitoring");
+  assert.deepEqual(pearlCatalogObserved.savedRows.map(item => item.row.package_sale_price), [487.4, 915.87, 716.63, 618.35, 432.84, 516.9, 395.85, 265.15, 176.29, 144.06, 135.49, 47.52, 75.95],
+    "live monitoring must select the explicit wholesale price and otherwise retain the only package price");
+  assert.deepEqual(pearlCatalogObserved.savedRows.map(item => item.row.consumer_price), [525, 325, 200, 630, 450, 145, 110, 75, 25, 15, 10, 5, 5],
+    "consumer prices must remain in their own field during live catalog monitoring");
+  assert.equal(pearlCatalogObserved.savedRows[0].row.listed_base_price, 505.31, "the unlabelled base amount must remain available for review");
+  assert.ok(pearlCatalogObserved.savedRows.every(item => item.row.decision === "pending" && item.row.needs_review),
+    "Pearl rows with unclear piece/carton semantics or multiple price columns must remain pending");
+  assert.ok(pearlMonitorParams.every(params => params[13] === "pending"), "ambiguous Pearl catalog rows must be persisted as pending");
   // Known identity memory must never override a deterministic ambiguity flag.
   const ambiguousKnownPool = { async query(sql) {
     if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };

@@ -18,6 +18,13 @@ assert.equal(detectUnitPriceType("أريال 2ك 490ج 4ق", 4), "بالكرتو
 const rows = extractPriceCandidates(`أريال ٢ك يدوي ٤٩٠ج ٤ق\nبريكس ارضيات ٢٥ جم ١٨.٧٥ ج\nبريكس 1 لتر مستهلك 55 ج`);
 assert.ok(rows.length >= 2);
 assert.equal(rows[0].pack_count, 4);
+const baheyShower = extractPriceCandidates("صابون دوش 110 جم * 48 قطعة 612.50")[0];
+assert.equal(baheyShower.product_text, "صابون دوش",
+  "carton-count suffix '48 قطعة' must be fully removed from product identity");
+assert.equal(baheyShower.weight_g, 110);
+assert.equal(baheyShower.pack_count, 48);
+assert.equal(baheyShower.package_sale_price, 612.5);
+
 assert.equal(rows[0].package_sale_price, 490);
 assert.equal(commercialMetrics(rows[0]).piece_sale_price, 122.5);
 assert.equal(rows.some((r) => r.raw_line.includes("مستهلك")), false);

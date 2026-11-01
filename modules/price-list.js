@@ -95,11 +95,12 @@ function extractPackageLabel(line) {
 }
 function cleanExplicitProductLine(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
-  const token = [...ascii.matchAll(PRICE_TOKEN)].find(m => {
+  const tokens = [...ascii.matchAll(PRICE_TOKEN)].filter(m => {
     const end = m.index + m[0].length;
     const tail = ascii.slice(end);
     return !/^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
   });
+  const token = tokens.filter(m => /(?:جنيه|ج|EGP)$/iu.test(m[0].trim())).at(-1) || tokens[0];
   const withoutPrice = token
     ? ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length)
     : ascii;

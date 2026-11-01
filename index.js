@@ -16,7 +16,7 @@ const { formatTelegramStartupError } = require("./core/telegram-startup-error");
 const { installFatalProcessHandlers } = require("./core/fatal-process");
 const { send: logChannel, LOG_CHAT_ID } = require("./core/log-channel");
 const { markTelegramRateLimited, isTelegramRateLimit, isTelegramRateLimitedNow } = require("./core/telegram-rate-limit");
-const { MASTER_ID, isMaster, isChatOwner, canManage } = require("./core/permissions");
+const { MASTER_ID, isMaster, isReviewOperator, isChatOwner, canManage } = require("./core/permissions");
 const { approvePendingGroup } = require("./core/group-approval");
 const { isListLike, deterministicList, extractList } = require("./modules/price-list");
 const { persistPriceList } = require("./modules/price-list-persistence");
@@ -125,7 +125,7 @@ async function isAuthorizedChat(chatId) {
 const ADDITIONAL_PRICE_REVIEWER_IDS = new Set([831621854]);
 
 async function isPriceReviewer(telegram, userId) {
-  if (isMaster(userId) || ADDITIONAL_PRICE_REVIEWER_IDS.has(Number(userId))) return true;
+  if (isMaster(userId) || isReviewOperator(userId) || ADDITIONAL_PRICE_REVIEWER_IDS.has(Number(userId))) return true;
   if (!db.pool || !telegram || !userId) return false;
   try {
     const groups = await db.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE");

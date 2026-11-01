@@ -155,6 +155,8 @@ function deterministicList(text) {
     if (unitHeading && !getPriceTokens(line).length) { sectionUnitPriceType = unitHeading; continue; }
     if (!getPriceTokens(line).length && !line.includes("|")) {
       if (/^(?:الأسعار?|اسعار)\s*(?:هي\s*)?(?:جملة|جمله|قطاعي|مستهلك)$/iu.test(line)) continue;
+      // Ignore catalog column labels; they must never overwrite the company identity.
+      if (/^(?:اسم\s+)?الصنف\s+(?:السعر|سعر)(?:\s|$)/iu.test(line)) continue;
       if (/[:：]$/.test(line) && line.length <= 70) { section = line.replace(/[:：]+$/, "").trim(); continue; }
       if (/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+شركة\s+/iu.test(line)) { company = line.replace(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
       if (/اوتوماتيك|automatic/i.test(normalized)) { section = "مسحوق أوتوماتيك"; continue; }

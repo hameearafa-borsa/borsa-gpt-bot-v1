@@ -17,10 +17,11 @@ function splitPages(rows, pageSize) {
 function packageStatus(item) {
   const unit = item.unit_price_type === "بالقطعة" ? "بالقطعة" :
     item.unit_price_type === "بالكرتونة" ? "بالكرتونة" : "نوع السعر غير محدد";
-  const size = Number(item.weight_g) > 0 ? `${item.weight_g} جم` :
-    Number(item.volume_ml) > 0 ? `${item.volume_ml} مل` : "";
-  const count = Number(item.pack_count) > 0 ? `${item.pack_count} قطعة` : "";
-  return [size, count, unit].filter(Boolean).join(" · ");
+  const size = Number(item.weight_g) > 0 ? String(item.weight_g) + " جم" :
+    Number(item.volume_ml) > 0 ? String(item.volume_ml) + " مل" : "";
+  const fallback = [size, Number(item.pack_count) > 0 ? String(item.pack_count) + " قطعة" : ""].filter(Boolean).join(" · ");
+  const details = String(item.package_label || "").trim() || fallback;
+  return [details, unit].filter(Boolean).join(" · ");
 }
 function isColumnHeaderLabel(value) {
   const normalized = String(value || "").replace(/[^\p{L}]/gu, "");

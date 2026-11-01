@@ -314,9 +314,9 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 471 }], rowCount: 1 };
     throw new Error("unexpected known ambiguous product query");
   } };
-  const ambiguousKnown = await observe({ pool: ambiguousKnownPool, message: { chatId: -100123, messageId: 471, text: "منظف جديد 500 جم 22 ج\nمنظف جديد 500 جم جملة 24 ج" }, registry: [] });
-  assert.ok(ambiguousKnown.savedRows.every(item => item.row.needs_review), "conflicting or inferred price context must retain needs_review");
-  assert.ok(ambiguousKnown.savedRows.every(item => item.row.decision === "pending"), "reviewer memory must not auto-accept a row flagged for review");
+  const ambiguousKnown = await observe({ pool: ambiguousKnownPool, message: { chatId: -100123, messageId: 471, text: "بيرل 9 ك: 505.31 | جملة 487.40 | مستهلك 525" }, registry: [] });
+  assert.equal(ambiguousKnown.savedRows[0].row.needs_review, true, "a conflicting base and labelled wholesale price must retain needs_review");
+  assert.equal(ambiguousKnown.savedRows[0].row.decision, "pending", "reviewer memory must not auto-accept a row flagged for review");
   const noDb = await observe({ message: { text: base.text }, registry });
   assert.equal(noDb.saved, 0);
   assert.equal(noDb.silent, true);

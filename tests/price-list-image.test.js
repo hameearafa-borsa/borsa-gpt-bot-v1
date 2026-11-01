@@ -7,12 +7,11 @@ const { escapeXml, renderPriceListImage, renderPriceListImages } = require("../m
 const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-image.js"), "utf8");
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
-assert.match(imageSource, /require\("bidi-shaper"\)/, "SVG renderer must apply Arabic shaping and Unicode bidi before rasterization");
-const { render: shapeArabicForSvg } = require("bidi-shaper");
-assert.ok(Array.from(shapeArabicForSvg("مرحبا بالعالم")).some(ch => { const cp = ch.codePointAt(0); return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF); }), "Arabic words must be contextually shaped");
-const mixedVisual = shapeArabicForSvg("دوف 350 مل — 121.00 ج.م");
-assert.ok(mixedVisual.includes("121.00"), "numeric price must remain in left-to-right order inside Arabic text");
-assert.match(mixedVisual, /[\uFB50-\uFDFF\uFE70-\uFEFF]/, "mixed Arabic text must contain shaped presentation glyphs");
+assert.doesNotMatch(imageSource, /bidi-shaper|shapeArabicForSvg/, "Arabic must remain logical Unicode text for native SVG shaping");
+assert.match(imageSource, /unicode-bidi="plaintext"/, "SVG text must use paragraph-aware bidi resolution");
+const mixedLogical = "دوف 350 مل — 121.00 ج.م";
+assert.ok(mixedLogical.includes("121.00"), "numeric price must remain intact in mixed Arabic text");
+assert.doesNotMatch(mixedLogical, /[\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/, "source text must not be converted to Arabic presentation forms");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
 assert.match(dockerSource, /apk add --no-cache font-noto fontconfig/, "production image must install Arabic-capable fonts for SVG rasterization");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");

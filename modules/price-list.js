@@ -95,9 +95,11 @@ function cleanExplicitProductLine(line) {
   });
   // Remove the explicitly currency-marked price, not an earlier bundle size
   // such as "350" in "صانسيلك 350 + بلسم ق 159 ج".
-  const token = tokens.filter(m => /(?:جنيه|ج|EGP)\s*$/iu.test(m[0])).at(-1) || tokens[0];
+  const token = tokens.filter(m => /(?:جنيه|ج|EGP)\s*$/iu.test(m[0])).at(-1) || tokens.at(-1);
   if (!token) return cleanProductName(line);
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
+    .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g|لتر|ل|ml|مل)\b/giu, " ")
+    .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/giu, " ")
     .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
     // Keep carton promotion wording in raw_line, not in the normalized product identity.
     .replace(/\s+(?:العرض|عرض)\s+على\s+(?:الكرتونة|الكرتونه)[\s\S]*$/iu, "")

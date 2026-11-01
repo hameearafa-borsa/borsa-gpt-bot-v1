@@ -122,6 +122,7 @@ function makePipelinePool() {
   return {
     rows,
     async query(sql, params = []) {
+      if (sql.includes("FROM service_settings")) return { rows: [], rowCount: 0 };
       if (sql.startsWith("SELECT fingerprint")) {
         const matches = [...rows.values()].filter(r => r.store_key === params[0] && r.catalog_url === params[1])
           .sort((a, b) => b.id - a.id);

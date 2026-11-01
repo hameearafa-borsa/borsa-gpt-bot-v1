@@ -41,14 +41,24 @@ assert.match(index, /replyWithMediaGroup/, "multiple pages should be sent as a T
 assert.match(index, /offset \+= 10/, "long price lists must be split into Telegram-safe media groups of at most 10 photos");
 assert.equal(pkg.dependencies.sharp, "^0.35.5", "sharp must be declared as a runtime dependency");
 (async () => {
-  const fallback = await parser.extractList({ generate: async () => { throw new Error("simulated AI timeout"); } }, [
+  let aiCalls = 0;
+  const deterministic = await parser.extractList({ generate: async () => { aiCalls++; throw new Error("must not run"); } }, [
     "قائمة أسعار شركة باهي", "شهر أكتوبر 2026",
     "صابون دوش 60 جم * 48 قطعة 329.28",
     "جل باهي 1 كجم 12 زجاجة 215.50",
     "دوف 350 مل ق 121"
   ].join("\n"));
-  assert.equal(fallback.method, "deterministic", "AI timeout must preserve a valid local catalog parse");
-  assert.equal(fallback.items.length, 3);
+  assert.equal(deterministic.method, "deterministic", "three clean local rows should bypass AI");
+  assert.equal(deterministic.items.length, 3);
+  assert.equal(aiCalls, 0, "AI should not be called for a clean local catalog");
+
+  const fallback = await parser.extractList({ generate: async () => { throw new Error("simulated AI timeout"); } }, [
+    "قائمة أسعار شركة باهي", "شهر أكتوبر 2026",
+    "صابون دوش 60 جم * 48 قطعة 329.28",
+    "جل باهي 1 كجم 12 زجاجة 215.50"
+  ].join("\n"));
+  assert.equal(fallback.method, "fallback", "an actual AI timeout must return the local fallback");
+  assert.equal(fallback.items.length, 2);
   assert.ok(fallback.items.every(row => row.decision === "accepted"));
   console.log("price-list command configuration tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

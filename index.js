@@ -472,6 +472,7 @@ bot.on("text", async ctx => {
   }
 
   if (cmd === "قائمة" || cmd === "pricelist") {
+    if (!(await serviceSettings.isServiceEnabled(db.pool, "lists", m.chatId))) { await ctx.reply("خدمة قوائم الشركات متوقفة لهذه المجموعة حاليًا."); return; }
     let sourceText = args;
     const link = parseMessageLink(args);
     if (link) {
@@ -544,6 +545,7 @@ bot.on("text", async ctx => {
   }
 
   if (isChemicalCommand) {
+    if (!(await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) { await ctx.reply("المساعد الكيميائي متوقف لهذه المجموعة حاليًا."); return; }
     if (!["group", "supergroup"].includes(m.chatType)) return;
     const question = args || "اكتب سؤالك الكيميائي بوضوح.";
     const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
@@ -555,6 +557,7 @@ bot.on("text", async ctx => {
   }
 
   if (cmd === "weather" || cmd === "الطقس") {
+    if (!(await serviceSettings.isServiceEnabled(db.pool, "weather", m.chatId))) { await ctx.reply("خدمة الطقس متوقفة لهذه المجموعة حاليًا."); return; }
     const city = args || "القاهرة";
     const result = await weather.getWeatherSummary(ai, city);
     await ctx.reply(`${result.message}${result.ok ? "" : `\n🔎 بحث الطقس: ${result.searchUrl}`}`, { disable_web_page_preview: true });
@@ -564,6 +567,9 @@ bot.on("text", async ctx => {
   if (cmd) return; // commands are intentionally invisible/unusable to unauthorized users
 
   if (!priceMonitor.isEligibleMessage({ chatType: m.chatType, text: text || m.caption || "", isLogChannel: false, isCommand: false, ownMessage: isBotMessage(ctx, botUserId) })) return;
+  const pricesEnabled = await serviceSettings.isServiceEnabled(db.pool, "prices", m.chatId);
+  const merchantsEnabled = await serviceSettings.isServiceEnabled(db.pool, "merchants", m.chatId);
+  if (!pricesEnabled && !merchantsEnabled) return;
 
   let merchantId = null;
   // Use captions too: sellers frequently attach the price and phone number to a photo.
@@ -585,6 +591,7 @@ bot.on("text", async ctx => {
 
   // Silent price observation runs independently of AI intent classification.
   // A classification miss must never prevent a plausible price from being recorded.
+  if (pricesEnabled) {
   try {
     const result = await priceMonitor.observe({ pool: db.pool, message: m, merchantId, registry });
     if (result.saved > 0) {
@@ -680,8 +687,10 @@ bot.on("text", async ctx => {
     });
   }
 
+  }
+
   // In approved groups, automatically answer likely chemistry questions once per incoming message.
-  if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text)) {
+  if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text) && (await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) {
     const answer = await chemical.answer(chemicalAI, text, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: text, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(text);
     const body = `🧪 المساعد الكيميائي\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
@@ -692,6 +701,31 @@ bot.on("text", async ctx => {
 
 });
 
+
+bot.action(/^group-settings:(refresh|toggle:[a-z]+)$/, async ctx => {
+  const chatId = ctx.callbackQuery?.message?.chat?.id;
+  if (!["group", "supergroup"].includes(ctx.callbackQuery?.message?.chat?.type) ||
+      !(await isAuthorizedChat(chatId)) || !(await canManage(ctx.telegram, chatId, ctx.from?.id))) {
+    await ctx.answerCbQuery("إعدادات هذه المجموعة متاحة لمنشئها فقط.", { show_alert: true }).catch(() => {});
+    return;
+  }
+  try {
+    const action = ctx.match[1];
+    if (action.startsWith("toggle:")) {
+      const key = action.slice(7);
+      const current = await serviceSettings.getSettings(db.pool, "group", chatId);
+      const item = current.find(value => value.key === key);
+      if (!item) throw new Error("UNKNOWN_SERVICE_SETTING");
+      await serviceSettings.setServiceSetting(db.pool, { scope: "group", chatId, serviceKey: key, enabled: !item.enabled, actorId: ctx.from.id });
+    }
+    const settings = await serviceSettings.getSettings(db.pool, "group", chatId);
+    await ctx.editMessageText(adminPanel.settingsText("group", chatId, settings), { reply_markup: adminPanel.settingsKeyboard(settings, "group", chatId) });
+    await ctx.answerCbQuery(action.startsWith("toggle:") ? "تم حفظ إعداد المجموعة." : "").catch(() => {});
+  } catch (error) {
+    await ctx.answerCbQuery("تعذر حفظ الإعداد.", { show_alert: true }).catch(() => {});
+    await sendLog({ module: "admin-panel", stage: "group_settings_callback", severity: "warn", status: "failed", details: { chatId, error: redactString(error?.message || "group settings callback failed") } }).catch(() => {});
+  }
+});
 
 bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|health|diagnostics|settings|groups|toggle:[a-z]+|group:-?\d+|group-toggle:-?\d+:[a-z]+)$/, async ctx => {
   const chatId = ctx.callbackQuery?.message?.chat?.id;

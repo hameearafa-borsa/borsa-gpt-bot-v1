@@ -154,13 +154,13 @@ function deterministicList(text) {
     if (!getPriceTokens(line).length && !line.includes("|")) {
       if (/^(?:الأسعار?|اسعار)\s*(?:هي\s*)?(?:جملة|جمله|قطاعي|مستهلك)$/iu.test(line)) continue;
       if (/[:：]$/.test(line) && line.length <= 70) { section = line.replace(/[:：]+$/, "").trim(); continue; }
-      if (/^(?:أسعار|اسعار)\s+شركة\s+/iu.test(line)) { company = line.replace(/^(?:أسعار|اسعار)\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
+      if (/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+شركة\s+/iu.test(line)) { company = line.replace(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
       if (/اوتوماتيك|automatic/i.test(normalized)) { section = "مسحوق أوتوماتيك"; continue; }
       if (/اوزان|شكاير|شكاره/i.test(normalized)) { section = "أوزان وشكاير"; continue; }
       if (/عبوات صغيره|العبوات الصغيره/i.test(normalized)) { section = "العبوات الصغيرة"; continue; }
       if (line.length >= 2 && line.length <= 100 && !/^\d/.test(toAsciiDigits(line))) {
         const header = line.split(/[–—-]/)[0].trim();
-        if (/^(أسعار|اسعار)/i.test(header)) company = header.replace(/^(أسعار|اسعار)\s*/i, "").trim() || company;
+        if (/^(?:قائمة\s+)?(?:أسعار|اسعار)/iu.test(header)) company = header.replace(/^(?:قائمة\s+)?(?:أسعار|اسعار)\s*/iu, "").trim() || company;
         else if (header) company = header;
       }
       continue;

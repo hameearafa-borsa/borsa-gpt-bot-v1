@@ -9,7 +9,7 @@ assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp 
 assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
 assert.match(imageSource, /require\("bidi-shaper"\)/, "SVG renderer must apply Arabic shaping and Unicode bidi before rasterization");
 const { render: shapeArabicForSvg } = require("bidi-shaper");
-assert.match(shapeArabicForSvg("مرحبا بالعالم"), /[\\uFB50-\\uFDFF\\uFE70-\\uFEFF]/, "Arabic words must be contextually shaped");
+assert.ok(Array.from(shapeArabicForSvg("مرحبا بالعالم")).some(ch => { const cp = ch.codePointAt(0); return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF); }), "Arabic words must be contextually shaped");
 const mixedVisual = shapeArabicForSvg("دوف 350 مل — 121.00 ج.م");
 assert.ok(mixedVisual.includes("121.00"), "numeric price must remain in left-to-right order inside Arabic text");
 assert.match(mixedVisual, /[\uFB50-\uFDFF\uFE70-\uFEFF]/, "mixed Arabic text must contain shaped presentation glyphs");

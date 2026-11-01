@@ -176,15 +176,15 @@ const unileverOctoberText = fs.readFileSync(path.join(__dirname, "fixtures-unile
 const unileverRows = deterministicList(unileverOctoberText);
 assert.equal(unileverRows.length, 66, "the actual Unilever October source should preserve all 66 price rows");
 
-assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 66,
-  "unmarked rows in a named company wholesale catalog should inherit carton pricing");
-assert.equal(unileverRows.filter(row => row.decision === "review").length, 0,
-  "the contextual currency typo should be accepted only because adjacent price rows use ج");
+assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 61,
+  "only unambiguous Unilever rows should be auto-accepted");
+assert.equal(unileverRows.filter(row => row.decision === "review").length, 5,
+  "offers and suspicious currency suffixes should remain reviewable");
 assert.equal(unileverRows.filter(row => row.decision === "skipped").length, 0,
   "no priced Unilever row should be silently discarded");
 const unileverCurrencyTypo = unileverRows.find(row => row.raw_line.includes("تريزيمي بلسم 600 مل"));
-assert.equal(unileverCurrencyTypo?.decision, "accepted",
-  "the trailing ح should be interpreted as ج when an adjacent priced row confirms the currency convention");
+assert.equal(unileverCurrencyTypo?.decision, "review",
+  "the trailing ح should remain reviewable even when adjacent rows use ج");
 assert.equal(unileverCurrencyTypo?.package_sale_price, 205, "the numeric price must remain unchanged");
 assert.equal(unileverCurrencyTypo?.raw_line, "تريزيمي بلسم 600 مل ق 205 ح", "retain the original source text for audit");
 assert.equal(deterministicList("أسعار شركة يونيليفر:\nمنتج تجريبي 205 ح").find(row => row.raw_line.includes("205 ح"))?.decision, "review",
@@ -215,6 +215,7 @@ assert.equal(unileverSoapOffer.unit_price_type, "بالكرتونة",
   "the carton offer context must be carried to the soap price");
 assert.ok(unileverSoapOffer.raw_line.includes("قطعة صابون هدية"),
   "the original source row must preserve the promotional gift wording");
+assert.equal(unileverSoapOffer.decision, "review", "carton gift offers must not be auto-approved");
 assert.doesNotMatch(unileverSoapOffer.product, /العرض على الكرتونة|قطعة صابون هدية/u,
   "a carton promotion note should not contaminate the product identity");
 // Historical comparison preserves product identity when only weight/offer changes.

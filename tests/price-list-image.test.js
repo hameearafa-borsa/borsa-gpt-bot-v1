@@ -64,8 +64,8 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
         { product: "صنف ثالث", package_sale_price: 125, wholesale_carton_price: 500, consumer_price: 250, list_price: 300, unit_price_type: "بالكرتونة" }
       ]
     });
-    assert.ok(capturedSvg.includes("42.33") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "the declared package price should be rendered for per-piece rows");
-    assert.ok(capturedSvg.includes("346") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "the declared package price should be rendered for carton rows");
+    assert.ok(capturedSvg.includes("42.33") && capturedSvg.includes("ج.م"), "the declared package price should be rendered for per-piece rows");
+    assert.ok(capturedSvg.includes("346") && capturedSvg.includes("ج.م"), "the declared package price should be rendered for carton rows");
     const renderedText = Array.from(capturedSvg.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g), match => match[1]).join(" ");
     assert.doesNotMatch(renderedText, /999|888|777|500|250|300/, "separate wholesale, consumer and list prices must not leak into visible image text");
     const unileverLikeImages = await renderPriceListImages({

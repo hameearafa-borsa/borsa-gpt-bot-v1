@@ -13,27 +13,36 @@ function privatePanelKeyboard() {
   return { inline_keyboard: ROWS.map(row => row.map(button => ({ ...button }))) };
 }
 function panelText(version, providers = []) {
-  return \`📊 لوحة خدمات بورصة المنظفات — \${version}\\n\\nاختر الخدمة التي تريد مراجعتها. اللوحة مخصصة لمالك البوت، ولا تتضمن أدوات حماية أو إدارة أعضاء المجموعة.\\nمحركات الذكاء المضبوطة: \${providers.length ? providers.join("، ") : "لا يوجد مزود مضبوط"}\\n\\nالحفظ التلقائي لبيانات التجار ومرصد الأسعار يعملان في الخلفية عند تحقق شروط التسجيل.\\nمدعوم بتقنيات ChatGPT\`;
+  return "📊 لوحة خدمات بورصة المنظفات — " + version +
+    "\n\nاختر الخدمة التي تريد مراجعتها. اللوحة مخصصة لمالك البوت، ولا تتضمن أدوات حماية أو إدارة أعضاء المجموعة." +
+    "\nمحركات الذكاء المضبوطة: " + (providers.length ? providers.join("، ") : "لا يوجد مزود مضبوط") +
+    "\n\nالحفظ التلقائي لبيانات التجار ومرصد الأسعار يعملان في الخلفية عند تحقق شروط التسجيل." +
+    "\nمدعوم بتقنيات ChatGPT";
 }
 function settingsText(scope, chatId, settings) {
   const title = scope === "global" ? "⚙️ إعدادات الخدمات العامة" : "⚙️ إعدادات المجموعة";
-  const rows = settings.map(item => \`\${item.enabled ? "🟢" : "🔴"} \${item.label}: \${item.enabled ? "مفعلة" : "متوقفة"}\`);
-  return \`\${title}\${chatId ? \`\\nالمجموعة: \${chatId}\` : ""}\\n\\n\${rows.join("\\n")}\\n\\nيُحفظ التغيير فورًا في قاعدة البيانات. الإيقاف العام يتقدم على إعداد المجموعة.\`;
+  const rows = settings.map(item => (item.enabled ? "🟢 " : "🔴 ") + item.label + ": " + (item.enabled ? "مفعلة" : "متوقفة"));
+  return title + (chatId ? "\nالمجموعة: " + chatId : "") + "\n\n" + rows.join("\n") +
+    "\n\nيُحفظ التغيير فورًا في قاعدة البيانات. الإيقاف العام يتقدم على إعداد المجموعة. قد تفرض متغيرات البيئة إيقافًا إضافيًا أعلى أولوية.";
 }
 function settingsKeyboard(settings, scope, chatId = 0) {
   const buttons = settings.map(item => ({
-    text: \`\${item.enabled ? "🟢" : "🔴"} \${item.label}\`,
-    callback_data: scope === "global" ? \`panel:toggle:\${item.key}\` : \`panel:group-toggle:\${chatId}:\${item.key}\`
+    text: (item.enabled ? "🟢 " : "🔴 ") + item.label,
+    callback_data: scope === "global"
+      ? "panel:toggle:" + item.key
+      : scope === "admin-group"
+        ? "panel:group-toggle:" + chatId + ":" + item.key
+        : "group-settings:toggle:" + item.key
   }));
   const rows = [];
   for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
-  rows.push([{ text: "⬅️ رجوع", callback_data: scope === "global" || scope === "admin-group" ? (scope === "global" ? "panel:home" : "panel:groups") : "group-settings:refresh" }]);
+  rows.push([{ text: "⬅️ رجوع", callback_data: scope === "global" ? "panel:home" : scope === "admin-group" ? "panel:groups" : "group-settings:refresh" }]);
   return { inline_keyboard: rows };
 }
 function groupsKeyboard(groups) {
   const rows = groups.map(group => [{
-    text: \`👥 \${group.chat_id}\`,
-    callback_data: \`panel:group:\${group.chat_id}\`
+    text: "👥 " + group.chat_id,
+    callback_data: "panel:group:" + group.chat_id
   }]);
   rows.push([{ text: "⬅️ القائمة الرئيسية", callback_data: "panel:home" }]);
   return { inline_keyboard: rows };

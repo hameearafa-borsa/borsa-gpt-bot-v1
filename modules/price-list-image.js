@@ -24,7 +24,7 @@ function packageStatus(item) {
 }
 function isColumnHeaderLabel(value) {
   const normalized = String(value || "").replace(/[^\p{L}]/gu, "");
-  return ["الصنفالنهائيسعر", "الصنفالسعر", "الصنف"].includes(normalized);
+  return ["الصنفالنهائيالسعر", "الصنفالسعر", "الصنف"].includes(normalized);
 }
 
 async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 18, logoPath = null }) {

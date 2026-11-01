@@ -233,6 +233,10 @@ const historyBase = {
 assert.equal(classifyObservationChange(null, historyBase), "new_observation");
 assert.equal(classifyObservationChange(historyBase, { ...historyBase }), "same_observation");
 assert.equal(classifyObservationChange(historyBase, { ...historyBase, package_sale_price: 500 }), "price_change");
+assert.equal(classifyObservationChange(historyBase, { ...historyBase, pack_count: 24 }), "package_configuration_change",
+  "a carton-count-only change must be represented in observation history");
+assert.equal(classifyObservationChange(historyBase, { ...historyBase, pack_count: 24, package_sale_price: 500 }), "price_and_package_configuration_change",
+  "a carton-count and price change must be represented in observation history");
 assert.equal(classifyObservationChange(historyBase, { ...historyBase, weight_g: 9500 }), "weight_change");
 assert.equal(classifyObservationChange(historyBase, { ...historyBase, weight_g: 9500, package_sale_price: 500 }), "price_and_weight_change");
 assert.equal(classifyObservationChange(historyBase, { ...historyBase, brand_key: "other", product_identity_key: "other|بيرل اوتوماتيك|wholesale" }), "new_observation");

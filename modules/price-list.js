@@ -233,8 +233,10 @@ async function extractList(ai, text) {
   const metadata = parseListMetadata(text);
   const acceptedLocal = localItems.filter(item => item.decision === "accepted");
   const companies = [...new Set(acceptedLocal.map(item => normalizeArabic(item.company || "")).filter(Boolean))];
-  // A clean, locally parsed list of >=3 accepted items from one named company needs no AI call.
-  if (acceptedLocal.length >= 3 && companies.length === 1) {
+  // A clean local parse needs no AI call when its accepted rows have at most one
+  // explicit company identity. Some valid lists name a brand in the title (e.g.
+  // "أسعار برسيل") without using the formal "أسعار شركة ..." metadata syntax.
+  if (acceptedLocal.length >= 3 && companies.length <= 1) {
     return { ...metadata, company: acceptedLocal[0].company || metadata.company || null, items: localItems, method: "deterministic" };
   }
   if (!ai?.generate) return { ...metadata, company: metadata.company || null, items: localItems, method: "deterministic" };

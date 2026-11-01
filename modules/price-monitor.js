@@ -202,6 +202,8 @@ async function observe({ pool, message, merchantId = null, registry }) {
        row.product_identity_key, row.change_type, row.listed_base_price ?? null,
        row.explicit_wholesale_label_price ?? null, row.price_selection_reason ?? null, Boolean(row.needs_review), row.consumer_price ?? null, row.unit_price_type ?? null]
     );
+    // ON CONFLICT DO NOTHING returns no row when another worker already saved this source row.
+    if (!inserted.rows?.[0]) continue;
     savedRows.push({ id: inserted.rows[0].id, row });
   }
   return { accepted, saved: savedRows.length, savedRows, silent: true };

@@ -158,7 +158,11 @@ function deterministicList(text) {
       // Ignore catalog column labels; they must never overwrite the company identity.
       if (/^(?:اسم\s+)?الصنف\s+(?:السعر|سعر)(?:\s|$)/iu.test(line)) continue;
       if (/[:：]$/.test(line) && line.length <= 70) { section = line.replace(/[:：]+$/, "").trim(); continue; }
-      if (/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+شركة\s+/iu.test(line)) { company = line.replace(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
+      if (/^(?:(?:قائمة)\\s+)?(?:أسعار|اسعار)\\s+شركة\\s+/iu.test(line)) { company = line.replace(/^(?:(?:قائمة)\\s+)?(?:أسعار|اسعار)\\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
+      // Legacy catalog titles such as "أسعار بيرل – أكتوبر" identify the
+      // company before the dash; preserve it across following section headings.
+      const legacyCompanyTitle = line.match(/^(?:أسعار|اسعار)\\s+(.+?)\\s+[–—-]\\s*(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)(?:\\s+20\\d{2})?$/iu);
+      if (legacyCompanyTitle) { company = legacyCompanyTitle[1].trim(); section = null; continue; }
       if (/اوتوماتيك|automatic/i.test(normalized)) { section = "مسحوق أوتوماتيك"; continue; }
       if (/اوزان|شكاير|شكاره/i.test(normalized)) { section = "أوزان وشكاير"; continue; }
       if (/عبوات صغيره|العبوات الصغيره/i.test(normalized)) { section = "العبوات الصغيرة"; continue; }

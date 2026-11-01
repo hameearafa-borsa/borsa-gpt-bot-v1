@@ -9,7 +9,7 @@ assert.match(index, /cmd === "قائمة" \|\| cmd === "pricelist"/, "Arabic ali
 assert.match(index, /command: "pricelist", description: "قائمة أسعار الشركات"/, "menu must expose the working command");
 assert.match(index, /db\.withTransaction\(client => persistPriceList\(client,/, "price-list persistence should be transactional through the dedicated persistence module");
 const parser = require("../modules/price-list");
-const metadata = parser.parseListMetadata("قائمة أسعار شركة باهي\\nشهر أكتوبر 2026");
+const metadata = parser.parseListMetadata("قائمة أسعار شركة باهي\nشهر أكتوبر 2026");
 assert.equal(metadata.company, "شركة باهي");
 assert.equal(metadata.month, "أكتوبر 2026");
 const rows = parser.deterministicList([

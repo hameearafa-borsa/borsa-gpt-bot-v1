@@ -52,7 +52,8 @@ assert.equal(novemberRows[35].pack_count, 4);
 assert.equal(novemberRows[37].pack_count, 50);
 assert.equal(novemberRows[43].package_sale_price, 635.04);
 assert.equal(novemberRows[44].package_sale_price, 238.14);
-\nconst persistence = fs.readFileSync(path.join(root, "modules", "price-list-persistence.js"), "utf8");
+
+const persistence = fs.readFileSync(path.join(root, "modules", "price-list-persistence.js"), "utf8");
 assert.match(persistence, /INSERT INTO price_reference_observations/, "accepted company rows must be stored in the separate official reference ledger");
 assert.match(persistence, /if \(decision === "accepted"\)/, "only accepted company rows may enter the reference ledger");
 assert.match(persistence, /parsedList\.month \|\| null/, "the official reference ledger must preserve the source period when available");

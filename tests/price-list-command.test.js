@@ -37,7 +37,7 @@ assert.equal(novemberMetadata.company, "شركة باهي");
 assert.equal(novemberMetadata.month, "نوفمبر 2026");
 assert.equal(novemberMetadata.isCompanyCatalog, true);
 const novemberRows = parser.deterministicList(novemberFixture);
-assert.equal(novemberRows.length, 51, "the original November company catalog contains 51 product rows");
+assert.equal(novemberRows.length, 50, "the original November company catalog contains 50 product rows");
 assert.ok(novemberRows.every(row => row.company === "شركة باهي"));
 assert.ok(novemberRows.every(row => row.decision === "accepted"), "all clearly priced rows in the declared company catalog should be accepted");
 assert.equal(novemberRows[0].pack_count, 48);

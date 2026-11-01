@@ -23,7 +23,7 @@ function isBulkPriceList(text) {
   // Telegram messages may contain a whole catalog pasted as one long paragraph.
   // Detect repeated explicit currency amounts before the single-product monitor sees it.
   const currencyPrices = [...source.matchAll(/(?:^|[\s:|])\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)(?=$|[\s|])/giu)].length;
-  const hasCatalogContext = /(?:أسعار|اسعار)\s*(?:شركة|شركه)|(?:قائمة|قائمه)\s*أسعار|(?:جملة|جمله)\s+.{0,40}(?:منتجات|أصناف|اصناف)/iu.test(source) ||\n    lines.some(line => /^(?:أسعار|اسعار)\\s+[\\p{L}][^\\n]{1,80}$/iu.test(line));
+  const hasCatalogContext = /(?:أسعار|اسعار)\s*(?:شركة|شركه)|(?:قائمة|قائمه)\s*أسعار|(?:جملة|جمله)\s+.{0,40}(?:منتجات|أصناف|اصناف)/iu.test(source) ||\n    lines.some(line => /^(?:أسعار|اسعار)\s+[\p{L}][^\n]{1,80}$/iu.test(line));
   // Company price lists often omit the currency marker after every amount (e.g.
   // "صنسيلك 350 مل عرض 76.25"). A clear catalog heading plus many numbered rows
   // is enough to classify the whole message as a catalog, without requiring "جنيه"

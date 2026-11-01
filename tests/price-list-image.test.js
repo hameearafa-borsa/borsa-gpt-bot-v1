@@ -7,6 +7,12 @@ const { escapeXml, renderPriceListImage, renderPriceListImages } = require("../m
 const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-image.js"), "utf8");
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
+assert.match(imageSource, /require\("bidi-shaper"\)/, "SVG renderer must apply Arabic shaping and Unicode bidi before rasterization");
+const { render: shapeArabicForSvg } = require("bidi-shaper");
+assert.ok(Array.from(shapeArabicForSvg("مرحبا بالعالم")).some(ch => { const cp = ch.codePointAt(0); return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF); }), "Arabic words must be contextually shaped");
+const mixedVisual = shapeArabicForSvg("دوف 350 مل — 121.00 ج.م");
+assert.ok(mixedVisual.includes("121.00"), "numeric price must remain in left-to-right order inside Arabic text");
+assert.match(mixedVisual, /[\uFB50-\uFDFF\uFE70-\uFEFF]/, "mixed Arabic text must contain shaped presentation glyphs");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
 assert.match(dockerSource, /apk add --no-cache font-noto fontconfig/, "production image must install Arabic-capable fonts for SVG rasterization");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");
@@ -34,19 +40,19 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
       { product: "A".repeat(149) + "&end", package_sale_price: 40, volume_ml: 350, unit_price_type: "بالكرتونة" }
     ] });
     assert.equal(png.toString(), "mock-png");
-    assert.match(capturedSvg, /شركة اختبار/);
-    assert.match(capturedSvg, /بورصة المنظفات/);
+    assert.ok(Array.from(capturedSvg).some(ch => { const cp = ch.codePointAt(0); return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF); }), "Arabic company heading must be shaped before SVG rendering");
+    assert.ok(capturedSvg.includes(shapeArabicForSvg("بورصة المنظفات")), "watermark must use shaped Arabic text");
     assert.match(capturedSvg, /data:image\/(?:jpeg|png);base64,/, "default output must embed the group logo");
     assert.match(capturedSvg, /url\(#securityTexture\)/, "default output must include the subtle security background");
     assert.match(capturedSvg, /url\(#rowWatermark\)/, "default output must repeat the watermark across price rows");
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
-    assert.match(capturedSvg, /10 ج\.م/);
-    assert.match(capturedSvg, /بالكرتونة/, "carton price type should be visible on rendered list rows");
-    assert.match(capturedSvg, /العبوة \/ السعة/, "package size should have its own labeled middle column");
-    assert.match(capturedSvg, /الصنف/, "product name should have a separate column heading");
-    assert.match(capturedSvg, /السعر/, "price should have a separate column heading");
-    assert.match(capturedSvg, /text-anchor="middle"[^>]*>350 مل</, "package capacity should be centered in its own column");
+    assert.ok(capturedSvg.includes("10") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "price currency label should be shaped while digits remain intact");
+    assert.ok(capturedSvg.includes(shapeArabicForSvg("بالكرتونة")), "carton price type should be visible with shaped Arabic");
+    assert.ok(capturedSvg.includes(shapeArabicForSvg("العبوة / السعة")), "package size should have its own labeled middle column");
+    assert.ok(capturedSvg.includes(shapeArabicForSvg("الصنف")), "product name should have a separate column heading");
+    assert.ok(capturedSvg.includes(shapeArabicForSvg("السعر")), "price should have a separate column heading");
+    assert.ok(capturedSvg.includes("350") && capturedSvg.includes(shapeArabicForSvg("مل")), "package capacity should preserve its number and shape its Arabic unit");
     // The image is a company-list view: render only package_sale_price.
     // Separate wholesale/consumer/list prices remain stored for comparison,
     // and must never silently replace or be mixed into the displayed list price.
@@ -58,10 +64,10 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
         { product: "صنف ثالث", package_sale_price: 125, wholesale_carton_price: 500, consumer_price: 250, list_price: 300, unit_price_type: "بالكرتونة" }
       ]
     });
-    assert.match(capturedSvg, /42\.33 ج\.م/, "the declared package price should be rendered for per-piece rows");
-    assert.match(capturedSvg, /346 ج\.م/, "the declared package price should be rendered for carton rows");
-    assert.doesNotMatch(capturedSvg, /999 ج\.م|888 ج\.م|777 ج\.م|500 ج\.م|250 ج\.م|300 ج\.م/,
-      "separate wholesale, consumer and list prices must not leak into the single-price company-list image");
+    assert.ok(capturedSvg.includes("42.33") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "the declared package price should be rendered for per-piece rows");
+    assert.ok(capturedSvg.includes("346") && capturedSvg.includes(shapeArabicForSvg("ج.م")), "the declared package price should be rendered for carton rows");
+    const renderedText = Array.from(capturedSvg.matchAll(/<text\b[^>]*>([\s\S]*?)<\/text>/g), match => match[1]).join(" ");
+    assert.doesNotMatch(renderedText, /999|888|777|500|250|300/, "separate wholesale, consumer and list prices must not leak into visible image text");
     const unileverLikeImages = await renderPriceListImages({
       company: "شركة اختبار",
       items: Array.from({ length: 66 }, (_, i) => ({
@@ -72,7 +78,7 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     });
     assert.equal(unileverLikeImages.length, 5,
       "66 products should render as five images at the default 16 products per image");
-    assert.match(capturedSvg, /صفحة 5 من 5/,
+    assert.ok(capturedSvg.includes(shapeArabicForSvg("صفحة 5 من 5")),
       "the final image should identify itself as page 5 of 5");
     await assert.doesNotReject(() => renderPriceListImages({
       company: "شركة اختبار",

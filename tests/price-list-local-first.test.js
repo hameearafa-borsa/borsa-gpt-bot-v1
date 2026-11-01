@@ -4,9 +4,9 @@ const { extractList, isListLike } = require("../modules/price-list");
 const text = `أسعار برسيل\nالأسعار بالقطعة\nأوتوماتيك\nبرسيل 2 كيلو 100 جنيه\nبرسيل 3 كيلو 140 جنيه\nبرسيل 5 كيلو 220 جنيه`;
 const singleLineCatalog = "أسعار شركة يونيليفر " + Array.from({ length: 12 }, (_, i) => `صنف ${i + 1} ${100 + i} جم ${20 + i},50 ج`).join(" • ");
 assert.equal(isListLike(singleLineCatalog), true, "single-line pasted catalogs with many priced rows should be accepted");
-assert.equal(isListLike("أسعار شركة برسيل\\nبرسيل 2 كيلو 100 جنيه\\nبرسيل 3 كيلو 140 جنيه"), true,
+assert.equal(isListLike("أسعار شركة برسيل\nبرسيل 2 كيلو 100 جنيه\nبرسيل 3 كيلو 140 جنيه"), true,
   "a short but clearly headed two-row catalog should be accepted");
-assert.equal(isListLike("برسيل 2 كيلو 100\\nبرسيل 3 كيلو 140\\nبرسيل 5 كيلو 220"), true,
+assert.equal(isListLike("برسيل 2 كيلو 100\nبرسيل 3 كيلو 140\nبرسيل 5 كيلو 220"), true,
   "three product-price rows without currency suffixes should be accepted");
 assert.equal(isListLike("برضو فيه ب 10 و برضو في ب 25"), false, "conversational price mentions must not be treated as a catalog");
 (async () => {

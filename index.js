@@ -569,7 +569,6 @@ bot.on("text", async ctx => {
   if (!priceMonitor.isEligibleMessage({ chatType: m.chatType, text: text || m.caption || "", isLogChannel: false, isCommand: false, ownMessage: isBotMessage(ctx, botUserId) })) return;
   const pricesEnabled = await serviceSettings.isServiceEnabled(db.pool, "prices", m.chatId);
   const merchantsEnabled = await serviceSettings.isServiceEnabled(db.pool, "merchants", m.chatId);
-  if (!pricesEnabled && !merchantsEnabled) return;
 
   let merchantId = null;
   // Use captions too: sellers frequently attach the price and phone number to a photo.

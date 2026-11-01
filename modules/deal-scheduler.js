@@ -2,6 +2,7 @@
 const { collectDealCandidates } = require("./deal-sources");
 const { filterRecentDeals, distributeDeals, formatNewsletterMessage } = require("./deal-publication");
 const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
+const { isServiceEnabled } = require("../core/service-settings");
 
 function cairoParts(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Africa/Cairo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(date);
@@ -33,16 +34,21 @@ function selectNewsletterDeals(recent, kind) {
 }
 
 async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000, maxRedirects = 5 } = {}) {
-  const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com"]);
+  const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com", "snapflyer.io"]);
+  const isAllowedSnapFlyerCatalogUrl = url =>
+    url.hostname.toLowerCase() === "snapflyer.io" &&
+    /^\/eg\/downtown\/offers\/(?:kazyon|bim|metro-market)\/\d+\/?$/i.test(url.pathname);
   const safeUrl = value => {
     try {
       const u = new URL(value);
       if (u.protocol !== "https:" || !allowedHosts.has(u.hostname.toLowerCase()) || u.username || u.password || (u.port && u.port !== "443")) return null;
+      if (u.hostname.toLowerCase() === "snapflyer.io" && !isAllowedSnapFlyerCatalogUrl(u)) return null;
       return u;
     } catch { return null; }
   };
   let url = safeUrl(raw);
   if (!url) return { ok: false, reason: "host_not_allowed" };
+  const originalSnapFlyerUrl = url.hostname.toLowerCase() === "snapflyer.io" ? url : null;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -65,6 +71,13 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
         catch { return { ok: false, reason: "redirect_host_not_allowed" }; }
         const next = safeUrl(resolvedLocation);
         if (!next) return { ok: false, reason: "redirect_host_not_allowed" };
+        // SnapFlyer offers intentionally point to the selected catalog page.
+        // Never let a redirect silently replace that destination with another
+        // retailer or a different catalog/store page.
+        if (originalSnapFlyerUrl && (
+          next.hostname.toLowerCase() !== originalSnapFlyerUrl.hostname.toLowerCase() ||
+          next.pathname.replace(/\/$/, "").toLowerCase() !== originalSnapFlyerUrl.pathname.replace(/\/$/, "").toLowerCase()
+        )) return { ok: false, reason: "snapflyer_catalog_redirect_changed" };
         url = next;
         continue;
       }
@@ -121,7 +134,10 @@ async function resolveDealChatIds({ pool, chatId, chatIds }) {
 
 async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
-  const targetChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
+  if (!(await isServiceEnabled(pool, "deals"))) return { skipped: true, reason: "service_disabled" };
+  const requestedChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
+  const targetChatIds = [];
+  for (const id of requestedChatIds) if (await isServiceEnabled(pool, "deals", id)) targetChatIds.push(id);
   if (!targetChatIds.length) return { skipped: true, reason: "no_active_authorized_groups" };
   const kind = newsletterKindAt(now);
   if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
@@ -144,15 +160,15 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   // Collect and verify once per edition, regardless of the number of target groups.
   const gathered = await fetcher({ edition: kind });
   if (!gathered.deals?.length) {
-    await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
-    return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null };
+    await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
+    return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null };
   }
   const verified = await verify(gathered.deals);
   const recent = await filterRecentDeals(pool, verified, 7);
   if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
   const items = selectNewsletterDeals(recent, kind);
   if (!items.length) {
-    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
+    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
   }
   const title = kind === "amazon"
@@ -207,16 +223,16 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     published, sourceErrors: gathered.errors || []
   };
 }
-function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 15 * 60_000 } = {}) {
+function startDealScheduler(options, { intervalMs = 60_000, retryAfterFailureMs = 2 * 60_000 } = {}) {
   let busy = false;
   let nextAttemptAt = 0;
   let backoffKind = null;
   let activeDay = batchKey();
   const reportedFetchFailures = new Set();
 
-  // A failed source query used to emit the same diagnostic every minute. Keep
-  // trying periodically, but emit only one identical fetch-failure report per
-  // Cairo day. A changed source/status signature is still reported immediately.
+  // Retry a failed edition quickly enough to fit inside its five-minute window.
+  // Keep diagnostics quiet: emit one identical fetch-failure report per Cairo day,
+  // while a changed source/status signature is still reported immediately.
   const scheduledOptions = {
     ...options,
     onError: async (error, details = {}) => {

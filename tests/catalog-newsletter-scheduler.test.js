@@ -122,6 +122,7 @@ function makePipelinePool() {
   return {
     rows,
     async query(sql, params = []) {
+      if (sql.includes("FROM service_settings")) return { rows: [], rowCount: 0 };
       if (sql.startsWith("SELECT fingerprint")) {
         const matches = [...rows.values()].filter(r => r.store_key === params[0] && r.catalog_url === params[1])
           .sort((a, b) => b.id - a.id);
@@ -202,17 +203,17 @@ function makePipelinePool() {
       `<a href="/eg/downtown/offers/${slug}/1378"><span>${storeKey} flyer December 2026</span></a>`;
   };
   const second = await checkCatalogsOnce({ pool, telegram, chatIds: [-100123, -100456], fetchPage: fetchTwoNewCatalogs });
-  assert.equal(second.published, Object.keys(CATALOG_STORES).length * 2 * 2, "each new catalog should be delivered to both approved groups");
-  assert.equal(sent.length, Object.keys(CATALOG_STORES).length * 2 * 2);
+  assert.equal(second.published, Object.keys(CATALOG_STORES).length * 1 * 2, "only one catalog per store should be delivered to both approved groups");
+  assert.equal(sent.length, Object.keys(CATALOG_STORES).length * 1 * 2);
   assert.ok(sent.some(item => item.chatId === -100123));
   assert.ok(sent.some(item => item.chatId === -100456));
   assert.ok(sent.some(item => item.message.includes("November 2026")));
-  assert.ok(sent.some(item => item.message.includes("December 2026")));
+  assert.ok(!sent.some(item => item.message.includes("December 2026")), "the second edition for a store must not publish in the same poll");
 
   // Next poll sees the same two catalogs per store and must not publish duplicates.
   const third = await checkCatalogsOnce({ pool, telegram, chatId: -100123, fetchPage: fetchTwoNewCatalogs });
   assert.equal(third.published, 0);
-  assert.equal(sent.length, Object.keys(CATALOG_STORES).length * 2 * 2);
+  assert.equal(sent.length, Object.keys(CATALOG_STORES).length * 1 * 2);
 
   // If every source fails, no stale pending notice is published by this run.
   const allFail = await checkCatalogsOnce({
@@ -224,16 +225,19 @@ function makePipelinePool() {
 
   // A Telegram failure moves the snapshot out of the pending queue; the terminal delivery record prevents ambiguous automatic retries.
   const retryPool = makePipelinePool();
+  const failureCatalogHtml = '<a href="/eg/downtown/offers/kazyon/1378"><span>Kazyon flyer December 2026</span></a>';
+  const failureFingerprint = require("../modules/catalog-newsletter").extractCatalogs(failureCatalogHtml, "kazyon")[0].fingerprint;
+  const fetchFailureEdition = async url => url === CATALOG_STORES.kazyon.url ? failureCatalogHtml : fetchPage(url);
   await checkCatalogsOnce({ pool: retryPool, telegram, chatId: -100123, fetchPage });
   await retryPool.query(
     "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
-    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1378", "fp-new", "Kazyon flyer December 2026", "محافظة القاهرة", null, "pending"]
+    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1378", failureFingerprint, "Kazyon flyer December 2026", "محافظة القاهرة", null, "pending"]
   );
   let publishErrors = 0;
   let ambiguousDeliveryAlert = false;
   const failingTelegram = { sendMessage: async () => { throw new Error("telegram unavailable"); } };
   const failedPublish = await checkCatalogsOnce({
-    pool: retryPool, telegram: failingTelegram, chatId: -100123, fetchPage,
+    pool: retryPool, telegram: failingTelegram, chatId: -100123, fetchPage: fetchFailureEdition,
     onError: async (_error, meta) => {
       if (meta.stage === "catalog_publish") {
         publishErrors++;
@@ -244,30 +248,33 @@ function makePipelinePool() {
   assert.ok(failedPublish.failed >= 1);
   assert.ok(publishErrors >= 1);
   assert.equal(ambiguousDeliveryAlert, true, "Telegram send errors must explicitly flag ambiguous delivery for manual review");
-  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
+  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === failureFingerprint && r.status === "failed"),
     "terminal delivery failures must leave the pending queue so newer snapshots are not starved");
 
   const retrySent = [];
   const retry = await checkCatalogsOnce({
     pool: retryPool, telegram: { sendMessage: async (_id, message) => retrySent.push(message) },
-    chatId: -100123, fetchPage
+    chatId: -100123, fetchPage: fetchFailureEdition
   });
   assert.equal(retrySent.length, 0, "an ambiguous Telegram send outcome must not be retried automatically");
-  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === "fp-new" && r.status === "failed"),
+  assert.ok([...retryPool.rows.values()].some(r => r.fingerprint === failureFingerprint && r.status === "failed"),
     "the snapshot is terminally failed and its delivery record prevents automatic retry");
   // Partial delivery: one approved group succeeds while another has an ambiguous Telegram error.
   // The successful group's record must remain published, and neither group is retried automatically.
   const partialPool = makePipelinePool();
+  const partialCatalogHtml = '<a href="/eg/downtown/offers/kazyon/1390"><span>Kazyon flyer January 2027</span></a>';
+  const partialFingerprint = require("../modules/catalog-newsletter").extractCatalogs(partialCatalogHtml, "kazyon")[0].fingerprint;
+  const fetchPartialEdition = async url => url === CATALOG_STORES.kazyon.url ? partialCatalogHtml : fetchPage(url);
   await checkCatalogsOnce({ pool: partialPool, telegram, chatId: -100123, fetchPage });
   await partialPool.query(
     "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
-    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1390", "fp-partial", "Kazyon flyer January 2027", "محافظة القاهرة", null, "pending"]
+    ["kazyon", "https://snapflyer.io/eg/downtown/offers/kazyon/1390", partialFingerprint, "Kazyon flyer January 2027", "محافظة القاهرة", null, "pending"]
   );
   const partialSent = [];
   const partialResult = await checkCatalogsOnce({
     pool: partialPool,
     chatIds: [-100123, -100456],
-    fetchPage,
+    fetchPage: fetchPartialEdition,
     telegram: {
       sendMessage: async (chatId, message) => {
         if (chatId === -100456) throw new Error("Telegram response lost");
@@ -279,7 +286,7 @@ function makePipelinePool() {
   assert.equal(partialResult.published, 1, "successful group delivery should be counted");
   assert.ok(partialResult.failed >= 1, "ambiguous group delivery should be counted as failed");
   const partialDeliveries = [...partialPool.rows.values()].filter(row => row.delivery && row.snapshot_id ===
-    [...partialPool.rows.values()].find(snapshot => snapshot.fingerprint === "fp-partial")?.id);
+    [...partialPool.rows.values()].find(snapshot => snapshot.fingerprint === partialFingerprint)?.id);
   assert.equal(partialDeliveries.find(row => row.chat_id === -100123)?.status, "published");
   assert.equal(partialDeliveries.find(row => row.chat_id === -100456)?.status, "failed");
   assert.equal(partialSent.length, 1);
@@ -287,11 +294,45 @@ function makePipelinePool() {
   await checkCatalogsOnce({
     pool: partialPool,
     chatIds: [-100123, -100456],
-    fetchPage,
+    fetchPage: fetchPartialEdition,
     telegram: { sendMessage: async (chatId, message) => partialRetrySent.push({ chatId, message }) }
   });
   assert.equal(partialRetrySent.length, 0, "neither successful nor ambiguous group deliveries should be resent automatically");
   assert.equal(partialSent.length, 1, "the group that already received the notice must not get a duplicate");
+
+
+
+  // An older pending record must not beat the edition currently listed by that store.
+  const stalePool = makePipelinePool();
+  await stalePool.query(
+    "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
+    ["metro_market", "https://snapflyer.io/eg/downtown/offers/metro-market/1325", "fp-stale", "Metro stale edition", "محافظة القاهرة", null, "pending"]
+  );
+  const staleSent = [];
+  await checkCatalogsOnce({
+    pool: stalePool, telegram: { sendMessage: async (_id, message) => staleSent.push(message) },
+    chatId: -100123, fetchPage
+  });
+  assert.equal([...stalePool.rows.values()].find(row => row.fingerprint === "fp-stale")?.status, "ignored",
+    "a pending edition absent from the current store listing must be retired");
+  assert.equal(staleSent.some(message => message.includes("Metro stale edition")), false);
+
+  // Expired pending snapshots are retained in the database but never sent.
+  const expiredPool = makePipelinePool();
+  await expiredPool.query(
+    "INSERT INTO catalog_newsletter_snapshots(store_key,catalog_url,fingerprint,title,region,displayed_date_range,status) VALUES($1,$2,$3,$4,$5,$6,$7)",
+    ["metro_market", "https://snapflyer.io/eg/downtown/offers/metro-market/1325", "fp-expired", "Metro October 2026", "محافظة القاهرة", "16 - 31 Oct", "pending"]
+  );
+  const expiredSent = [];
+  const expiredResult = await checkCatalogsOnce({
+    pool: expiredPool, telegram: { sendMessage: async (_id, message) => expiredSent.push(message) },
+    chatId: -100123, fetchPage,
+    now: new Date("2026-11-01T00:30:00.000Z")
+  });
+  assert.equal(expiredSent.some(message => message.includes("Metro October 2026")), false,
+    "an expired pending catalog must not be published");
+  assert.equal([...expiredPool.rows.values()].find(row => row.fingerprint === "fp-expired")?.status, "ignored",
+    "expired snapshots remain stored but leave the pending queue");
 
   console.log("catalog newsletter end-to-end mocked pipeline tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

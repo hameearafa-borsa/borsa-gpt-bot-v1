@@ -95,5 +95,6 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.equal(baheyImageMeta.format, "png");
   assert.equal(baheyImageMeta.width, 1200);
   console.log(`Bahey real-list parser and image test: OK (${baheyRows.length} rows, ${baheyImages.length} PNG page)`);
-\n  console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);
+
+  console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

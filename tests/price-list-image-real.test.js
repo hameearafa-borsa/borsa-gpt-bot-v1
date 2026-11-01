@@ -70,6 +70,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   ].join("\n");
   const baheyMetadata = parseListMetadata(baheyFixture);
   const baheyRows = deterministicList(baheyFixture);
+  console.log("BAHEY_REVIEW_DIAGNOSTIC " + JSON.stringify(baheyRows.filter(row => row.decision !== "accepted").map(row => ({raw_line: row.raw_line, product: row.product, price: row.package_sale_price, unit: row.unit_price_type, decision: row.decision}))));
   assert.equal(baheyMetadata.company, "شركة باهي");
   assert.equal(baheyMetadata.month, "نوفمبر 2026");
   assert.equal(baheyMetadata.priceType, "أسعار جملة");

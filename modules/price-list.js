@@ -59,7 +59,7 @@ function cleanProductName(line) {
     .replace(/^[\s•*._-]+/, "")
     .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
     .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)/giu, " ")
-    .replace(/\b\d+\s*(?:قطعة|قطعه|قط|ق)/giu, " ")
+    .replace(/(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$)/giu, " ")
     .replace(/\s+/g, " ").trim();
 }
 function parseListMetadata(text) {

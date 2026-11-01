@@ -164,8 +164,11 @@ function deterministicList(text) {
       if (/عبوات صغيره|العبوات الصغيره/i.test(normalized)) { section = "العبوات الصغيرة"; continue; }
       if (line.length >= 2 && line.length <= 100 && !/^\d/.test(toAsciiDigits(line))) {
         const header = line.split(/[–—-]/)[0].trim();
-        if (/^(?:قائمة\s+)?(?:أسعار|اسعار)/iu.test(header)) company = header.replace(/^(?:قائمة\s+)?(?:أسعار|اسعار)\s*/iu, "").trim() || company;
-        else if (header) company = header;
+        if (/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+شركة\s+/iu.test(header)) {
+          company = header.replace(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+/iu, "").trim() || company;
+        } else if (header) {
+          section = header;
+        }
       }
       continue;
     }

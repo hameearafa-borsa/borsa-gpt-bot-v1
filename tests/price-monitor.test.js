@@ -642,6 +642,37 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.deepEqual(pearl503MemoryRowsReturned, [],
     "an unapproved 503.31 Pearl observation must not be added to trusted wholesale memory");
 
+  // Follow-up message for the exact 503.31 product: simulate the persisted
+  // pending observation and apply the same accepted/wholesale/confidence filter
+  // used by production memory lookup. It must not resolve the next message.
+  const pearl503PersistedRows = pearl503Observed.savedRows.map(item => item.row);
+  let pearl503FollowupMemoryRows = null;
+  const pearl503FollowupPool = {
+    async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) {
+        pearl503FollowupMemoryRows = pearl503PersistedRows.filter(row =>
+          row.decision === "accepted" && row.price_kind === "wholesale" && row.confidence >= 0.8
+        );
+        return { rows: pearl503FollowupMemoryRows, rowCount: pearl503FollowupMemoryRows.length };
+      }
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 522 }], rowCount: 1 };
+      throw new Error("unexpected Pearl 503.31 follow-up query");
+    }
+  };
+  const pearl503Followup = await observe({
+    pool: pearl503FollowupPool,
+    message: { chatId: -100123, messageId: 475, userId: 789, text: "بيرل 9 ك 503.31" },
+    registry
+  });
+  assert.deepEqual(pearl503FollowupMemoryRows, [],
+    "the earlier pending 503.31 observation must not be loaded as trusted memory for a later message");
+  assert.equal(pearl503Followup.saved, 1);
+  assert.equal(pearl503Followup.savedRows[0].row.decision, "pending");
+  assert.ok(!/resolved_from_accepted_price_memory/.test(pearl503Followup.savedRows[0].row.price_selection_reason || ""),
+    "a repeated 503.31 message must not be auto-resolved from its own pending history");
+
   // Re-processing the same Telegram message row must not create a second observation.
   let duplicateChecks = 0;
   let duplicateInserts = 0;

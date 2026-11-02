@@ -34,8 +34,14 @@ function classifyPriceKind(text) {
 }
 
 function parsePackCount(text) {
-  const s = toAsciiDigits(text);
-  const m = s.match(PACK_RE) || s.match(PACK_ANY_RE);
+  // Telegram and invoice exports often wrap each token in Markdown emphasis,
+  // leaving punctuation between the count and its Arabic package unit.
+  const s = toAsciiDigits(String(text || ""))
+    .replace(/[*_`]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const m = s.match(PACK_RE) || s.match(PACK_ANY_RE) ||
+    s.match(/(?:^|\s)(\d+)\s*(?:كيس|جوال|شكاره|شكارة|زجاجه|زجاجة|زجاجات|جركن|عبوه|عبوة|عبوات|قطعه|قطعة|قط|ق)(?=\s|$|[،,;])/iu);
   if (!m) return null;
   const n = m[1] ?? m[2];
   return n ? Number(n) : null;

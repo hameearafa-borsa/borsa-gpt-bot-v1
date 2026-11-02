@@ -56,7 +56,9 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
       const name = svgText(rawName.slice(0, 150));
       const variant = String(item.variant || "");
       const size = String(item.package_label || "").trim() || (item.weight_g ? `${item.weight_g} جم` : item.volume_ml ? `${item.volume_ml} مل` : "");
-      const productNote = variant && variant !== rawCategory ? svgText(variant) : "";
+      const rawCategory = String(item.category || item.raw_category || "");
+      const isGenericCategory = /^(منتجات متنوعة|متنوع|عام|غير محدد)$/u.test(rawCategory.trim());
+      const productNote = variant && !isGenericCategory ? svgText(variant) : "";
       const packageSize = size ? svgText(size) : "";
       const unitLabel = item.unit_price_type === "بالقطعة" ? "بالقطعة" : item.unit_price_type === "بالكرتونة" ? "بالكرتونة" : "";
       const fill = i % 2 ? "#f3f7f5" : "#ffffff";

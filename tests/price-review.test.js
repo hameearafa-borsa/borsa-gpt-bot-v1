@@ -1,6 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard, resolveReview, saveEditedReview } = require("../modules/price-review");
+const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory");
 
 (async () => {
   const row = { product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: 1, brand_key: null, raw_line: "منظف جديد 500 جم جملة 22 ج", package_sale_price: 22, price_kind: "wholesale", unit_price_type: "بالقطعة" };
@@ -37,7 +38,12 @@ const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard,
   const calls = [];
   const db = { async withTransaction(fn) { return fn({ async query(sql, params) {
     calls.push({ sql, params });
-    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ ...row, id: 42 }] };
+    if (sql.includes("UPDATE price_observations")) if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{
+      ...row, id: 42, product_text: params[0], package_sale_price: params[1],
+      weight_g: params[2], volume_ml: params[3], pack_count: params[4], brand_key: params[5],
+      price_kind: "wholesale", decision: "accepted", confidence: 1, needs_review: false
+    }] };
+    return { rowCount: 1, rows: [{ id: 42 }] };
     return { rowCount: 1, rows: [] };
   } }); } };
   const approved = await resolveReview({ db, id: 42, action: "new", reviewerId: 7 });
@@ -64,12 +70,25 @@ const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard,
   assert.equal(ignoredCalls[0].params[0], "ignored", "rejecting a price should retain its observation with ignored decision");
   assert.match(ignoredCalls[1].sql, /UPDATE price_review_queue SET status=\$1/);
   assert.equal(ignoredCalls[1].params[0], "ignored", "rejecting a price should resolve its queue entry too");
+  assert.equal(buildPriceMemory([{ ...row, decision: "ignored", price_kind: "wholesale", confidence: 1 }]).size, 0,
+    "a rejected price must never enter trusted price memory");
   const editedCalls = [];
   const editedDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
     editedCalls.push({ sql, params }); return { rowCount: 1, rows: [{ ...row, id: 42 }] };
   } }); } };
   const edited = await saveEditedReview({ db: editedDb, id: 42, reviewerId: 7, productText: "منظف مصحح", price: 23, weightG: 500 });
   assert.equal(edited.ok, true);
+  assert.equal(edited.row.decision, "accepted");
+  assert.equal(edited.row.confidence, 1);
+  assert.equal(edited.row.price_kind, "wholesale");
+  const editedMemory = buildPriceMemory([edited.row]);
+  const editedResolution = resolveFromMemory({
+    product_text: "منظف مصحح", weight_g: 500, volume_ml: null,
+    offer_extra_weight_g: null, package_type: null, unit_price_type: "بالقطعة",
+    price_kind: "wholesale_candidate"
+  }, editedMemory);
+  assert.equal(editedResolution.resolved, true,
+    "a manually edited and approved price must be reusable from trusted price memory");
   assert.match(editedCalls[0].sql, /decision='accepted'/);
   assert.match(editedCalls[0].sql, /needs_review=FALSE/);
   assert.match(editedCalls[0].sql, /explicit_wholesale_label_price=\$2/,
@@ -104,5 +123,27 @@ const { identityKey, formatReviewMessage, formatPriceEditPrompt, reviewKeyboard,
     saveEditedReview({ db: missingEditQueueDb, id: 44, reviewerId: 7, productText: "منظف مصحح", price: 23 }),
     /price_review_queue_missing_or_resolved/
   );
+  // Repeated or stale reviewer actions must be idempotently rejected.
+  const staleCalls = [];
+  const staleDb = { async withTransaction(fn) { return fn({ async query(sql) {
+    staleCalls.push(sql);
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 0, rows: [] };
+    throw new Error("stale review must stop after the guarded observation update");
+  } }); } };
+  const staleApproval = await resolveReview({ db: staleDb, id: 42, action: "approve", reviewerId: 7 });
+  assert.deepEqual(staleApproval, { ok: false, reason: "already_resolved" });
+  assert.equal(staleCalls.length, 1, "a stale approval must not modify reviewer memory or the review queue");
+  const staleEditCalls = [];
+  const staleEditDb = { async withTransaction(fn) { return fn({ async query(sql) {
+    staleEditCalls.push(sql);
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 0, rows: [] };
+    throw new Error("stale edit must stop after the guarded observation update");
+  } }); } };
+  const staleEdit = await saveEditedReview({
+    db: staleEditDb, id: 42, reviewerId: 7, productText: "منظف مصحح", price: 23, weightG: 500
+  });
+  assert.deepEqual(staleEdit, { ok: false, reason: "already_resolved" });
+  assert.equal(staleEditCalls.length, 1, "a stale edit must not update identity, memory, or queue state");
+
   console.log("price review identity, controls, atomic resolution, edit-save and queue consistency tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

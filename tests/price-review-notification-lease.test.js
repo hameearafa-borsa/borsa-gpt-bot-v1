@@ -7,21 +7,21 @@ const migration = fs.readFileSync(path.join(root, "migrations", "015_price_revie
 const recovery = fs.readFileSync(path.join(root, "modules", "price-review-recovery.js"), "utf8");
 const index = fs.readFileSync(path.join(root, "index.js"), "utf8");
 const rateLimit = fs.readFileSync(path.join(root, "core", "telegram-rate-limit.js"), "utf8");
+
 assert.match(migration, /ADD COLUMN IF NOT EXISTS notification_claim_token TEXT/i);
 assert.match(migration, /ADD COLUMN IF NOT EXISTS notification_claimed_at TIMESTAMPTZ/i);
 assert.match(recovery, /FOR UPDATE SKIP LOCKED/i);
-assert.match(recovery, /notification_claimed_at < NOW\(\) - \(\$3 \* INTERVAL '1 second'\)/i);
-assert.match(recovery, /notification_claim_token = \$4/i);
-assert.match(recovery, /SET notification_claimed_at = NOW\(\)[\s\S]*?notification_claim_token = \$2/i);
-assert.match(recovery, /AND notification_claim_token = \$3/i);
-assert.match(index, /notification_claim_token=\$1, notification_claimed_at=NOW\(\)/i);
-assert.match(index, /notification_claimed_at < NOW\(\) - INTERVAL '120 seconds'/i);
-assert.match(index, /AND notification_claim_token=\$3/i);
-assert.match(index, /isTelegramRateLimitedNow\(\)/);
-assert.match(index, /if \(hitTelegramRateLimit\) break/);
-assert.match(recovery, /isTelegramRateLimitedNow\(\)/);
-assert.match(recovery, /markTelegramRateLimited\(error\)/);
-assert.match(recovery, /if \(hitTelegramRateLimit\) break/);
+assert.match(recovery, /notification_claimed_at < NOW\\(\\) - \\(\\$3 \\* INTERVAL '1 second'\\)/i);
+assert.match(recovery, /notification_claim_token = \\$4/i);
+assert.match(recovery, /SET notification_claimed_at = NOW\\(\\)[\\s\\S]*?notification_claim_token = \\$2/i);
+assert.match(recovery, /AND notification_claim_token = \\$3/i);
+
+// The lease/recovery module remains available for legacy data maintenance, but
+// the live runtime intentionally no longer schedules or sends review notices.
+assert.doesNotMatch(index, /priceReviewRecovery\\.recoverPendingNotifications\\s*\\(/i);
+assert.doesNotMatch(index, /priceReview\\.formatReviewMessage\\s*\\(/i);
+assert.match(index, /Pending price observations are intentionally silent/);
+
 assert.match(rateLimit, /function markTelegramRateLimited/);
 assert.match(rateLimit, /function isTelegramRateLimitedNow/);
-console.log("price review notification lease and concurrency regression tests: OK");
+console.log("legacy notification lease helpers and silent runtime policy tests: OK");

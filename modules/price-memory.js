@@ -8,9 +8,29 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
+function canonicalProductText(text) {
+  const normalized = normalizeArabic(text || "");
+  if (!normalized) return "";
+  const { resolve } = require("../core/product-registry");
+  const match = resolve(text);
+  if (!match.matched || !match.brand) return normalized;
+
+  // Canonicalize only a known leading brand/family alias. Keep every remaining
+  // descriptor intact so different product variants are never merged by brand alone.
+  const aliases = match.family
+    ? [match.family.name_ar, ...(match.family.aliases || [])]
+    : [match.brand.name_ar, ...(match.brand.aliases || [])];
+  const ordered = aliases.map(alias => normalizeArabic(alias)).filter(Boolean)
+    .sort((a, b) => b.length - a.length);
+  const alias = ordered.find(value => normalized === value || normalized.startsWith(value + " "));
+  if (!alias) return normalized;
+  const canonical = match.family ? match.family.key : match.brand.key;
+  return canonical + normalized.slice(alias.length);
+}
+
 function dimensionKey(row) {
   return [
-    normalizeArabic(row.product_text || ""),
+    canonicalProductText(row.product_text || ""),
     numberOrNull(row.weight_g),
     numberOrNull(row.volume_ml),
     numberOrNull(row.offer_extra_weight_g),
@@ -61,4 +81,4 @@ function resolveFromMemory(candidate, memory) {
   };
 }
 
-module.exports = { dimensionKey, buildPriceMemory, resolveFromMemory };
+module.exports = { canonicalProductText, dimensionKey, buildPriceMemory, resolveFromMemory };

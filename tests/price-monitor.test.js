@@ -17,6 +17,16 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "ordinary conversation containing a year must not enter price monitoring");
   assert.equal(isEligibleMessage({ ...base, text: "سأشتري 2 عبوة غداً، والتوصيل الساعة 5", isLogChannel: false, isCommand: false, ownMessage: false }), false,
     "quantities, dates and times without a product-price signal must not be treated as prices");
+  assert.equal(isEligibleMessage({ ...base, text: "رقم الهاتف 01012345678", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "a phone number must never start price monitoring");
+  assert.equal(isEligibleMessage({ ...base, text: "رقم الفاتورة 50331 ج", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "an invoice number followed by a currency abbreviation is not a product price");
+  assert.equal(isEligibleMessage({ ...base, text: "موعد التسليم الساعة 5 مساءً", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "delivery times must not be treated as prices");
+  assert.equal(isEligibleMessage({ ...base, text: "وصلنا إلى 2026 والسعر ممتاز", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "a year plus casual price wording is not a price observation");
+  assert.equal(isEligibleMessage({ ...base, text: "يا جماعة دوف 350مل سعره 121 جنيه والتوصيل بكرة", isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "a real product price remains eligible when embedded in ordinary conversation");
   assert.equal(isEligibleMessage({ ...base, text: "دوف 350مل 121", isLogChannel: false, isCommand: false, ownMessage: false }), true,
     "a recognizable product size followed by a price remains eligible even without a currency suffix");
   assert.equal(isEligibleMessage({ ...base, text: "دوف 350مل 121 ح", isLogChannel: false, isCommand: false, ownMessage: false }), true,

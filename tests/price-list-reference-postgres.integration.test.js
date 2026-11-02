@@ -73,7 +73,7 @@ if (!connectionString) {
     );
     const references = await pool.query(
       `SELECT company_label, source_period, declared_price_type, price_kind, product_label,
-              package_sale_price, unit_price_type, raw_line, decision
+              package_sale_price, unit_price_type, raw_line, package_type, decision
        FROM price_reference_observations WHERE run_id=$1 ORDER BY id`,
       [result.runId]
     );
@@ -103,6 +103,7 @@ if (!connectionString) {
     assert.ok(signal, "the Signal 120 ml row must be persisted");
     assert.equal(Number(signal.package_sale_price), 42.33);
     assert.equal(signal.unit_price_type, "بالقطعة");
+    assert.equal(signal.package_type, "sachet", "official references must retain package type for exact product matching");
 
     const carton = references.rows.find(row => /كلير أكياس 5 مل الكرتونة/.test(row.raw_line || ""));
     assert.ok(carton, "the explicit Clear sachet carton row must be persisted");

@@ -66,8 +66,8 @@ function cleanProductName(line) {
   if (source.includes(":")) source = source.slice(0, source.indexOf(":"));
   return toAsciiDigits(source)
     .replace(/^[\s•*._-]+/, "")
-    .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
-    .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)/giu, " ")
+    .replace(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|liter|ml|مل)/giu, " ")
+    .replace(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|liter|ml|مل)/giu, " ")
     .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/giu, " ")
     .replace(/\s+/g, " ").trim();
 }
@@ -98,7 +98,7 @@ function cleanExplicitProductLine(line) {
   const token = tokens.filter(m => /(?:جنيه|ج|EGP)\s*$/iu.test(m[0])).at(-1) || tokens.at(-1);
   if (!token) return cleanProductName(line);
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
-    .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g)/giu, " ")
+    .replace(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|liter|ml|مل)/giu, " ")
     .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/giu, " ")
     .replace(/(?:[*×x]\s*\d+|(?:^|\s)ق\s*(?=\s|$))/giu, " ")
     // Keep carton promotion wording in raw_line, not in the normalized product identity.
@@ -215,7 +215,7 @@ function deterministicList(text) {
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const identitySizes = metadata.company && /(?:[*×x]\s*\d+|(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu.test(toAsciiDigits(line))
       ? extractPackageSizes(line) : [];
-    const displayProductPrefix = [productPrefix, identitySizes.join(" + ")].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const displayProductPrefix = [productPrefix.replace(/[+*×/]+\s*$/u, ""), identitySizes.join(" + ")].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(displayProductPrefix);
     const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));

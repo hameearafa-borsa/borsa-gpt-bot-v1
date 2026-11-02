@@ -603,6 +603,45 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(!/resolved_from_accepted_price_memory/.test(pearlMemoryFollowup.savedRows[0].row.price_selection_reason || ""),
     "pending Pearl history must not resolve a later candidate into wholesale memory");
 
+  // Exact Pearl regression requested: 503.31 is an unlabeled/base amount,
+  // not a trusted wholesale price. It must remain pending through the real
+  // monitor persistence path and must not be learned as accepted price memory.
+  let pearl503MemoryRowsReturned = null;
+  let pearl503InsertParams = null;
+  const pearl503Pool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) {
+        pearl503MemoryRowsReturned = [];
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) {
+        pearl503InsertParams = params;
+        return { rows: [{ id: 521 }], rowCount: 1 };
+      }
+      throw new Error("unexpected Pearl 503.31 query");
+    }
+  };
+  const pearl503Observed = await observe({
+    pool: pearl503Pool,
+    message: { chatId: -100123, messageId: 474, userId: 789, text: "بيرل 9 ك 503.31" },
+    registry
+  });
+  assert.equal(pearl503Observed.saved, 1,
+    "the ambiguous 503.31 observation should be retained for human review, not discarded");
+  assert.equal(pearl503Observed.savedRows[0].row.package_sale_price, 503.31);
+  assert.equal(pearl503Observed.savedRows[0].row.price_kind, "wholesale_candidate");
+  assert.equal(pearl503Observed.savedRows[0].row.decision, "pending",
+    "the exact unlabelled Pearl 503.31 amount must never be auto-approved as wholesale");
+  assert.ok(pearl503Observed.savedRows[0].row.confidence < 0.8);
+  assert.equal(pearl503InsertParams[2], 503.31,
+    "503.31 must be persisted as the observed amount without being rewritten");
+  assert.equal(pearl503InsertParams[13], "pending",
+    "the database decision for the exact 503.31 case must remain pending");
+  assert.deepEqual(pearl503MemoryRowsReturned, [],
+    "an unapproved 503.31 Pearl observation must not be added to trusted wholesale memory");
+
   // Re-processing the same Telegram message row must not create a second observation.
   let duplicateChecks = 0;
   let duplicateInserts = 0;

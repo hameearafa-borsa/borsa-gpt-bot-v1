@@ -25,7 +25,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.equal(ariel50.package_sale_price, 134.6, "the third dash-delimited field is the price");
   const diaper1 = accepted.find(row => /بامبرز ماكسي مقاس 1/.test(row.raw_line));
   assert.equal(diaper1.product, "بامبرز ماكسي مقاس 1", "the complete first field must remain the diaper product identity");
-  assert.equal(diaper1.package_label, "3 شنطة * 60 حفاضة", "the complete second field must remain the diaper package description");
+  assert.equal(diaper1.package_label, "3 شنطة × 60 حفاضة", "the complete second field must remain the diaper package description");
   assert.ok(accepted.some(row => /بامبرز ماكسي مقاس 1/.test(row.raw_line) && /3 شنطة/.test(row.package_label) && /60 حفاضة/.test(row.package_label)), "diaper bundle composition must be preserved");
   assert.ok(accepted.some(row => /فيري اقراص 20/.test(row.raw_line) && /5 وحدات/.test(row.package_label)), "unit counts must be retained");
   assert.ok(accepted.some(row => /ماكينة بلوتو بلس 10\+4/.test(row.raw_line)), "promotional multipacks must remain in product identity");

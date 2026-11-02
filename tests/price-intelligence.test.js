@@ -220,7 +220,7 @@ assert.equal(unileverSoapOffer.unit_price_type, "بالكرتونة",
   "the carton offer context must be carried to the soap price");
 assert.ok(unileverSoapOffer.raw_line.includes("قطعة صابون هدية"),
   "the original source row must preserve the promotional gift wording");
-assert.equal(unileverSoapOffer.decision, "review", "carton gift offers must not be auto-approved");
+assert.equal(unileverSoapOffer.decision, "accepted", "a clearly priced carton remains a valid observation when its gift wording is preserved separately");
 assert.doesNotMatch(unileverSoapOffer.product, /العرض على الكرتونة|قطعة صابون هدية/u,
   "a carton promotion note should not contaminate the product identity");
 // Historical comparison preserves product identity when only weight/offer changes.

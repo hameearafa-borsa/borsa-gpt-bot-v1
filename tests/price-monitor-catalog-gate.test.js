@@ -55,6 +55,34 @@ const { findOfficialCatalogMatch, observe } = require("../modules/price-monitor"
   });
   assert.equal(wrongUnit, null, "piece observations must not match carton references");
 
+  const ambiguousPool = {
+    async query() {
+      return { rows: [
+        { ...reference, company_label: "Supplier A", id: 91 },
+        { ...reference, company_label: "Supplier B", id: 92 }
+      ], rowCount: 2 };
+    }
+  };
+  const ambiguous = await findOfficialCatalogMatch(ambiguousPool, {
+    product_text: "دوف 350مل", weight_g: null, volume_ml: 350,
+    pack_count: 12, unit_price_type: "بالكرتونة", offer_extra_weight_g: null
+  });
+  assert.equal(ambiguous, null, "different official suppliers must not be silently merged");
+
+  const sameCompanyHistoryPool = {
+    async query() {
+      return { rows: [
+        { ...reference, company_label: "Supplier A", id: 91 },
+        { ...reference, company_label: "Supplier A", id: 93 }
+      ], rowCount: 2 };
+    }
+  };
+  const sameCompanyHistory = await findOfficialCatalogMatch(sameCompanyHistoryPool, {
+    product_text: "دوف 350مل", weight_g: null, volume_ml: 350,
+    pack_count: 12, unit_price_type: "بالكرتونة", offer_extra_weight_g: null
+  });
+  assert.equal(sameCompanyHistory.id, 91, "same supplier history may resolve to its newest row");
+
   const result = await observe({
     pool,
     message: { chatId: -100123, messageId: 990, userId: 700, text: "دوف 350مل 12 عبوة 125 ج" },

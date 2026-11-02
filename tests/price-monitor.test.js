@@ -499,6 +499,38 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(pearlPersistedParams.every(params => params[13] === "pending"),
     "unreviewed catalog rows must remain pending rather than being silently auto-approved");
 
+  // Pending Pearl rows must never become trusted price memory on a later message.
+  const pearlPendingRows = pearlPersisted.savedRows.map(item => item.row);
+  let pearlMemoryRowsReturned = null;
+  const pearlMemoryFollowupPool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) {
+        // Mirror the production WHERE decision='accepted' AND confidence >= 0.8 filter.
+        pearlMemoryRowsReturned = pearlPendingRows.filter(row =>
+          row.decision === "accepted" && row.price_kind === "wholesale" && row.confidence >= 0.8
+        );
+        return { rows: pearlMemoryRowsReturned, rowCount: pearlMemoryRowsReturned.length };
+      }
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 520 }], rowCount: 1 };
+      throw new Error("unexpected Pearl memory follow-up query");
+    }
+  };
+  const pearlMemoryFollowup = await observe({
+    pool: pearlMemoryFollowupPool,
+    message: { chatId: -100123, messageId: 473, userId: 789, text: "بيرل 9 ك 505.31" },
+    registry
+  });
+  assert.deepEqual(pearlMemoryRowsReturned, [],
+    "pending Pearl rows, including the 505.31 base amount, must not enter trusted wholesale memory");
+  assert.equal(pearlMemoryFollowup.saved, 1);
+  assert.equal(pearlMemoryFollowup.savedRows[0].row.package_sale_price, 505.31);
+  assert.equal(pearlMemoryFollowup.savedRows[0].row.decision, "pending",
+    "a later unlabelled 505.31 observation must remain pending without trusted wholesale evidence");
+  assert.ok(!/resolved_from_accepted_price_memory/.test(pearlMemoryFollowup.savedRows[0].row.price_selection_reason || ""),
+    "pending Pearl history must not resolve a later candidate into wholesale memory");
+
   // Re-processing the same Telegram message row must not create a second observation.
   let duplicateChecks = 0;
   let duplicateInserts = 0;

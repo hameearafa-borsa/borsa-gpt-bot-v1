@@ -1,16 +1,16 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
-const { render: shapeArabicForSvg } = require("bidi-shaper");
 
 function escapeXml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
 }
 function svgText(value) {
-  // bidi-shaper returns Arabic in final visual order. Force SVG to draw that
-  // prepared sequence left-to-right so its own bidi pass cannot reverse it twice.
-  const visual = escapeXml(shapeArabicForSvg(String(value ?? ""), { direction: "auto", paragraphs: "split" }));
-  return `<tspan direction="ltr" unicode-bidi="bidi-override">${visual}</tspan>`;
+  // Keep Arabic as logical Unicode. librsvg/Pango (used by sharp) performs
+  // contextual shaping and bidirectional layout with the installed Noto fonts.
+  // Pre-shaping into Arabic Presentation Forms can render as missing-glyph boxes.
+  const logicalText = escapeXml(String(value ?? ""));
+  return '<tspan direction="auto" unicode-bidi="plaintext">' + logicalText + '</tspan>';
 }
 function priceText(value) {
   const n = Number(value);

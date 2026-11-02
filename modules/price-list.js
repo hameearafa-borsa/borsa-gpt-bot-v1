@@ -1,6 +1,6 @@
 "use strict";
 const { normalizeArabic, toAsciiDigits, parseNumber, parseQuantity } = require("../core/normalization");
-const { extractPriceCandidates, commercialMetrics } = require("./price-intelligence");
+const { extractPriceCandidates, commercialMetrics, parsePackageType } = require("./price-intelligence");
 
 const PRICE_TOKEN = /(?:^|[\s|:])([0-9٠-٩۰-۹]+(?:[.,٫][0-9٠-٩۰-۹]+)?)\s*(?:جنيه|ج|EGP)?(?=\s|\||$)/giu;
 const WEIGHT_TOKEN = /([0-9٠-٩۰-۹]+(?:[.,][0-9٠-٩۰-۹]+)?)\s*(كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/iu;
@@ -260,7 +260,8 @@ function deterministicList(text) {
     out.push({
       raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company, package_label: explicitRow ? extractPackageLabelFromPackagePart(packageSource) : extractPackageLabel(line),
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
-      pack_count: packCount, package_sale_price: packagePrice, unit_price_type: unitPriceType,
+      pack_count: packCount, package_type: parsePackageType(packageSource) || parsePackageType(productSource) || null,
+      package_sale_price: packagePrice, unit_price_type: unitPriceType,
       wholesale_carton_price: afterWholesale, consumer_price: afterConsumer,
       list_price: null, confidence: decision === "accepted" ? 0.93 : decision === "review" ? 0.58 : 0.1,
       decision

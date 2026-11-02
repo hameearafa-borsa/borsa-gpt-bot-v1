@@ -373,16 +373,11 @@ function extractPriceCandidates(text) {
     const consumerPrice = numericPriceTokens(stripQuantityTokens(consumerSuffix))[0] ?? null;
 
     const invoiceLabelledPrice = extractInvoicePriceAfterTax(parsedLine);
-    const candidateNameBase = (invoiceLabelledPrice != null
+    const candidateName = (invoiceLabelledPrice != null
       ? extractInvoiceProductText(parsedLine)
       : extractProductText(parsedLine))
       .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى|قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة|بعد)/giu, " ")
       .replace(/\s+/g, " ").trim();
-    // Keep size in the final observation identity even though the low-level
-    // name cleaner intentionally removes quantities for other callers.
-    const candidateName = quantity && !candidateNameBase.includes(quantity[0])
-      ? [candidateNameBase, quantity[0]].filter(Boolean).join(" ").trim()
-      : candidateNameBase;
     const weightLabel = quantity?.[0]?.trim() || (decimalAutomaticWeight ? decimalAutomaticWeight[1] : null);
     // Generic package words describe packaging, not the product identity.
     // For weight-only catalog rows (e.g. "شكارة 10 ك") preserve company/section/weight context.

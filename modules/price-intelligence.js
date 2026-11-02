@@ -528,10 +528,18 @@ function productIdentityKey(row) {
   // Product identity describes the item itself, not the supplier's temporary carton configuration.
   // Keep size, extra free weight and package type in identity, but track carton count per observation:
   // promotions and carton-merging can change count without changing the underlying product.
+  const numericDimension = value => {
+    if (value == null || value === "") return "";
+    const number = Number(value);
+    return Number.isFinite(number) ? String(number) : String(value);
+  };
   const dimensions = [
-    row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g,
-    row?.package_type, row?.unit_price_type
-  ].map(value => value == null || value === "" ? "" : String(value));
+    numericDimension(row?.weight_g),
+    numericDimension(row?.volume_ml),
+    numericDimension(row?.offer_extra_weight_g),
+    row?.package_type == null || row.package_type === "" ? "" : String(row.package_type),
+    row?.unit_price_type == null || row.unit_price_type === "" ? "" : String(row.unit_price_type)
+  ];
   // Piece and carton prices are different commercial units and must never
   // share a price history or inherit each other's carton count.
   return [String(row?.brand_key || ""), stableName, String(row?.price_kind || ""), ...dimensions].join("|");

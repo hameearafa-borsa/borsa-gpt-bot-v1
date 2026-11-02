@@ -317,7 +317,7 @@ async function observe({ pool, message, merchantId = null, registry, requireCata
        message.userId || null, row.raw_line, row.confidence, row.product_text, row.weight_g, row.volume_ml,
        row.pack_count, row.offer_extra_weight_g, row.decision, row.brand_key, row.package_type,
        row.product_identity_key, row.change_type, row.listed_base_price ?? null,
-       row.explicit_wholesale_label_price ?? null, row.price_selection_reason ?? null, Boolean(row.needs_review), row.consumer_price ?? null, row.unit_price_type ?? null]
+       row.explicit_wholesale_label_price ?? null, row.price_selection_reason ?? null, Boolean(row.needs_review), row.consumer_price ?? null, row.unit_price_type ?? null, row.package_description ?? null, row.reference_observation_id ?? null]
     );
     // ON CONFLICT DO NOTHING returns no row when another worker already saved this source row.
     if (!inserted.rows?.[0]) continue;

@@ -15,7 +15,7 @@ const { isBotMessage, claimMessage } = require("../core/message-gate");
   const seen = new Set();
   const pool = {
     async query(sql, params) {
-      assert.match(sql, /ON CONFLICT\\s*\\(chat_id,message_id,update_type\\) DO NOTHING/i);
+      assert.match(sql, /ON CONFLICT\s*\(chat_id,message_id,update_type\\) DO NOTHING/i);
       const key = params.join(":");
       if (seen.has(key)) return { rowCount: 0, rows: [] };
       seen.add(key);

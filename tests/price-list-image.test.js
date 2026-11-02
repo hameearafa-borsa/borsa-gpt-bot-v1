@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
 const { escapeXml, renderPriceListImage, renderPriceListImages } = require("../modules/price-list-image");
+const { extractPackageLabel } = require("../modules/price-list");
 const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-image.js"), "utf8");
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
@@ -14,6 +15,9 @@ assert.match(imageSource, /logoPlacement = "both"/, "combined group logo and wat
 assert.match(imageSource, /id="securityTexture"/, "rendered pages must include a subtle security background");
 assert.match(imageSource, /id="rowWatermark"/, "price rows must include a repeated light watermark");
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
+assert.equal(extractPackageLabel("اريال 50 جرام - 32 كيس - 134.6"), "50 جرام · 32 كيس");
+assert.equal(extractPackageLabel("بامبرز ماكسي مقاس 1 - 3 شنطة * 60 حفاضة - 912.56"), "3 شنطة × 60 حفاضة");
+assert.equal(extractPackageLabel("ماكينة ناست حصائر 48 ماكينة - 48 قطعة - 406.56"), "48 قطعة");
 (async () => {
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: [{ product: "أ", package_sale_price: 10 }] }), /three_valid_products/);
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: Array.from({length: 101}, (_, i) => ({ product: `منتج ${i}`, package_sale_price: 10 })) }), /exceeds_100_products/);

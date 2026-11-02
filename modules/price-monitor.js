@@ -65,7 +65,7 @@ function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage
     // product, or an explicit product size plus a separate amount. Administrative numbers
     // are excluded unless the same row contains a product size.
     if (administrativeContext && !hasProductSize) return false;
-    return (hasProductSize && numericCount >= 2) || (hasProductName && (hasCurrency || hasPriceLabel));
+    return (hasProductSize && numericCount >= 2) || (hasProductName && hasCurrency);
   });
 }
 async function observe({ pool, message, merchantId = null, registry }) {

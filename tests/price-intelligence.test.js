@@ -176,19 +176,19 @@ const unileverOctoberText = fs.readFileSync(path.join(__dirname, "fixtures-unile
 const unileverRows = deterministicList(unileverOctoberText);
 assert.equal(unileverRows.length, 66, "the actual Unilever October source should preserve all 66 price rows");
 
-assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 61,
+assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 62,
   "only unambiguous Unilever rows should be auto-accepted");
-assert.equal(unileverRows.filter(row => row.decision === "review").length, 5,
-  "offers and suspicious currency suffixes should remain reviewable");
+assert.equal(unileverRows.filter(row => row.decision === "review").length, 4,
+  "only ambiguous promotional offers should remain reviewable");
 assert.equal(unileverRows.filter(row => row.decision === "skipped").length, 0,
   "no priced Unilever row should be silently discarded");
 const unileverCurrencyTypo = unileverRows.find(row => row.raw_line.includes("تريزيمي بلسم 600 مل"));
-assert.equal(unileverCurrencyTypo?.decision, "review",
-  "the trailing ح should remain reviewable even when adjacent rows use ج");
+assert.equal(unileverCurrencyTypo?.decision, "accepted",
+  "the trailing ح is a harmless Egyptian-pound currency typo");
 assert.equal(unileverCurrencyTypo?.package_sale_price, 205, "the numeric price must remain unchanged");
 assert.equal(unileverCurrencyTypo?.raw_line, "تريزيمي بلسم 600 مل ق 205 ح", "retain the original source text for audit");
-assert.equal(deterministicList("أسعار شركة يونيليفر:\nمنتج تجريبي 205 ح").find(row => row.raw_line.includes("205 ح"))?.decision, "review",
-  "a trailing ح without adjacent price evidence must remain in review");
+assert.equal(deterministicList("أسعار شركة يونيليفر:\nمنتج تجريبي 205 ح").find(row => row.raw_line.includes("205 ح"))?.decision, "accepted",
+  "a trailing ح is accepted as Egyptian pounds without needing adjacent currency evidence");
 const unileverUnclearUnitRows = unileverRows.filter(row => row.category === "منتجات جلو و فازلين");
 assert.equal(unileverUnclearUnitRows.length, 8);
 assert.ok(unileverUnclearUnitRows.every(row => row.decision === "accepted" && row.unit_price_type === "بالكرتونة"),

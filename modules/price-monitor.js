@@ -314,7 +314,6 @@ async function observe({ pool, message, merchantId = null, registry, requireCata
           row.package_type ?? null, row.unit_price_type ?? null]
       );
       const previous = history.rows?.[0] || null;
-      if (row.product_text === "صابون جديد") console.log("LEGACY_HISTORY_SELECTED", JSON.stringify({ params: [row.product_identity_key, row.price_kind, row.product_text, row.weight_g, row.volume_ml, row.offer_extra_weight_g, row.package_type, row.unit_price_type], rows: history.rows, previousIdentity: previous ? productIdentityKey(previous) : null, currentIdentity: row.product_identity_key }));
       // If today's post omits carton count, reuse a known count from the same product/size history.
       // Keep the source wording intact and mark the count as inherited; never override an explicit count.
       if ((row.pack_count == null || row.pack_count === "") &&

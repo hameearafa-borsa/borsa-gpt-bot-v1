@@ -14,7 +14,7 @@ function isLogChat(chatId, logChatId = Number(process.env.LOG_CHAT_ID || -100434
 }
 
 function isCommand(text) {
-  return /^\\s*\\//.test(String(text || ""));
+  return /^\s*\//.test(String(text || ""));
 }
 
 async function claimMessage(pool, { chatId, messageId, updateType = "message" }) {

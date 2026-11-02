@@ -88,11 +88,10 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   assert.equal(edited.ok, true);
   assert.match(editedCalls[0].sql, /decision='accepted'/);
   assert.match(editedCalls[0].sql, /needs_review=FALSE/);
-  const editedMemory = buildPriceMemory([{
-    product_text: "أريال مسحوق", package_sale_price: 23, weight_g: 500, volume_ml: null,
-    pack_count: null, offer_extra_weight_g: null, package_type: null, price_kind: "wholesale",
-    decision: "accepted", confidence: 1, unit_price_type: "بالكرتونة"
-  }]);
+  assert.equal(edited.row.decision, "accepted");
+  assert.equal(edited.row.confidence, 1);
+  assert.equal(edited.row.price_kind, "wholesale");
+  const editedMemory = buildPriceMemory([edited.row]);
   const editedResolution = resolveFromMemory({
     product_text: "أريال مسحوق", weight_g: 500, volume_ml: null,
     offer_extra_weight_g: null, package_type: null, unit_price_type: "بالكرتونة",

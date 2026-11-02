@@ -13,6 +13,14 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(isEligibleMessage({ ...base, isLogChannel: true, isCommand: false, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: true, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: false, ownMessage: true }), false);
+  assert.equal(isEligibleMessage({ ...base, text: "مبروك يا جماعة وصلنا إلى 2026، وإن شاء الله القادم أفضل", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "ordinary conversation containing a year must not enter price monitoring");
+  assert.equal(isEligibleMessage({ ...base, text: "سأشتري 2 عبوة غداً، والتوصيل الساعة 5", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "quantities, dates and times without a product-price signal must not be treated as prices");
+  assert.equal(isEligibleMessage({ ...base, text: "دوف 350مل 121", isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "a recognizable product size followed by a price remains eligible even without a currency suffix");
+  assert.equal(isEligibleMessage({ ...base, text: "دوف 350مل 121 ح", isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "the Egyptian-pound keyboard typo ح remains a valid price marker");
   const oxyTextCatalog = fs.readFileSync(path.join(__dirname, "..", "قائمة أسعار أوكسي.txt"), "utf8");
   const bahiTextCatalog = fs.readFileSync(path.join(__dirname, "..", "قائمة أسعار باهي.txt"), "utf8");
   assert.equal(parseInvoiceTable(oxyTextCatalog).length, 63, "all Oxy text-catalog product rows must be parsed");

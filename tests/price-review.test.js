@@ -63,7 +63,7 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   const ignoredCalls = [];
   const ignoredDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
     ignoredCalls.push({ sql, params });
-    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ ...row, id: 45 }] };
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ ...row, id: 45, decision: "ignored", price_kind: "wholesale", confidence: 1, package_sale_price: 100 }] };
     return { rowCount: 1, rows: [] };
   } }); } };
   const ignored = await resolveReview({ db: ignoredDb, id: 45, action: "ignore", reviewerId: 7 });
@@ -71,14 +71,35 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   assert.equal(ignoredCalls[0].params[0], "ignored", "rejecting a price should retain its observation with ignored decision");
   assert.match(ignoredCalls[1].sql, /UPDATE price_review_queue SET status=\$1/);
   assert.equal(ignoredCalls[1].params[0], "ignored", "rejecting a price should resolve its queue entry too");
+  assert.equal(buildPriceMemory([ignored.row]).size, 0,
+    "a rejected observation must never enter trusted price memory");
   const editedCalls = [];
   const editedDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
-    editedCalls.push({ sql, params }); return { rowCount: 1, rows: [{ id: 42 }] };
+    editedCalls.push({ sql, params });
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{
+      id: 42, product_text: params[0], package_sale_price: params[1], weight_g: params[2],
+      volume_ml: params[3], pack_count: params[4], brand_key: params[5], package_type: null,
+      offer_extra_weight_g: null, price_kind: "wholesale", decision: "accepted",
+      confidence: 1, unit_price_type: "بالكرتونة", needs_review: false
+    }] };
+    return { rowCount: 1, rows: [{ id: 42 }] };
   } }); } };
   const edited = await saveEditedReview({ db: editedDb, id: 42, reviewerId: 7, productText: "أريال مسحوق", price: 23, weightG: 500 });
   assert.equal(edited.ok, true);
   assert.match(editedCalls[0].sql, /decision='accepted'/);
   assert.match(editedCalls[0].sql, /needs_review=FALSE/);
+  const editedMemory = buildPriceMemory([{
+    product_text: "أريال مسحوق", package_sale_price: 23, weight_g: 500, volume_ml: null,
+    pack_count: null, offer_extra_weight_g: null, package_type: null, price_kind: "wholesale",
+    decision: "accepted", confidence: 1, unit_price_type: "بالكرتونة"
+  }]);
+  const editedResolution = resolveFromMemory({
+    product_text: "أريال مسحوق", weight_g: 500, volume_ml: null,
+    offer_extra_weight_g: null, package_type: null, unit_price_type: "بالكرتونة",
+    price_kind: "wholesale_candidate"
+  }, editedMemory);
+  assert.equal(editedResolution.resolved, true,
+    "a manually edited and approved price must be reusable from trusted price memory");
   assert.match(editedCalls[0].sql, /explicit_wholesale_label_price=\$2/,
     "a manually corrected wholesale price must update its dedicated field too");
   assert.match(editedCalls[0].sql, /brand_key=\$6/,

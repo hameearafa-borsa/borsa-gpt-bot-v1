@@ -31,6 +31,7 @@ const registry = require("../data/product-registry.json");
   assert.equal(row("تريزيمي بلسم 600 مل ق 205 ح")?.package_sale_price, 205);
   const inserts = [];
   const pool = { async query(sql, params) {
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
     if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };

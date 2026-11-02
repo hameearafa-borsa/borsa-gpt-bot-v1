@@ -1,8 +1,12 @@
 "use strict";
 
 function isBotMessage(ctx, botUserId) {
-  const from = ctx?.from?.id;
-  return botUserId != null && from != null && String(from) === String(botUserId);
+  const from = ctx?.from;
+  // Ignore every Telegram bot account, not only this bot's own account.
+  // Other bots in the group must never become price observations or merchants.
+  if (from?.is_bot === true) return true;
+  const fromId = from?.id;
+  return botUserId != null && fromId != null && String(fromId) === String(botUserId);
 }
 
 function isLogChat(chatId, logChatId = Number(process.env.LOG_CHAT_ID || -1004344288353)) {
@@ -10,7 +14,7 @@ function isLogChat(chatId, logChatId = Number(process.env.LOG_CHAT_ID || -100434
 }
 
 function isCommand(text) {
-  return /^\s*\//.test(String(text || ""));
+  return /^\\s*\\//.test(String(text || ""));
 }
 
 async function claimMessage(pool, { chatId, messageId, updateType = "message" }) {

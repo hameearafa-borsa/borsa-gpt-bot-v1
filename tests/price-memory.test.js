@@ -87,7 +87,7 @@ assert.equal(familyAliasMatch.matched, true,
 assert.equal(familyAliasMatch.resolved, true);
 
 const differentFamily = resolveFromMemory({
-  ...accepted[0], product_text: "بريكس متعدد الاسطح 25 جم", weight_g: 25, volume_ml: null,
+  ...accepted[0], product_text: "بريكس منظف اسطح 25 جم", weight_g: 25, volume_ml: null,
   price_kind: "wholesale_candidate", unit_price_type: null, pack_count: null
 }, familyAliasMemory);
 assert.equal(differentFamily.matched, false,

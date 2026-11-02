@@ -81,6 +81,47 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "a structured carton/piece arithmetic conflict must remain pending for review");
   assert.equal(inconsistentAsc2[0].confidence, 0.72);
 
+  // Exercise the dedicated ASC2 parser through the real silent monitor + INSERT path.
+  const monitorStructuredRows = Array.from({ length: 8 }, (_, index) =>
+    `منظف تجريبي ${index + 1} 10 100.00 ${index === 3 ? "15.00" : "10.00"}`
+  );
+  const monitorStructuredText = [
+    "أسعار شركة باهي",
+    "تصفية اسعار نوفمبر 2026",
+    "بيانات جملة",
+    "الاصناف | عدد القطع | السعر الصافي بعد الخصم 2% | صافي سعر القطعة",
+    ...monitorStructuredRows
+  ].join("\\n");
+  assert.equal(isBulkPriceList(monitorStructuredText), true,
+    "a structured ASC2 table must enter the bulk monitor path");
+  const structuredInserts = [];
+  const structuredPool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) {
+        structuredInserts.push(params);
+        return { rows: [{ id: 300 + structuredInserts.length }], rowCount: 1 };
+      }
+      throw new Error("unexpected structured monitor query");
+    }
+  };
+  const structuredMonitorResult = await observe({
+    pool: structuredPool,
+    message: { chatId: -100123, messageId: 458, userId: 789, text: monitorStructuredText },
+    registry
+  });
+  assert.equal(structuredMonitorResult.saved, 8,
+    "all structured ASC2 rows, including the mismatched one, must be persisted");
+  assert.equal(structuredMonitorResult.savedRows.filter(item => item.row.decision === "accepted").length, 7,
+    "seven arithmetically consistent rows must be accepted by the monitor");
+  assert.equal(structuredMonitorResult.savedRows.filter(item => item.row.decision === "pending").length, 1,
+    "the arithmetic mismatch must be retained as pending, not trusted");
+  assert.equal(structuredInserts.filter(params => params[13] === "pending").length, 1,
+    "the database decision must persist the arithmetic mismatch as pending");
+
   const oxyInvoice = parseInvoiceTable(`الصنف
 سعر الفاتورة بعد 14% والعرض الترويجي
 جوي

@@ -1050,7 +1050,7 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   assert.equal(classifyObservationChange(changeBase, { ...changeBase, pack_count: 24 }),
     "package_configuration_change", "a carton-count change must be distinguished from a product identity change");
   assert.equal(classifyObservationChange(changeBase, { ...changeBase, volume_ml: 500, package_sale_price: 125 }),
-    "price_and_weight_change", "a different size and price must not be mislabeled as price-only movement");
+    "new_observation", "a different product size must retain a distinct identity even when its price also differs");
   assert.equal(classifyObservationChange(changeBase, { ...changeBase, offer_extra_weight_g: 50 }),
     "new_observation", "a free-extra offer must retain a distinct product identity");
   assert.equal(classifyObservationChange(changeBase, { ...changeBase, package_type: "jerrycan" }),

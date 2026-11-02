@@ -186,6 +186,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const pool = {
     async query(sql, params) {
       savedQueries.push({ sql, params });
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -214,6 +215,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   let pieceInsertParams = null;
   const piecePool = {
     async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -244,6 +246,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   let historyInsertParams = null;
   const historyPool = {
     async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) {
@@ -273,6 +276,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   let inheritedInsertParams = null;
   const inheritedCountPool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [{
@@ -311,7 +315,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   // retaining per-piece/carton unit semantics instead of being dropped as bulk.
   const unileverMonitorParams = [];
   const unileverMonitorPool = { async query(sql, params) {
-    if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
     if (sql.includes("INSERT INTO price_observations")) { unileverMonitorParams.push(params); return { rows: [{ id: 300 + unileverMonitorParams.length }], rowCount: 1 }; }
@@ -351,7 +356,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 • 30 جم: 3.79 | جملة 75.95 | مستهلك 5`;
   const pearlMonitorParams = [];
   const pearlMonitorPool = { async query(sql, params) {
-    if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
     if (sql.includes("INSERT INTO price_observations")) { pearlMonitorParams.push(params); return { rows: [{ id: 500 + pearlMonitorParams.length }], rowCount: 1 }; }
@@ -369,7 +375,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(pearlMonitorParams.every(params => params[13] === "pending"), "ambiguous Pearl catalog rows must be persisted as pending");
   // Known identity memory must never override a deterministic ambiguity flag.
   const ambiguousKnownPool = { async query(sql) {
-    if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
     if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
     if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 471 }], rowCount: 1 };
@@ -398,6 +405,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const pearlPool = {
     async query(sql, params) {
       pearlQueries.push({ sql, params });
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -470,6 +478,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const pearlPersistedParams = [];
   const pearlDatabasePool = {
     async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
@@ -507,6 +516,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   let duplicateInserts = 0;
   const duplicatePool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) {
         duplicateChecks += 1;
@@ -547,6 +557,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const captionPool = {
     async query(sql) {
       captionQueries.push(sql);
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -571,6 +582,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const identity = identityKey({ product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: null, brand_key: null });
   const reviewedProductPool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -591,6 +603,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   // seller post omits the word "جملة". This is the core repeat-observation path.
   const rememberedPool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
@@ -617,6 +630,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const registryRememberedPool = {
     async query(sql) {
       registryMemoryQueries.push(sql);
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -643,6 +657,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(contextual.length >= 2);
   const contextPool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };

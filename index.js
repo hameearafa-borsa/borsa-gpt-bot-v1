@@ -302,7 +302,8 @@ bot.on("my_chat_member", async ctx => {
   await sendLog({ module: "security", stage: "group_approval_required", severity: "warn", status: "pending", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
 });
 
-bot.on("text", async ctx => {
+// Monitor ordinary text and captioned photos through the same silent price-monitor path.
+bot.on(["text", "photo"], async ctx => {
   const m = messageData(ctx);
   if (!["group", "supergroup", "private"].includes(m.chatType)) return;
   if (isBotMessage(ctx, botUserId)) return;

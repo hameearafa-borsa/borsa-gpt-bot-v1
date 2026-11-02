@@ -104,6 +104,7 @@ function cleanExplicitProductLine(line) {
     .replace(/(?:[*×x]\s*\d+|(?:^|\s)ق\s*(?=\s|$))/giu, " ")
     // Keep carton promotion wording in raw_line, not in the normalized product identity.
     .replace(/\s+(?:العرض|عرض)\s+على\s+(?:الكرتونة|الكرتونه)[\s\S]*$/iu, "")
+    .replace(/\s*[-–—]\s*/gu, " ")
     .replace(/\s+/g, " ").trim().replace(/^[\s•*._-]+/, "");
 }
 function detectUnitPriceHeading(line) {

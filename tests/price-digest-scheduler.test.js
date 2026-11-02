@@ -20,7 +20,11 @@ const {
   assert.equal(DAILY_MINUTE, 0);
   assert.equal(currentPriceDigestSlot(new Date("2026-11-02T17:59:00.000Z")), null);
   assert.equal(currentPriceDigestSlot(now).date, "2026-11-02");
-  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T18:05:00.000Z")), null);
+  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T18:05:00.000Z")).date, "2026-11-02");
+  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T21:50:00.000Z")).date, "2026-11-02",
+    "a restart after the five-minute opening window must still publish that day’s digest");
+  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T23:59:00.000Z")).date, "2026-11-02");
+  assert.equal(currentPriceDigestSlot(new Date("2026-11-03T00:00:00.000Z")), null);
 
   const sampleRows = [
     { product_text: "دوف 350 مل", package_sale_price: 125, volume_ml: 350, pack_count: 12, unit_price_type: "بالكرتونة", change_type: "price_change" },
@@ -68,6 +72,7 @@ const {
   assert.match(observationQuery.sql, /confidence >= 0\.8/);
   assert.match(observationQuery.sql, /needs_review=FALSE/);
   assert.match(observationQuery.sql, /AT TIME ZONE 'Africa\/Cairo'/);
+  assert.match(observationQuery.sql, /unit_price_type, pack_count, package_sale_price/);
   assert.match(observationQuery.sql, /LIMIT 100/);
   assert.equal(observationQuery.params[0], "2026-11-02");
 

@@ -214,7 +214,7 @@ function deterministicList(text) {
     const offerSignal = /(?:هدية|هديه|عرض|اشترِ|اشتري|مجانا|\+[^\n]*(?:بلسم|صابون))/iu.test(line);
     // The catalog uses Egyptian pounds; a trailing ح is a common keyboard typo for ج.
     // Review ambiguous bundles/promotions, not this harmless currency-letter variation.
-    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : (offerSignal || !unitPriceType) ? "review" : "accepted";
+    const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : !unitPriceType ? "review" : "accepted";
     out.push({
       raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company, package_label: packageLabel,
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,

@@ -223,7 +223,7 @@ function deterministicList(text) {
       (metadata.company && (metadata.isCompanyCatalog || metadata.priceType === "أسعار جملة") ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
     const identitySizes = metadata.company
-      ? [...toAsciiDigits(line).matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))/giu)]
+      ? [...toAsciiDigits(line).matchAll(/\\d+(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+(?:[.,]\\d+)?)*(?:\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))(?:\\s*\\+\\s*\\d+(?:[.,]\\d+)?(?:\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)))*/giu)]
         .map(match => match[0].replace(/\s+/g, " ").trim())
       : [];
     // Weight/volume belongs in the package column; keep it out of product identity.

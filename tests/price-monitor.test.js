@@ -754,5 +754,62 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(memoryCalls.filter(sql => sql.includes("SELECT product_text, price_kind")).length, 1,
     "accepted history must be loaded once for the whole Telegram message");
 
+  // End-to-end monitor path for the real Unilever October catalog:
+  // preserve the piece/carton unit, price, currency typo, and gift wording.
+  const unileverPersistedParams = [];
+  const unileverMonitorPool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) {
+        unileverPersistedParams.push(params);
+        return { rows: [{ id: 200 + unileverPersistedParams.length }], rowCount: 1 };
+      }
+      throw new Error("unexpected Unilever monitor query");
+    }
+  };
+  const unileverObserved = await observe({
+    pool: unileverMonitorPool,
+    message: { chatId: -100123, messageId: 480, userId: 789, text: unileverList },
+    registry
+  });
+  assert.equal(unileverObserved.saved, 66,
+    "the complete Unilever catalog must reach persistence through the real monitor path");
+  assert.ok(unileverObserved.savedRows.every(item =>
+    item.row.decision === "accepted" && item.row.price_kind === "wholesale" &&
+    item.row.confidence >= 0.8 && !item.row.needs_review
+  ), "all explicitly interpreted Unilever rows must be trusted wholesale observations");
+  const findUnileverRow = fragment =>
+    unileverObserved.savedRows.find(item => item.row.raw_line.includes(fragment))?.row;
+  const signalPiece = findUnileverRow("سيجنال 120مل");
+  assert.ok(signalPiece, "Signal per-piece row must be persisted");
+  assert.equal(signalPiece.package_sale_price, 42.33);
+  assert.equal(signalPiece.unit_price_type, "بالقطعة");
+  assert.equal(signalPiece.pack_count, null,
+    "per-piece Signal observations must never acquire a carton count");
+  const clearCarton = findUnileverRow("كلير أكياس 5 مل الكرتونة");
+  assert.ok(clearCarton, "Clear explicit carton row must be persisted");
+  assert.equal(clearCarton.package_sale_price, 346);
+  assert.equal(clearCarton.unit_price_type, "بالكرتونة");
+  const glowCarton = findUnileverRow("جلو 40جم");
+  assert.ok(glowCarton, "Unmarked Glow rows in the wholesale catalog must be persisted");
+  assert.equal(glowCarton.unit_price_type, "بالكرتونة",
+    "the catalog's wholesale default must classify these unmarked rows as carton prices");
+  const soapGiftCarton = findUnileverRow("كامي 110جم 1104");
+  assert.ok(soapGiftCarton, "the Camay carton gift offer must be persisted");
+  assert.equal(soapGiftCarton.unit_price_type, "بالكرتونة");
+  assert.equal(soapGiftCarton.package_sale_price, 1104);
+  assert.doesNotMatch(soapGiftCarton.product_text, /قطعة صابون هدية|العرض على الكرتونة/u,
+    "gift wording must remain source evidence, not contaminate the product identity");
+  const currencyTypo = findUnileverRow("تريزيمي بلسم 600 مل");
+  assert.equal(currencyTypo?.package_sale_price, 205);
+  assert.equal(currencyTypo?.unit_price_type, "بالقطعة");
+  assert.equal(unileverPersistedParams.length, 66,
+    "every accepted catalog row must be inserted exactly once");
+  assert.ok(unileverPersistedParams.every(params => params[13] === "accepted"),
+    "the persisted decision column must agree with the trusted catalog classification");
+
   console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, identity memory, context inference, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

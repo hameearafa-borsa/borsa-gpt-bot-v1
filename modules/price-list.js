@@ -142,8 +142,8 @@ function hasContextualCurrencyTypo(lines, index) {
 }
 function extractPackageSizes(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
-  return [...ascii.matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك(?=\\s|$)|kg|جرام|جم|g|لتر|ل(?=\\s|$)|liter|ml|مل))/giu)]
-    .map(match => match[0].replace(/\\s+/g, " ").trim());
+  return [...ascii.matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك(?=\s|$)|kg|جرام|جم|g|لتر|ل(?=\s|$)|liter|ml|مل))/giu)]
+    .map(match => match[0].replace(/\s+/g, " ").trim());
 }
 function extractPackageLabel(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");

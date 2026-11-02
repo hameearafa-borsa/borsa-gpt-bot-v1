@@ -979,5 +979,62 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   assert.ok(unileverPersistedParams.every(params => params[13] === "accepted"),
     "the persisted decision column must agree with the trusted catalog classification");
 
+  // Batch regression checks for accepted price-memory quality and unit boundaries.
+  const memoryFixture = [
+    { product_text: "دوف", price_kind: "wholesale", package_sale_price: 120, confidence: 0.9, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12, observed_at: "2026-11-01T10:00:00Z" },
+    { product_text: "دوف", price_kind: "wholesale", package_sale_price: 121, confidence: 0.79, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12, observed_at: "2026-11-01T11:00:00Z" },
+    { product_text: "دوف", price_kind: "wholesale_candidate", package_sale_price: 122, confidence: 0.99, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12 },
+    { product_text: "دوف", price_kind: "wholesale", package_sale_price: 123, confidence: 0.99, decision: "pending", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12 },
+    { product_text: "دوف", price_kind: "retail", package_sale_price: 124, confidence: 0.99, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12 },
+    { product_text: "دوف", price_kind: "wholesale", package_sale_price: 0, confidence: 0.99, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12 }
+  ];
+  const trustedMemory = buildPriceMemory(memoryFixture);
+  assert.equal(trustedMemory.size, 1,
+    "only accepted, wholesale, confidence-qualified rows with a positive price may seed memory");
+  const cartonMemoryMatch = resolveFromMemory(
+    { product_text: "دوف", price_kind: "wholesale_candidate", volume_ml: 350, unit_price_type: "بالكرتونة" },
+    trustedMemory
+  );
+  assert.equal(cartonMemoryMatch.matched, true);
+  assert.equal(cartonMemoryMatch.pack_count, 12,
+    "one consistent accepted carton history may supply its carton count");
+  const pieceMemoryConflict = resolveFromMemory(
+    { product_text: "دوف", price_kind: "wholesale_candidate", volume_ml: 350, unit_price_type: "بالقطعة" },
+    trustedMemory
+  );
+  assert.equal(pieceMemoryConflict.matched, false,
+    "carton history must never classify an explicitly piece-priced observation");
+  assert.equal(pieceMemoryConflict.unit_conflict, true);
+  const retailMemoryCandidate = resolveFromMemory(
+    { product_text: "دوف", price_kind: "retail", volume_ml: 350 },
+    trustedMemory
+  );
+  assert.equal(retailMemoryCandidate.matched, false,
+    "retail observations must never be resolved from wholesale memory");
+  const unknownMemoryCandidate = resolveFromMemory(
+    { product_text: "دوف", price_kind: "unknown", volume_ml: 350 },
+    trustedMemory
+  );
+  assert.equal(unknownMemoryCandidate.matched, false,
+    "unknown price kinds must never be resolved from wholesale memory");
+  const differentVariantMemory = buildPriceMemory([{
+    product_text: "دوف", price_kind: "wholesale", package_sale_price: 130,
+    confidence: 0.95, decision: "accepted", volume_ml: 350,
+    offer_extra_weight_g: 20, package_type: "bottle", unit_price_type: "بالكرتونة",
+    pack_count: 12, observed_at: "2026-11-01T12:00:00Z"
+  }]);
+  assert.equal(resolveFromMemory(
+    { product_text: "دوف", price_kind: "wholesale_candidate", volume_ml: 350,
+      offer_extra_weight_g: null, package_type: "bottle" },
+    differentVariantMemory
+  ).matched, false,
+  "a free-extra offer must not be merged with the regular product memory");
+  assert.equal(resolveFromMemory(
+    { product_text: "دوف", price_kind: "wholesale_candidate", volume_ml: 350,
+      offer_extra_weight_g: 20, package_type: "jerrycan" },
+    differentVariantMemory
+  ).matched, false,
+  "different package forms must not share trusted price memory");
+
   console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, identity memory, context inference, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

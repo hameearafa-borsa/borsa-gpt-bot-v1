@@ -1036,5 +1036,25 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   ).matched, false,
   "different package forms must not share trusted price memory");
 
+  // A price-only change must remain the same product observation identity.
+  const { classifyObservationChange } = require("../modules/price-intelligence");
+  const changeBase = {
+    product_text: "دوف 350 مل", brand_key: "dove", price_kind: "wholesale",
+    volume_ml: 350, package_sale_price: 120, pack_count: 12,
+    offer_extra_weight_g: null, package_type: "bottle"
+  };
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, package_sale_price: 125 }),
+    "price_change", "a new price for the same product and package must be recorded as a price change");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase }),
+    "same_observation", "identical product, price and package must remain unchanged");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, pack_count: 24 }),
+    "package_configuration_change", "a carton-count change must be distinguished from a product identity change");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, volume_ml: 500, package_sale_price: 125 }),
+    "price_and_weight_change", "a different size and price must not be mislabeled as price-only movement");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, offer_extra_weight_g: 50 }),
+    "new_observation", "a free-extra offer must retain a distinct product identity");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, package_type: "jerrycan" }),
+    "new_observation", "a different package form must retain a distinct product identity");
+
   console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, identity memory, context inference, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

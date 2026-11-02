@@ -45,6 +45,7 @@ assert.equal(priceAppears("السعر 505.31 جنيه", 99999), false);
       if (sql.includes("INSERT INTO products")) return { rows: [{ id: 3 }] };
       if (sql.includes("SELECT id FROM product_variants")) return { rows: [] };
       if (sql.includes("INSERT INTO product_variants")) return { rows: [{ id: 9 }] };
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rowCount: 0, rows: [] };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 11 }] };
       throw new Error(`unexpected sql: ${sql}`);

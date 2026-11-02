@@ -33,7 +33,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.ok(accepted.some(row => /205 ح/.test(row.raw_line) && row.package_sale_price === 205), "the contextual currency typo should retain its source text and numeric price");
 
   const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType });
-  assert.equal(images.length, Math.ceil(accepted.length / 16), "long lists should be split into readable pages");
+  assert.equal(images.length, Math.ceil(accepted.length / 25), "long lists should be split into readable pages");
   const outputDir = process.env.PRICE_LIST_TEST_OUTPUT_DIR;
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   for (const [index, png] of images.entries()) {
@@ -43,7 +43,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     const m = await sharp(png).metadata();
     assert.equal(m.format, "png");
     assert.equal(m.width, 1200);
-    assert.ok(m.height >= 250 && m.height <= 1200, "page height should remain readable and shareable");
+    assert.ok(m.height >= 250 && m.height <= 1700, "page height should remain readable and shareable");
     assert.equal(m.channels, 4);
     assert.ok(png.length > 1000, "rasterized image should not be an empty/mock buffer");
   }

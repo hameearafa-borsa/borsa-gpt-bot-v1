@@ -109,6 +109,10 @@ if (!connectionString) {
     assert.ok(carton, "the explicit Clear sachet carton row must be persisted");
     assert.equal(Number(carton.package_sale_price), 346);
     assert.equal(carton.unit_price_type, "بالكرتونة");
+    const expectedCarton = rows.find(row => /كلير أكياس 5 مل الكرتونة/.test(row.raw_line || ""));
+    assert.ok(expectedCarton?.package_type, "the source parser must classify the sachet package type");
+    assert.equal(carton.package_type, expectedCarton.package_type,
+      "the official reference must persist the package type derived from the exact source row");
 
     const bonus = references.rows.find(row => /سيجنال قرنفل 100مل \+25مل هدية/.test(row.raw_line || ""));
     assert.ok(bonus, "the Signal bonus quantity must remain visible in the original row");

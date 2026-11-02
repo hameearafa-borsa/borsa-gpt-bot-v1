@@ -184,10 +184,14 @@ function parseStructuredPriceTable(text) {
       unit_price_type: "بالكرتونة",
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
       offer_extra_weight_g: extraWeight, pack_count: packCount,
-      package_type: parsePackageType(productText), confidence: 0.99,
-      trusted_catalog_row: true,
-      needs_review: false,
-      price_selection_reason: "trusted_structured_catalog_case_total_and_piece_price_preserved"
+      package_type: parsePackageType(productText),
+      confidence: unitPriceConsistent ? 0.99 : 0.72,
+      trusted_catalog_row: unitPriceConsistent,
+      needs_review: !unitPriceConsistent,
+      unit_price_consistency: unitPriceConsistent ? "matched_at_one_decimal_precision" : "carton_piece_price_mismatch",
+      price_selection_reason: unitPriceConsistent
+        ? "trusted_structured_catalog_case_total_and_piece_price_consistent"
+        : "structured_catalog_carton_piece_price_mismatch_requires_review"
     });
   }
   return rows;

@@ -597,7 +597,7 @@ bot.on(["text", "photo"], async ctx => {
   // A classification miss must never prevent a plausible price from being recorded.
   if (pricesEnabled) {
   try {
-    const result = await priceMonitor.observe({ pool: db.pool, message: m, merchantId, registry });
+    const result = await priceMonitor.observe({ pool: db.pool, message: m, merchantId, registry, requireCatalogMatch: true });
     if (result.saved > 0) {
       // Match each accepted live observation to the latest compatible official company reference.
       // Comparison failures are logged but must never discard an already-saved group observation.

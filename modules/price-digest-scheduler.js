@@ -10,7 +10,7 @@ const MAX_DIGEST_ROWS = 100;
 
 function currentPriceDigestSlot(now = new Date()) {
   const p = partsAt(new Date(now), CAIRO_ZONE);
-  if (p.hour !== DAILY_HOUR || p.minute < DAILY_MINUTE || p.minute >= DAILY_MINUTE + GRACE_MINUTES) return null;
+  if (p.hour < DAILY_HOUR || (p.hour === DAILY_HOUR && p.minute < DAILY_MINUTE)) return null;
   return { date: dateKeyAt(now, CAIRO_ZONE), key: "daily", hour: p.hour, minute: p.minute };
 }
 

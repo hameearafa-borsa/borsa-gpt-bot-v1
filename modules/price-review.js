@@ -44,7 +44,7 @@ async function resolveReview({ db, id, action, reviewerId }) {
        explicit_wholesale_label_price=CASE WHEN $1='accepted' THEN package_sale_price ELSE explicit_wholesale_label_price END,
        review_reason=CASE WHEN $3='new' THEN 'new_product_approved' ELSE review_reason END
        WHERE id=$4 AND decision='pending'
-       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, offer_extra_weight_g, package_type, package_sale_price, price_kind`,
+       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, offer_extra_weight_g, package_type, package_sale_price, price_kind, decision, confidence, unit_price_type, observed_at, needs_review`,
       [decision, reviewerId, action, id]
     );
     if (!result.rowCount) return { ok: false, reason: "already_resolved" };
@@ -79,7 +79,7 @@ async function saveEditedReview({ db, id, reviewerId, productText, price, weight
        explicit_wholesale_label_price=$2, reviewed_by=$7, reviewed_at=NOW(), review_reason='manually_corrected',
        price_selection_reason='manually_corrected', needs_review=FALSE
        WHERE id=$8 AND decision='pending'
-       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, package_type, offer_extra_weight_g, price_kind`,
+       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, package_type, offer_extra_weight_g, price_kind, package_sale_price, decision, confidence, unit_price_type, observed_at, needs_review`,
       [productText, price, weightG, volumeMl, packCount, brandKey, reviewerId, id]
     );
     if (!result.rowCount) return { ok: false, reason: "already_resolved" };

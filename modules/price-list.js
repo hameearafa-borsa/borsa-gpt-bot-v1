@@ -100,7 +100,7 @@ function cleanExplicitProductLine(line) {
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
     .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g)/giu, " ")
     .replace(/\b\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)/giu, " ")
-    .replace(/(?:^|\s)ق\s*(?=\s|$)/giu, " ")
+    .replace(/(?:[*×x]\s*\d+|(?:^|\s)ق\s*(?=\s|$))/giu, " ")
     // Keep carton promotion wording in raw_line, not in the normalized product identity.
     .replace(/\s+(?:العرض|عرض)\s+على\s+(?:الكرتونة|الكرتونه)[\s\S]*$/iu, "")
     .replace(/\s+/g, " ").trim().replace(/^[\s•*._-]+/, "");
@@ -188,7 +188,7 @@ function deterministicList(text) {
     if (!priceTokens.length) continue;
     const weightMatch = toAsciiDigits(line).match(WEIGHT_TOKEN);
     const quantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
-    const countMatch = toAsciiDigits(line).match(/(?:^|[+*x×\s])(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)(?=\s|$)/iu);
+    const countMatch = toAsciiDigits(line).match(/(?:[*×x]\s*(\d+)|(?:^|[+*x×\s])(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)(?=\s|$))/iu);
     const packCount = countMatch ? Number(countMatch[1] || countMatch[2]) : null;
     const wholesaleIndex = line.search(WHOLESALE_LABEL);
     const consumerIndex = line.search(RETAIL_LABEL);

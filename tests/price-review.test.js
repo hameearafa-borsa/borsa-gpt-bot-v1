@@ -114,5 +114,29 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
     saveEditedReview({ db: missingEditQueueDb, id: 44, reviewerId: 7, productText: "منظف مصحح", price: 23 }),
     /price_review_queue_missing_or_resolved/
   );
+  // Repeated or stale reviewer actions must be idempotently rejected.
+  const staleCalls = [];
+  const staleDb = { async withTransaction(fn) { return fn({ async query(sql) {
+    staleCalls.push(sql);
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 0, rows: [] };
+    throw new Error("stale review must stop after the guarded observation update");
+  } }); } };
+  const staleApproval = await resolveReview({ db: staleDb, id: 42, action: "approve", reviewerId: 7 });
+  assert.deepEqual(staleApproval, { ok: false, reason: "already_resolved" });
+  assert.equal(staleCalls.length, 1,
+    "a stale approval must not modify reviewer memory or the review queue");
+  const staleEditCalls = [];
+  const staleEditDb = { async withTransaction(fn) { return fn({ async query(sql) {
+    staleEditCalls.push(sql);
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 0, rows: [] };
+    throw new Error("stale edit must stop after the guarded observation update");
+  } }); } };
+  const staleEdit = await saveEditedReview({
+    db: staleEditDb, id: 42, reviewerId: 7, productText: "أريال مسحوق", price: 23, weightG: 500
+  });
+  assert.deepEqual(staleEdit, { ok: false, reason: "already_resolved" });
+  assert.equal(staleEditCalls.length, 1,
+    "a stale edit must not update product identity, reviewer memory, or queue state");
+
   console.log("price review identity, controls, atomic resolution, edit-save and queue consistency tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

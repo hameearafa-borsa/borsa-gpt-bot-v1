@@ -17,8 +17,8 @@ assert.match(dockerSource, /font-noto-arabic/, "production image must install No
 assert.match(dockerSource, /font-noto-naskh-arabic/, "production image must install Noto Naskh Arabic fonts");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
-assert.equal(packageStatus({ weight_g: 110, pack_count: 48, unit_price_type: "بالكرتونة" }), "48 قطعة", "details show count only, without size or carton wording");
-assert.equal(packageStatus({ product: "شامبو 400 مل", volume_ml: 400, unit_price_type: "بالكرتونة" }), "", "carton pricing does not need a redundant carton label or repeated size");
+assert.equal(packageStatus({ weight_g: 110, pack_count: 48, unit_price_type: "بالكرتونة" }), "48 قطعة · بالكرتونة", "carton count and sale unit must both be explicit");
+assert.equal(packageStatus({ product: "شامبو 400 مل", volume_ml: 400, unit_price_type: "بالكرتونة" }), "بالكرتونة", "carton pricing must remain distinguishable from per-piece pricing");
 assert.equal(packageStatus({ product: "معجون 120 مل", volume_ml: 120, unit_price_type: "بالقطعة" }), "بالقطعة", "only per-piece pricing is explicitly labeled");
 (async () => {
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: [{ product: "أ", package_sale_price: 10 }] }), /three_valid_products/);
@@ -49,7 +49,7 @@ assert.equal(packageStatus({ product: "معجون 120 مل", volume_ml: 120, uni
     assert.ok(capturedSvg.includes("A".repeat(149) + "&amp;"), "truncate original product name before XML escaping");
     assert.ok(!capturedSvg.includes("A".repeat(149) + "&end"), "raw ampersands must never leak into SVG text");
     assert.match(capturedSvg, /\u200eج\.م 10\u200e/, "currency must render before the amount in visual left-to-right order");
-    assert.doesNotMatch(capturedSvg, /بالكرتونة/, "carton pricing is implicit and should not be printed");
+    assert.match(capturedSvg, /بالكرتونة/, "carton pricing must be explicitly printed");
     assert.match(capturedSvg, /48 قطعة/, "the image must show carton count only");
     assert.doesNotMatch(capturedSvg, /110 جم/, "package size belongs in the product name, not the details column");
     assert.doesNotMatch(capturedSvg, /الصنف النهائي السعر/, "column headings must never be rendered as product names");
@@ -61,7 +61,7 @@ assert.equal(packageStatus({ product: "معجون 120 مل", volume_ml: 120, uni
       { product: "صابون 100جم", package_sale_price: 20, weight_g: 100, unit_price_type: "بالقطعة" },
       { product: "منظف", package_sale_price: 200, unit_price_type: "بالكرتونة" }
     ] });
-    assert.doesNotMatch(capturedSvg, /بالكرتونة/, "carton prices stay implicit");
+    assert.match(capturedSvg, /بالكرتونة/, "carton prices stay explicitly labeled");
     assert.match(capturedSvg, /بالقطعة/, "per-piece prices must be explicitly labeled");
     const unileverLikeImages = await renderPriceListImages({
       company: "شركة اختبار",

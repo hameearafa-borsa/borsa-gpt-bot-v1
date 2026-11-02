@@ -125,7 +125,7 @@ async function observe({ pool, message, merchantId = null, registry }) {
                 weight_g, volume_ml, offer_extra_weight_g, package_type, pack_count,
                 unit_price_type, observed_at
          FROM price_observations
-         WHERE decision = 'accepted' AND price_kind = 'wholesale' AND confidence >= 0.8
+         WHERE decision = 'accepted' AND confidence >= 0.8
            AND package_sale_price IS NOT NULL
          ORDER BY observed_at DESC, id DESC LIMIT 2000`,
       );

@@ -16,7 +16,7 @@ function splitPages(rows, pageSize) {
 }
 function packageStatus(item) {
   const details = Number(item.pack_count) > 0 ? String(item.pack_count) + " قطعة" : "";
-  const unit = item.unit_price_type === "بالقطعة" ? "بالقطعة" : "";
+  const unit = item.unit_price_type === "بالقطعة" || item.unit_price_type === "بالكرتونة" ? item.unit_price_type : "";
   return [details, unit].filter(Boolean).join(" · ");
 }
 function isColumnHeaderLabel(value) {

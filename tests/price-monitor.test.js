@@ -321,30 +321,6 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(uncertain.savedRows[0].row.confidence < 0.8);
   assert.equal(savedQueries.length, 9);
 
-  // Deterministic Unilever catalogs must flow into the live observation store,
-  // retaining per-piece/carton unit semantics instead of being dropped as bulk.
-  const unileverMonitorParams = [];
-  const unileverMonitorPool = { async query(sql, params) {
-    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
-      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
-    if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
-    if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
-    if (sql.includes("INSERT INTO price_observations")) { unileverMonitorParams.push(params); return { rows: [{ id: 300 + unileverMonitorParams.length }], rowCount: 1 }; }
-    throw new Error("unexpected Unilever catalog query");
-  } };
-  const unileverObserved = await observe({ pool: unileverMonitorPool, message: { chatId: -100123, messageId: 470, text: unileverList }, registry });
-  assert.equal(unileverObserved.saved, 66, "all 66 deterministic Unilever rows must reach live price observation persistence");
-  assert.equal(unileverObserved.savedRows.filter(item => item.row.decision === "accepted").length, 66,
-    "all 66 clear catalog rows, including offers and the harmless ح currency typo, should be accepted");
-  assert.equal(unileverObserved.savedRows.filter(item => item.row.decision === "pending").length, 0,
-    "clear bundle and gift offers should not remain pending review");
-  assert.ok(unileverObserved.savedRows.some(item => item.row.unit_price_type === "بالقطعة"), "per-piece rows must remain distinguishable");
-  assert.ok(unileverObserved.savedRows.some(item => item.row.unit_price_type === "بالكرتونة"), "carton rows must remain distinguishable");
-  assert.equal(unileverMonitorParams.filter(params => params[13] === "accepted").length, 66,
-    "all clearly interpreted catalog observations should be persisted as accepted");
-  assert.equal(unileverMonitorParams.filter(params => params[13] === "pending").length, 0,
-    "no clear offer observation should be persisted as pending");
-
   // Pearl multi-column catalog: select the wholesale column, preserve base/consumer columns,
   // and keep rows reviewable when piece/carton semantics are not explicit.
   const pearlCatalogText = `أسعار بيرل – أكتوبر

@@ -77,7 +77,7 @@ async function findOfficialCatalogMatch(pool, candidate) {
   const unit = candidate.unit_price_type || null;
   if (candidate.offer_extra_weight_g != null) return null;
   const result = await pool.query(
-    `SELECT id, price_kind, product_label, weight_g, volume_ml, pack_count,
+    `SELECT id, company_label, price_kind, product_label, weight_g, volume_ml, pack_count,
             unit_price_type, package_type, raw_line
      FROM price_reference_observations
      WHERE decision='accepted'
@@ -105,10 +105,11 @@ async function findOfficialCatalogMatch(pool, candidate) {
     return true;
   });
   if (!matches.length) return null;
-  // If the same product/size has multiple official carton configurations,
-  // an observation must identify the exact count above; otherwise it is not a safe match.
+  // Multiple historical rows from the same company and commercial unit are
+  // expected; the newest one wins. Different official companies for the same
+  // visible product identity are ambiguous unless the source can disambiguate them.
   const distinct = new Set(matches.map(row => [
-    row.price_kind, row.unit_price_type,
+    comparableName(row.company_label), row.price_kind, row.unit_price_type,
     row.unit_price_type === "بالكرتونة" ? Number(row.pack_count) : "",
   ].join("|")));
   if (distinct.size !== 1) return null;

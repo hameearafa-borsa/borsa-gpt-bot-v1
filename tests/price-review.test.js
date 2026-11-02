@@ -1,9 +1,10 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEditedReview } = require("../modules/price-review");
+const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory");
 
 (async () => {
-  const row = { product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: 1, brand_key: null, raw_line: "منظف جديد 500 جم جملة 22 ج", package_sale_price: 22, price_kind: "wholesale" };
+  const row = { product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: 1, brand_key: null, raw_line: "منظف جديد 500 جم 10 قطع 100 ج", package_sale_price: 100, price_kind: "wholesale_candidate", confidence: 0.72, unit_price_type: "بالكرتونة" };
   assert.equal(identityKey(row), identityKey({ ...row }));
   assert.notEqual(identityKey(row), identityKey({ ...row, weight_g: 750 }));
   assert.notEqual(identityKey(row), identityKey({ ...row, package_type: "sack" }),
@@ -26,7 +27,7 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   const calls = [];
   const db = { async withTransaction(fn) { return fn({ async query(sql, params) {
     calls.push({ sql, params });
-    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ ...row, id: 42 }] };
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{ ...row, id: 42, decision: "accepted", price_kind: "wholesale", confidence: 0.9, explicit_wholesale_label_price: 100 }] };
     return { rowCount: 1, rows: [] };
   } }); } };
   const approved = await resolveReview({ db, id: 42, action: "new", reviewerId: 7 });
@@ -45,6 +46,19 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
     "human approval must meet the trusted-memory confidence threshold");
   assert.match(calls[0].sql, /explicit_wholesale_label_price=CASE WHEN \$1='accepted' THEN package_sale_price/,
     "the explicitly approved wholesale amount must be retained");
+  assert.match(calls[0].sql, /GREATEST\(COALESCE\(confidence, 0\), 0\.9\)/,
+    "approval must safely raise even a null confidence to the trusted threshold");
+  const approvedMemory = buildPriceMemory([approved.row]);
+  const afterApproval = resolveFromMemory({
+    product_text: "منظف جديد", weight_g: 500, volume_ml: null,
+    offer_extra_weight_g: null, package_type: null, pack_count: null,
+    unit_price_type: "بالكرتونة", price_kind: "wholesale_candidate"
+  }, approvedMemory);
+  assert.equal(afterApproval.resolved, true,
+    "a human-approved pending wholesale candidate must become usable by trusted price memory");
+  assert.equal(afterApproval.price_kind, "wholesale");
+  assert.equal(afterApproval.unit_price_type, "بالكرتونة");
+  assert.equal(afterApproval.pack_count, 1);
 
   const ignoredCalls = [];
   const ignoredDb = { async withTransaction(fn) { return fn({ async query(sql, params) {

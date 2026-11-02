@@ -55,7 +55,7 @@ function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage
     const line = String(row.raw_line || "");
     const hasCurrency = /(?:جنيه|ج|ح|EGP)\\s*(?:$|[|،,؛;\\s])/iu.test(line) || /(?:^|\\s)(?:جنيه|ج|ح|EGP)(?=\\s|$)/iu.test(line);
     const hasPriceLabel = /(?:سعر|السعر|جمله|جملة|قطاعي|مستهلك|للبيع|عرض)/iu.test(line);
-    const hasProductSize = /\\d+(?:[.,]\\d+)?\\s*(?:كجم|كيلو|ك|جم|جرام|مل|ملى|لتر|ل|kg|g|ml|l)\\b/iu.test(line);
+    const hasProductSize = /\\d+(?:[.,]\\d+)?\\s*(?:كجم|كيلو|ك|جم|جرام|مل|ملى|لتر|ل|kg|g|ml|l)(?=$|[^\\p{L}\\p{N}])/iu.test(line);
     const numericCount = (line.match(/\\d+(?:[.,]\\d+)?/gu) || []).length;
     return hasCurrency || hasPriceLabel || (hasProductSize && numericCount >= 2);
   });

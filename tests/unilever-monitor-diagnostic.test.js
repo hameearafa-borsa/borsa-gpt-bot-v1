@@ -33,8 +33,12 @@ const registry = require("../data/product-registry.json");
     "the trailing currency typo must not leak into product identity");
   assert.equal(row("صانسيلك 350 + بلسم  ق 159 ج")?.volume_ml, 350,
     "the shampoo bundle base size is 350 ml; the gifted balm size must remain unknown");
+  assert.match(row("صانسيلك 350 + بلسم  ق 159 ج")?.product || "", /350 مل/u,
+    "the inferred base volume must also be visible in the product label");
   assert.equal(row("تريزيمي 400 + بلسم ق 276 ج")?.volume_ml, 400,
     "the Tresemme bundle base size is 400 ml without inventing a balm size");
+  assert.match(row("تريزيمي 400 + بلسم ق 276 ج")?.product || "", /400 مل/u,
+    "the Tresemme base volume must be visible without assigning a size to the gifted balm");
   const inserts = [];
   const pool = { async query(sql, params) {
     if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };

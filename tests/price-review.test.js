@@ -38,13 +38,12 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   const calls = [];
   const db = { async withTransaction(fn) { return fn({ async query(sql, params) {
     calls.push({ sql, params });
-    if (sql.includes("UPDATE price_observations")) if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{
       ...row, id: 42, product_text: params[0], package_sale_price: params[1],
       weight_g: params[2], volume_ml: params[3], pack_count: params[4], brand_key: params[5],
       price_kind: "wholesale", decision: "accepted", confidence: 1, needs_review: false
     }] };
     return { rowCount: 1, rows: [{ id: 42 }] };
-    return { rowCount: 1, rows: [] };
   } }); } };
   const approved = await resolveReview({ db, id: 42, action: "new", reviewerId: 7 });
   assert.equal(approved.ok, true);
@@ -74,7 +73,13 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
     "a rejected price must never enter trusted price memory");
   const editedCalls = [];
   const editedDb = { async withTransaction(fn) { return fn({ async query(sql, params) {
-    editedCalls.push({ sql, params }); return { rowCount: 1, rows: [{ ...row, id: 42 }] };
+    editedCalls.push({ sql, params });
+    if (sql.includes("UPDATE price_observations")) return { rowCount: 1, rows: [{
+      ...row, id: 42, product_text: params[0], package_sale_price: params[1],
+      weight_g: params[2], volume_ml: params[3], pack_count: params[4], brand_key: params[5],
+      price_kind: "wholesale", decision: "accepted", confidence: 1, needs_review: false
+    }] };
+    return { rowCount: 1, rows: [{ id: 42 }] };
   } }); } };
   const edited = await saveEditedReview({ db: editedDb, id: 42, reviewerId: 7, productText: "منظف مصحح", price: 23, weightG: 500 });
   assert.equal(edited.ok, true);

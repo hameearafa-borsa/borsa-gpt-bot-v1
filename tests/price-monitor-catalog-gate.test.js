@@ -28,6 +28,20 @@ const { findOfficialCatalogMatch, observe } = require("../modules/price-monitor"
     pack_count: 12, unit_price_type: "بالكرتونة", offer_extra_weight_g: null
   });
   assert.equal(matched.id, 91, "a matching official catalog row must resolve the product identity");
+  const missingCartonCount = await findOfficialCatalogMatch(pool, {
+    product_text: "دوف 350مل", weight_g: null, volume_ml: 350,
+    pack_count: null, unit_price_type: "بالكرتونة", offer_extra_weight_g: null
+  });
+  assert.equal(missingCartonCount, null,
+    "a carton observation without a count must not attach to a configured carton reference");
+
+  const wrongCartonCount = await findOfficialCatalogMatch(pool, {
+    product_text: "دوف 350مل", weight_g: null, volume_ml: 350,
+    pack_count: 24, unit_price_type: "بالكرتونة", offer_extra_weight_g: null
+  });
+  assert.equal(wrongCartonCount, null,
+    "a different carton count must not be treated as the same official price unit");
+
 
   const unknown = await findOfficialCatalogMatch(pool, {
     product_text: "صنف غير موجود", weight_g: null, volume_ml: 350,

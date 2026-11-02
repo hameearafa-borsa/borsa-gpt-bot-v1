@@ -52,12 +52,20 @@ function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage
   if (!rows.length) return false;
   return rows.some(row => {
     const line = String(row.raw_line || "");
+    const product = String(row.product_text || "").trim();
     const hasCurrency = /(?:جنيه|ج|ح|EGP)\s*(?:$|[|،,؛;\s])/iu.test(line) ||
       /(?:^|\s)(?:جنيه|ج|ح|EGP)(?=\s|$)/iu.test(line);
-    const hasPriceLabel = /(?:سعر|السعر|جمله|جملة|قطاعي|مستهلك|للبيع|عرض)/iu.test(line);
+    const hasPriceLabel = /(?:سعر|السعر|جمله|جملة|قطاعي|مستهلك|للبيع)/iu.test(line);
     const hasProductSize = /\d+(?:[.,]\d+)?\s*(?:كجم|كيلو|ك|جم|جرام|مل|ملى|لتر|ل|kg|g|ml|l)(?=$|[^\p{L}\p{N}])/iu.test(line);
+    const hasProductName = /[\p{L}]{2,}/u.test(product) &&
+      !/^(?:سعر|السعر|رقم|فاتوره|فاتورة|الفاتوره|الفاتورة|هاتف|تليفون|موبايل|اتصل|موعد|تاريخ|اليوم|غدا|غداً|وصل|مبروك)(?:\s+(?:سعر|السعر|رقم|فاتوره|فاتورة|الفاتوره|الفاتورة|هاتف|تليفون|موبايل|اتصل|موعد|تاريخ|اليوم|غدا|غداً|وصل|مبروك))*$/iu.test(product);
+    const administrativeContext = /(?:رقم\s*(?:الفاتوره|الفاتورة|الهاتف|الموبايل)|فاتوره|فاتورة|رقم\s*الطلب|رقم\s*التحويل|موعد\s*التسليم|الساعه|الساعة|اتصل|تليفون|موبايل)/iu.test(line);
     const numericCount = (line.match(/\d+(?:[.,]\d+)?/gu) || []).length;
-    return hasCurrency || hasPriceLabel || (hasProductSize && numericCount >= 2);
+    // Currency and price words are not sufficient on their own: require an identifiable
+    // product, or an explicit product size plus a separate amount. Administrative numbers
+    // are excluded unless the same row contains a product size.
+    if (administrativeContext && !hasProductSize) return false;
+    return (hasProductSize && numericCount >= 2) || (hasProductName && (hasCurrency || hasPriceLabel));
   });
 }
 async function observe({ pool, message, merchantId = null, registry }) {

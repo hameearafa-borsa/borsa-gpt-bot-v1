@@ -98,7 +98,7 @@ async function findOfficialCatalogMatch(pool, candidate) {
     if (reference.unit_price_type === "بالكرتونة" &&
         (candidate.pack_count == null || reference.pack_count == null ||
          Number(candidate.pack_count) !== Number(reference.pack_count))) return false;
-    if (/[+]\\s*\\d+(?:[.,]\\d+)?\\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|ml|مل)|هدية|هديه|بونص|مجانا/iu.test(reference.raw_line || "")) return false;
+    if (/[+]\s*\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|ml|مل)|هدية|هديه|بونص|مجانا/iu.test(reference.raw_line || "")) return false;
     return true;
   });
   if (!matches.length) return null;

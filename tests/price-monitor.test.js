@@ -72,9 +72,9 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "interpreted structured catalog rows must be trusted wholesale observations with no review");
   assert.ok(asc2September.every(row => Math.round((row.package_sale_price / row.pack_count) * 10) === Math.round(row.listed_base_price * 10)),
     "all 49 Bahi source rows must reconcile at the source's one-decimal piece-price precision");
-  const inconsistentAsc2 = parseStructuredPriceTable(
-    "تصفية اسعار سبتمبر ASC2 2026\\nالاصناف | عدد القطع | السعر الصافي بعد الخصم 2% | صافي سعر القطعة\\nدوش 60 جرام | 48 | 313.60 | 7.50"
-  );
+  const inconsistentAsc2 = parseStructuredPriceTable(`تصفية اسعار سبتمبر ASC2 2026
+الاصناف | عدد القطع | السعر الصافي بعد الخصم 2% | صافي سعر القطعة
+دوش 60 جرام | 48 | 313.60 | 7.50`);
   assert.equal(inconsistentAsc2[0].trusted_catalog_row, false,
     "a carton total that does not reconcile with the listed piece price must not be auto-trusted");
   assert.equal(inconsistentAsc2[0].needs_review, true,

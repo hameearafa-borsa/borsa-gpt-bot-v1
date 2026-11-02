@@ -11,17 +11,15 @@ const rateLimit = fs.readFileSync(path.join(root, "core", "telegram-rate-limit.j
 assert.match(migration, /ADD COLUMN IF NOT EXISTS notification_claim_token TEXT/i);
 assert.match(migration, /ADD COLUMN IF NOT EXISTS notification_claimed_at TIMESTAMPTZ/i);
 assert.match(recovery, /FOR UPDATE SKIP LOCKED/i);
-assert.match(recovery, /notification_claimed_at < NOW\\(\\) - \\(\\$3 \\* INTERVAL '1 second'\\)/i);
-assert.match(recovery, /notification_claim_token = \\$4/i);
-assert.match(recovery, /SET notification_claimed_at = NOW\\(\\)[\\s\\S]*?notification_claim_token = \\$2/i);
-assert.match(recovery, /AND notification_claim_token = \\$3/i);
+assert.match(recovery, /notification_claimed_at < NOW\(\) - \(\$3 \* INTERVAL '1 second'\)/i);
+assert.match(recovery, /notification_claim_token = \$4/i);
+assert.match(recovery, /SET notification_claimed_at = NOW\(\)[\s\S]*?notification_claim_token = \$2/i);
+assert.match(recovery, /AND notification_claim_token = \$3/i);
 
-// The lease/recovery module remains available for legacy data maintenance, but
-// the live runtime intentionally no longer schedules or sends review notices.
-assert.doesNotMatch(index, /priceReviewRecovery\\.recoverPendingNotifications\\s*\\(/i);
-assert.doesNotMatch(index, /priceReview\\.formatReviewMessage\\s*\\(/i);
-assert.match(index, /Pending price observations are intentionally silent/);
-
+// Legacy lease helpers remain for maintenance; live runtime sends no review notices.
+assert.ok(!index.includes("priceReviewRecovery.recoverPendingNotifications("));
+assert.ok(!index.includes("priceReview.formatReviewMessage("));
+assert.ok(index.includes("Pending price observations are intentionally silent"));
 assert.match(rateLimit, /function markTelegramRateLimited/);
 assert.match(rateLimit, /function isTelegramRateLimitedNow/);
 console.log("legacy notification lease helpers and silent runtime policy tests: OK");

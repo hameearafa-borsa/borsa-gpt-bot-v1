@@ -35,7 +35,7 @@ assert.equal(extractPackageLabel("ماكينة ناست حصائر 48 ماكين
       { product: "منتج أول", package_sale_price: 10 },
       { product: "منتج ثان", package_sale_price: 20 },
       { product: "منتج ثالث", package_sale_price: 30 },
-      { product: "A".repeat(149) + "&end", package_sale_price: 40, volume_ml: 350, unit_price_type: "بالكرتونة" }
+      { product: "A".repeat(149) + "&end", package_sale_price: 40, volume_ml: 350, unit_price_type: "بالكرتونة", package_label: "350 مل · 32 كيس" }
     ] });
     assert.equal(png.toString(), "mock-png");
     assert.ok(capturedSvg.includes("شركة اختبار"), "Arabic company heading must remain logical Unicode in SVG");

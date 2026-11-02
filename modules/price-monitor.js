@@ -42,9 +42,23 @@ function isBulkPriceList(text) {
 }
 
 function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage }) {
-  return ["group", "supergroup"].includes(chatType) &&
-    !isLogChannel && !isCommand && !ownMessage &&
-    Boolean(String(text || "").trim());
+  const source = String(text || "").trim();
+  if (!["group", "supergroup"].includes(chatType) || isLogChannel || isCommand || ownMessage || !source) return false;
+  // Catalogs have their own deterministic parser. Ordinary chat must contain
+  // an actual product-price signal; a random number, date, quantity or phone
+  // number is never enough to start price observation.
+  if (isBulkPriceList(source)) return true;
+  const rows = extractPriceCandidates(source);
+  if (!rows.length) return false;
+  const lines = source.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean);
+  return rows.some(row => {
+    const line = String(row.raw_line || "");
+    const hasCurrency = /(?:جنيه|ج|ح|EGP)\\s*(?:$|[|،,؛;\\s])/iu.test(line) || /(?:^|\\s)(?:جنيه|ج|ح|EGP)(?=\\s|$)/iu.test(line);
+    const hasPriceLabel = /(?:سعر|السعر|جمله|جملة|قطاعي|مستهلك|للبيع|عرض)/iu.test(line);
+    const hasProductSize = /\\d+(?:[.,]\\d+)?\\s*(?:كجم|كيلو|ك|جم|جرام|مل|ملى|لتر|ل|kg|g|ml|l)\\b/iu.test(line);
+    const numericCount = (line.match(/\\d+(?:[.,]\\d+)?/gu) || []).length;
+    return hasCurrency || hasPriceLabel || (hasProductSize && numericCount >= 2);
+  });
 }
 
 async function observe({ pool, message, merchantId = null, registry }) {

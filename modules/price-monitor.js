@@ -297,7 +297,7 @@ async function observe({ pool, message, merchantId = null, registry, requireCata
     if (duplicate.rowCount) continue;
     if (row.decision === "accepted") {
       const history = await pool.query(
-        `SELECT product_text, product_identity_key, brand_key, price_kind, package_sale_price, weight_g, volume_ml,
+        `SELECT product_identity_key, product_text, brand_key, price_kind, package_sale_price, weight_g, volume_ml,
                 pack_count, offer_extra_weight_g, package_type, unit_price_type
          FROM price_observations
          WHERE price_kind=$2 AND decision='accepted'

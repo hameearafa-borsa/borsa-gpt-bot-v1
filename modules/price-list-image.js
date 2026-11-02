@@ -57,7 +57,7 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
       const rawCategory = String(item.category || item.section || "");
       const category = svgText(rawCategory);
       const variant = String(item.variant || "");
-      const size = item.weight_g ? `${item.weight_g} جم` : item.volume_ml ? `${item.volume_ml} مل` : "";
+      const size = String(item.package_label || "").trim() || (item.weight_g ? `${item.weight_g} جم` : item.volume_ml ? `${item.volume_ml} مل` : "");
       const productNote = variant && variant !== rawCategory ? svgText(variant) : "";
       const packageSize = size ? svgText(size) : "";
       const unitLabel = item.unit_price_type === "بالقطعة" ? "بالقطعة" : item.unit_price_type === "بالكرتونة" ? "بالكرتونة" : "";

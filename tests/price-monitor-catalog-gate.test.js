@@ -43,7 +43,7 @@ const { findOfficialCatalogMatch, observe } = require("../modules/price-monitor"
 
   const result = await observe({
     pool,
-    message: { chatId: -100123, messageId: 990, userId: 700, text: "دوف 350مل 125 ج" },
+    message: { chatId: -100123, messageId: 990, userId: 700, text: "دوف 350مل 12 عبوة 125 ج" },
     registry: [],
     requireCatalogMatch: true
   });

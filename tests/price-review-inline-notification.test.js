@@ -18,6 +18,6 @@ assert.match(source, /const pendingRows = result\.savedRows\.filter\(item => ite
   "pending rows must remain visible to operational diagnostics without reviewer messages");
 assert.match(source, /pending: pendingRows\.length/,
   "the saved diagnostic must report pending counts without exposing review actions");
-assert.match(source, /bot\.action\(\/\^prv:\(approve\|new\|ignore\):\(\\d\+\)\$/,
+assert.ok(source.includes("bot.action(/^prv:(approve|new|ignore):(\\d+)$/"),
   "legacy review actions must remain available for existing log messages");
 console.log("silent pending price behavior and legacy review-action compatibility tests: OK");

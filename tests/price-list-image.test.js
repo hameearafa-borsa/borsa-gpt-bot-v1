@@ -51,13 +51,14 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.ok(capturedSvg.includes("الصنف"), "product name should have a separate column heading");
     assert.ok(capturedSvg.includes("السعر"), "price should have a separate column heading");
     assert.ok(capturedSvg.includes("350") && capturedSvg.includes("مل"), "package capacity should preserve its number and shape its Arabic unit");
+    assert.ok(capturedSvg.includes("32 كيس"), "commercial package count should be rendered without flattening bags into pieces");
     // The image is a company-list view: render only package_sale_price.
     // Separate wholesale/consumer/list prices remain stored for comparison,
     // and must never silently replace or be mixed into the displayed list price.
     await renderPriceListImages({
       company: "قائمة متعددة الأسعار",
       items: [
-        { product: "صنف بسعر قطعة", package_sale_price: 42.33, wholesale_carton_price: 346, consumer_price: 55, list_price: 60, unit_price_type: "بالقطعة" },
+        { product: "صنف بسعر قطعة", package_sale_price: 42.33, wholesale_carton_price: 346, consumer_price: 55, list_price: 60, unit_price_type: "بالقطعة", package_label: "32 كيس" },
         { product: "صنف بسعر كرتونة", package_sale_price: 346, wholesale_carton_price: 999, consumer_price: 888, list_price: 777, unit_price_type: "بالكرتونة" },
         { product: "صنف ثالث", package_sale_price: 125, wholesale_carton_price: 500, consumer_price: 250, list_price: 300, unit_price_type: "بالكرتونة" }
       ]

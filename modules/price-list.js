@@ -100,7 +100,7 @@ function cleanExplicitProductLine(line) {
   if (!token) return cleanProductName(line);
   return (ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length))
     .replace(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك(?=\s|$|[-–—])|جرام|جم|g|kg|لتر|ل(?=\s|$|[-–—])|liter|ml|مل)/giu, " ")
-    .replace(/(?<![\p{L}\p{N}])\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|شنطة|شنط|باكتة|باكت|وحدات|وحدة|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)(?![\p{L}\p{N}])/giu, " ")
+    .replace(/(?<![\p{L}\p{N}])\d+\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|شنطة|شنط|حفاضة|حفاضات|حفاظة|حفاظات|باكتة|باكت|وحدات|وحدة|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)(?![\p{L}\p{N}])/giu, " ")
     .replace(/(?:[*×x]\s*\d+|(?:^|\s)ق\s*(?=\s|$))/giu, " ")
     // Keep carton promotion wording in raw_line, not in the normalized product identity.
     .replace(/\s+(?:العرض|عرض)\s+على\s+(?:الكرتونة|الكرتونه)[\s\S]*$/iu, "")

@@ -707,5 +707,40 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.deepEqual(pearlRows.slice(0, 3).map(row => row.listed_base_price), [505.31, 308.43, 179.15],
     "the unlabeled pre-wholesale amount must remain separate from the selected wholesale price");
 
+
+  // Accepted history should resolve a repeated, otherwise unclassified product
+  // without an AI call or a manual-review queue entry.
+  const memoryCalls = [];
+  const trustedHistoryPool = {
+    async query(sql) {
+      memoryCalls.push(sql);
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [{
+        product_text: "دوف", price_kind: "wholesale", package_sale_price: 119,
+        confidence: 0.94, decision: "accepted", weight_g: null, volume_ml: 350,
+        offer_extra_weight_g: null, package_type: null, pack_count: 12,
+        unit_price_type: "بالكرتونة", observed_at: "2026-10-31T10:00:00Z"
+      }], rowCount: 1 };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 120 }], rowCount: 1 };
+      throw new Error("unexpected trusted-history query");
+    }
+  };
+  const rememberedPrice = await observe({
+    pool: trustedHistoryPool,
+    message: { chatId: -100123, messageId: 470, userId: 789, text: "دوف 350مل 121" },
+    registry: []
+  });
+  assert.equal(rememberedPrice.saved, 1);
+  assert.equal(rememberedPrice.savedRows[0].row.decision, "accepted",
+    "high-confidence accepted history should resolve the repeated product without manual review");
+  assert.equal(rememberedPrice.savedRows[0].row.price_kind, "wholesale");
+  assert.equal(rememberedPrice.savedRows[0].row.unit_price_type, "بالكرتونة");
+  assert.equal(rememberedPrice.savedRows[0].row.pack_count, 12);
+  assert.ok(rememberedPrice.savedRows[0].row.price_selection_reason.includes("resolved_from_accepted_price_memory"));
+  assert.equal(memoryCalls.filter(sql => sql.includes("SELECT product_text, price_kind")).length, 1,
+    "accepted history must be loaded once for the whole Telegram message");
+
   console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, identity memory, context inference, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

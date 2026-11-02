@@ -14,6 +14,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "startup must not replay legacy pending-review notifications");
   assert.match(runtimeSource, /Ambiguous observations are retained silently as pending data/,
     "ambiguous observations must remain stored silently instead of being discarded");
+  assert.match(runtimeSource, /الملاحظات غير المحسومة تُحفظ كبيانات معلّقة دون إشعار مراجعة/,
+    "the admin panel must describe pending observations as silent, not as a manual review queue");
   const base = { chatType: "supergroup", text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" };
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: false, ownMessage: false }), true);
   assert.equal(isEligibleMessage({ ...base, chatType: "private", isLogChannel: false, isCommand: false, ownMessage: false }), false);

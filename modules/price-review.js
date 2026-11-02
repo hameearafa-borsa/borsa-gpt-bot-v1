@@ -109,7 +109,7 @@ async function saveEditedReview({ db, id, reviewerId, productText, price, weight
       [reviewerId, id]
     );
     if (!queued.rowCount) throw new Error("price_review_queue_missing_or_resolved");
-    return { ok: true, product_identity_key: productKey };
+    return { ok: true, product_identity_key: productKey, row };
   });
 }
 

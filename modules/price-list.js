@@ -142,13 +142,13 @@ function hasContextualCurrencyTypo(lines, index) {
 }
 function extractPackageSizes(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
-  return [...ascii.matchAll(/\\d+(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+(?:[.,]\\d+)?)*(?:\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))/giu)]
+  return [...ascii.matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))/giu)]
     .map(match => match[0].replace(/\\s+/g, " ").trim());
 }
 function extractPackageLabel(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
   const sizes = extractPackageSizes(line);
-  const count = ascii.match(/(?:[*×x]\\s*(\\d+)|(?:^|\\s)(\\d+)\\s*(?:قطعة|قطعه|قط|ق)(?=\\s|$))/iu);
+  const count = ascii.match(/(?:[*×x]\s*(\d+)|(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu);
   const countValue = count ? Number(count[1] || count[2]) : null;
   return [...sizes, ...(countValue > 0 ? [String(countValue) + " قطعة"] : [])].join(" · ");
 }
@@ -213,9 +213,9 @@ function deterministicList(text) {
       // Explicit per-piece markers and section headings take precedence above.
       (metadata.company && (metadata.isCompanyCatalog || metadata.priceType === "أسعار جملة") ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
-    const identitySizes = metadata.company && /(?:[*×x]\\s*\\d+|(?:^|\\s)\\d+\\s*(?:قطعة|قطعه|قط|ق)(?=\\s|$))/iu.test(toAsciiDigits(line))
+    const identitySizes = metadata.company && /(?:[*×x]\s*\d+|(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu.test(toAsciiDigits(line))
       ? extractPackageSizes(line) : [];
-    const displayProductPrefix = [productPrefix, identitySizes.join(" + ")].filter(Boolean).join(" ").replace(/\\s+/g, " ").trim();
+    const displayProductPrefix = [productPrefix, identitySizes.join(" + ")].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(displayProductPrefix);
     const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));

@@ -277,6 +277,7 @@ assert.equal(classifyObservationChange(historyBase, { ...historyBase, brand_key:
 assert.equal(classifyObservationChange(historyBase, { ...historyBase, price_kind: "retail", product_identity_key: "pearl|بيرل اوتوماتيك|retail" }), "new_observation");
 assert.equal(parsePackageType("شكارة 10 ك"), "sack");
 assert.equal(parsePackageType("كيس 50 جم"), "sachet");
+assert.equal(parsePackageType("32 أكياس"), "sachet", "plural Arabic bag wording must resolve to sachet packaging");
 assert.equal(parsePackageType("9 ك"), null);
 assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 5 ك" }), productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 9 ك" }), "normalized product wording should not alone change the stable identity when dimensions are equal");
 assert.notEqual(

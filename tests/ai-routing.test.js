@@ -12,7 +12,7 @@ assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts m
 assert.ok(aiSource.includes("x-goog-api-key"));
 assert.ok(aiSource.includes("options.imageBase64"), "Gemini vision input must be opt-in");
 assert.ok(aiSource.includes("inline_data: { mime_type: mimeType, data: imageBase64 }"), "Gemini vision requests must send image bytes as inline data");
-assert.ok(aiSource.includes("image/jpeg|image/png|image/webp"), "Gemini vision input must restrict supported image MIME types");
+assert.ok(aiSource.includes("/^image\\/(?:jpeg|png|webp)$/i"), "Gemini vision input must restrict supported image MIME types");
 assert.ok(aiSource.includes("imageBase64.length > 12000000"), "Gemini vision input must reject oversized payloads");
 const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");

@@ -179,7 +179,7 @@ function deterministicList(text) {
     // In shampoo bundle rows such as "350 + بلسم", the section and bundle
     // structure identify the first size as the shampoo base volume. Never infer
     // a size for the gifted conditioner/balm.
-    const bundleBaseVolumeMatch = !explicitQuantity && /شامبو/u.test(normalizeArabic(section || ""))
+    const bundleBaseVolumeMatch = !explicitQuantity && /(?:شامبو|صانسيلك|تريزيمي)/u.test(normalized)
       ? toAsciiDigits(line).match(/(?:^|\s)(\d{2,4})\s*\+\s*بلسم/iu)
       : null;
     const quantity = explicitQuantity || (bundleBaseVolumeMatch

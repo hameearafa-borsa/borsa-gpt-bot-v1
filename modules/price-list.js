@@ -226,8 +226,8 @@ function deterministicList(text) {
       ? [...toAsciiDigits(line).matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))/giu)]
         .map(match => match[0].replace(/\s+/g, " ").trim())
       : [];
-    const displayProductPrefix = [productPrefix.replace(/[+*×/]+\s*$/u, ""), identitySizes.join(" + ")]
-      .filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    // Weight/volume belongs in the package column; keep it out of product identity.
+    const displayProductPrefix = productPrefix.replace(/[+*×/]+\\s*$/u, "").replace(/\\s+/g, " ").trim();
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(displayProductPrefix);
     const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));

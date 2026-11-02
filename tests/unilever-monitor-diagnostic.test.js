@@ -22,10 +22,10 @@ const registry = require("../data/product-registry.json");
     "تريزيمي 400 + بلسم ق 276 ج",
     "كامي 110جم 1104 ج العرض على الكرتونة قطعة صابون هدية"
   ]) {
-    assert.equal(row(raw)?.decision, "review", "ambiguous offer/currency row must require review: " + raw);
+    assert.equal(row(raw)?.decision, "accepted", "clear offer with explicit price and unit must be resolved automatically: " + raw);
   }
-  assert.equal(parsed.filter(x => x.decision === "review").length, 4,
-    "only ambiguous Unilever bundle and gift offers should require review");
+  assert.equal(parsed.filter(x => x.decision === "review").length, 0,
+    "clear Unilever bundle and gift offers should not enter manual review");
   assert.equal(row("تريزيمي بلسم 600 مل ق 205 ح")?.decision, "accepted",
     "a trailing ح is a harmless Egyptian-pound keyboard typo");
   assert.equal(row("تريزيمي بلسم 600 مل ق 205 ح")?.package_sale_price, 205);

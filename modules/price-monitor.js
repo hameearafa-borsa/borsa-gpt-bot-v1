@@ -213,16 +213,14 @@ async function observe({ pool, message, merchantId = null, registry }) {
       row.context_inferred_wholesale = true;
       row.price_selection_reason = [row.price_selection_reason, "previously_approved_product_identity"].filter(Boolean).join(";");
     }
-    // Rows parsed from the two explicitly recognized, pre-interpreted catalog formats
-    // have deterministic column semantics and are trusted as complete wholesale observations.
-    // Ordinary chat messages still require registry/reviewer evidence as before.
+    // A clear explicit wholesale label is sufficient evidence even for a first-seen
+    // product. Registry membership is not an approval requirement; only actual
+    // ambiguity (needs_review), low parser confidence, or unknown trade type holds a row.
     row.confidence = candidate.trusted_catalog_row
       ? candidate.confidence
       : previouslyReviewed
         ? Math.max(candidate.confidence, 0.9)
-        : learned.resolved
-          ? Math.max(candidate.confidence, learned.confidence)
-          : Math.min(candidate.confidence, match.matched ? 0.98 : 0.45);
+        : candidate.confidence;
     row.decision = !row.needs_review && row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
     const fp = fingerprint(row);
     if (seen.has(fp)) continue;

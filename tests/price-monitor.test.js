@@ -9,14 +9,14 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
 
 (async () => {
   const runtimeSource = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
-  assert.doesNotMatch(runtimeSource, /bot\.telegram\.sendMessage\(LOG_CHAT_ID,\s*priceReview\.formatReviewMessage/,
-    "pending price observations must never trigger manual review messages");
-  assert.doesNotMatch(runtimeSource, /priceReviewRecovery\.recoverPendingNotifications/,
-    "startup must not replay legacy pending-review notifications");
-  assert.match(runtimeSource, /Ambiguous observations are retained silently as pending data/,
-    "ambiguous observations must remain stored silently instead of being discarded");
-  assert.match(runtimeSource, /الملاحظات غير المحسومة تُحفظ كبيانات معلّقة دون إشعار مراجعة/,
-    "the admin panel must describe pending observations as silent, not as a manual review queue");
+  assert.match(runtimeSource, /INSERT INTO price_review_queue/,
+    "only unresolved observations should enter the durable reviewer queue");
+  assert.match(runtimeSource, /notification_claim_token/,
+    "review notification delivery must use a durable claim to prevent duplicates");
+  assert.match(runtimeSource, /priceReview\.formatReviewMessage/,
+    "ambiguous observations must retain the existing authorized review workflow");
+  assert.match(runtimeSource, /priceReviewRecovery\.recoverPendingNotifications/,
+    "startup must recover pending review notifications through the guarded queue");
   assert.match(runtimeSource, /bot\.on\(\["text",\s*"photo"\],\s*async ctx =>/,
     "the Telegram runtime must receive both ordinary text and captioned photo messages");
   assert.match(runtimeSource, /const merchantSourceText = text \|\| m\.caption \|\| ""/,

@@ -108,6 +108,7 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
         }], rowCount: 1
       };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_text, product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO price_observations")) {

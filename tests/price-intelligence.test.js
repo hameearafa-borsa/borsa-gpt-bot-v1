@@ -30,6 +30,18 @@ assert.equal(ambiguousCurrency.length, 1);
 assert.equal(ambiguousCurrency[0].package_sale_price, 205);
 
 
+const explicitFieldRow = extractPriceCandidates("اريال 50 جرام - 32 كيس - 134.60");
+assert.equal(explicitFieldRow.length, 1);
+assert.equal(explicitFieldRow[0].product_text, "اريال 50 جرام",
+  "the product field must remain intact, including its size");
+assert.equal(explicitFieldRow[0].weight_g, 50);
+assert.equal(explicitFieldRow[0].package_description, "32 كيس");
+assert.equal(explicitFieldRow[0].pack_count, 32);
+assert.equal(explicitFieldRow[0].package_sale_price, 134.60);
+assert.equal(explicitFieldRow[0].price_kind, "wholesale_candidate");
+assert.equal(explicitFieldRow[0].needs_review, true,
+  "an explicit field split does not by itself prove the amount is wholesale");
+
 const rows = extractPriceCandidates(`أريال ٢ك يدوي ٤٩٠ج ٤ق\nبريكس ارضيات ٢٥ جم ١٨.٧٥ ج\nبريكس 1 لتر مستهلك 55 ج`);
 assert.ok(rows.length >= 2);
 assert.equal(rows[0].pack_count, 4);

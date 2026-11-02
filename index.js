@@ -677,47 +677,9 @@ bot.on("text", async ctx => {
           }).catch(() => {});
         }
       }
+      // Ambiguous observations are retained silently as pending data.
+      // They are intentionally excluded from the reviewer queue and never become trusted prices.
       const pendingRows = result.savedRows.filter(item => item.row.decision === "pending");
-      for (const item of pendingRows) {
-        if (isTelegramRateLimitedNow()) break;
-        let sentReviewMessage = null;
-        try {
-          await db.query(
-            `INSERT INTO price_review_queue(observation_id, source_chat_id, log_chat_id)
-             VALUES($1,$2,$3) ON CONFLICT(observation_id) DO NOTHING`,
-            [item.id, m.chatId || null, LOG_CHAT_ID]
-          );
-          const claimToken = require("node:crypto").randomUUID();
-          const claimed = await db.query(
-            `UPDATE price_review_queue SET notification_claim_token=$1, notification_claimed_at=NOW()
-              WHERE observation_id=$2 AND status='pending' AND log_message_id IS NULL
-                AND (notification_claimed_at IS NULL OR notification_claimed_at < NOW() - INTERVAL '120 seconds')
-              RETURNING observation_id`,
-            [claimToken, item.id]
-          );
-          if (!claimed.rowCount) continue;
-          sentReviewMessage = await bot.telegram.sendMessage(LOG_CHAT_ID, priceReview.formatReviewMessage(item.id, item.row), {
-            reply_markup: priceReview.reviewKeyboard(item.id), disable_web_page_preview: true
-          });
-          const saved = await db.query(
-            `UPDATE price_review_queue SET log_message_id=$1, notification_claim_token=NULL, notification_claimed_at=NULL
-              WHERE observation_id=$2 AND status='pending' AND log_message_id IS NULL AND notification_claim_token=$3
-              RETURNING observation_id`,
-            [sentReviewMessage.message_id, item.id, claimToken]
-          );
-          if (!saved.rowCount) throw new Error("price_review_notification_save_conflict");
-        } catch (reviewError) {
-          const hitTelegramRateLimit = isTelegramRateLimit(reviewError);
-          if (hitTelegramRateLimit) markTelegramRateLimited(reviewError);
-          // Telegram may have accepted the message even if saving its ID failed.
-          // Best-effort deletion prevents a stale actionable message being duplicated by startup recovery.
-          if (sentReviewMessage?.message_id != null) {
-            try { await bot.telegram.deleteMessage(LOG_CHAT_ID, sentReviewMessage.message_id); } catch {}
-          }
-          await sendLog({ module: "price-monitor", stage: "review_notification", severity: "warn", status: "failed", details: { observationId: item.id, error: redactString(reviewError?.message || "review notification failed") } });
-          if (hitTelegramRateLimit) break;
-        }
-      }
       await sendLog({
         module: "price-monitor",
         stage: "saved",
@@ -851,34 +813,8 @@ installFatalProcessHandlers({
   const me = await bot.telegram.getMe();
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   botUserId = me.id;
-  try {
-    const recovered = await priceReviewRecovery.recoverPendingNotifications({
-      db,
-      telegram: bot.telegram,
-      defaultLogChatId: LOG_CHAT_ID,
-      onError: async (error, details) => {
-        await sendLog({
-          module: "price-monitor",
-          stage: "review_notification_recovery",
-          severity: "warn",
-          status: "failed",
-          details: { ...details, error: redactString(error?.message || "review recovery failed") }
-        });
-      }
-    });
-    if (recovered.found > 0) {
-      console.log(`[PRICE_REVIEW_RECOVERY] found=${recovered.found} sent=${recovered.sent} failed=${recovered.failed}`);
-    }
-  } catch (error) {
-    console.warn("[PRICE_REVIEW_RECOVERY_FAILED]", redactString(error?.message || "review recovery failed"));
-    await sendLog({
-      module: "price-monitor",
-      stage: "review_notification_recovery",
-      severity: "warn",
-      status: "failed",
-      details: { error: redactString(error?.message || "review recovery failed") }
-    }).catch(() => {});
-  }
+  // Pending price observations are intentionally silent.
+  // Do not replay legacy review-queue notifications during startup.
   await configureCommandMenus().catch(error => sendLog({ module: "security", stage: "command_menu_setup", severity: "warn", status: "failed", details: { code: error.code || null, message: error.message } }));
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   console.log(`Borsa GBT Bot V1 Mona Lisa ${APP_VERSION} — @${me.username} — ${BOT_CREDIT}`);

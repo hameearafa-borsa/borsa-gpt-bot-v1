@@ -41,8 +41,7 @@ function dimensionKey(row) {
 function buildPriceMemory(rows = []) {
   const groups = new Map();
   for (const row of rows) {
-    // Only accepted wholesale observations may teach the wholesale price resolver.
-    // Retail and unknown-kind observations must never transfer unit or pack semantics.
+    // Only accepted, high-confidence wholesale observations may teach the resolver.
     if (row.decision !== "accepted" || row.price_kind !== "wholesale") continue;
     if (Number(row.confidence) < 0.8) continue;
     if (!row.product_text || !Number.isFinite(Number(row.package_sale_price)) || Number(row.package_sale_price) <= 0) continue;
@@ -69,15 +68,31 @@ function resolveFromMemory(candidate, memory) {
   const packCounts = [...group.packCounts];
   const priceKind = kinds.length === 1 ? kinds[0] : null;
   const unitPriceType = units.length === 1 ? units[0] : null;
-  const packCount = candidate.pack_count == null && packCounts.length === 1 ? packCounts[0] : candidate.pack_count;
+
+  // An explicit piece/carton marker on the new observation must agree with
+  // accepted history. Never let carton history silently classify a piece price
+  // (or transfer carton quantity) and vice versa.
+  if (candidate.unit_price_type && units.length && !units.includes(candidate.unit_price_type)) {
+    return { matched: false, confidence: 0, unit_conflict: true };
+  }
+
+  const resolvedUnit = candidate.unit_price_type || unitPriceType;
+  // Pack counts describe cartons only. Do not copy them to piece-priced rows,
+  // nor infer a count from mixed unit histories.
+  const mayInheritPackCount = resolvedUnit === "بالكرتونة" &&
+    units.length === 1 && units[0] === "بالكرتونة" && packCounts.length === 1;
+  const packCount = candidate.pack_count == null && mayInheritPackCount
+    ? packCounts[0]
+    : candidate.pack_count;
+
   return {
     matched: true,
-    confidence: priceKind && priceKind !== "unknown" && unitPriceType ? 0.94 : 0.72,
+    confidence: priceKind && priceKind !== "unknown" && resolvedUnit ? 0.94 : 0.72,
     price_kind: priceKind,
-    unit_price_type: candidate.unit_price_type || unitPriceType,
+    unit_price_type: resolvedUnit || null,
     pack_count: packCount,
     evidence_count: group.count,
-    resolved: Boolean(priceKind && priceKind !== "unknown" && (candidate.unit_price_type || unitPriceType))
+    resolved: Boolean(priceKind && priceKind !== "unknown" && resolvedUnit)
   };
 }
 

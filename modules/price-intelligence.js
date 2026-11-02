@@ -304,6 +304,45 @@ function isConversationalNumericNoise(line) {
   return conversational && !productOrCommerceCue && /\d/.test(toAsciiDigits(source));
 }
 
+function parseExplicitDelimitedPriceRow(line) {
+  // Explicit three-field seller format: product name - package description - price.
+  // The separators are authoritative: preserve the product and package fields as written.
+  const fields = String(line || "").trim().split(/\\s+-\\s+/u);
+  if (fields.length !== 3) return null;
+  const [productText, packageText, priceText] = fields.map(value => value.trim());
+  if (!productText || !packageText || !priceText) return null;
+  const priceNumbers = numericPriceTokens(priceText);
+  if (priceNumbers.length !== 1) return null;
+  const explicitWholesalePrice = extractExplicitWholesalePrice(priceText);
+  const quantityMatch = toAsciiDigits(productText).match(/\\d+(?:[.,]\\d+)?\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ملل|ml)/iu);
+  const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
+  const packCount = parsePackCount(packageText);
+  const unitPriceType = detectUnitPriceType(packageText, packCount);
+  return {
+    raw_line: String(line || "").trim(),
+    company: null,
+    section: null,
+    product_text: productText,
+    package_description: packageText,
+    package_sale_price: explicitWholesalePrice ?? priceNumbers[0],
+    listed_base_price: null,
+    explicit_wholesale_label_price: explicitWholesalePrice,
+    consumer_price: null,
+    price_kind: explicitWholesalePrice != null ? "wholesale" : "wholesale_candidate",
+    unit_price_type: unitPriceType,
+    weight_g: quantity?.grams ?? null,
+    volume_ml: quantity?.milliliters ?? null,
+    offer_extra_weight_g: parseExtraWeight(productText + " " + packageText),
+    pack_count: packCount,
+    package_type: parsePackageType(packageText) || parsePackageType(productText),
+    confidence: explicitWholesalePrice != null ? 0.92 : 0.65,
+    needs_review: explicitWholesalePrice == null || !unitPriceType,
+    price_selection_reason: explicitWholesalePrice != null
+      ? "explicit_three_field_row_with_wholesale_label"
+      : "explicit_three_field_row_preserved_without_wholesale_confirmation"
+  };
+}
+
 function extractPriceCandidates(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const invoiceRows = parseInvoiceTable(text);
@@ -318,6 +357,8 @@ function extractPriceCandidates(text) {
 
   for (const line of lines) {
     if (isConversationalNumericNoise(line)) continue;
+    const explicitRow = parseExplicitDelimitedPriceRow(line);
+    if (explicitRow) { out.push(explicitRow); continue; }
     if (/^\/|^[-_=.*]+$/.test(line)) continue;
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
 

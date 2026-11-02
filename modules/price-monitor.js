@@ -224,17 +224,26 @@ async function observe({ pool, message, merchantId = null, registry }) {
     if (row.decision === "accepted") {
       const history = await pool.query(
         `SELECT product_identity_key, brand_key, price_kind, package_sale_price, weight_g, volume_ml,
-                pack_count, offer_extra_weight_g, package_type
+                pack_count, offer_extra_weight_g, package_type, unit_price_type
          FROM price_observations
          WHERE price_kind=$2 AND decision='accepted'
            AND (product_identity_key=$1 OR (product_identity_key IS NULL AND product_text=$3))
+           AND weight_g IS NOT DISTINCT FROM $4
+           AND volume_ml IS NOT DISTINCT FROM $5
+           AND offer_extra_weight_g IS NOT DISTINCT FROM $6
+           AND package_type IS NOT DISTINCT FROM $7
+           AND ($8::text IS NULL OR unit_price_type=$8)
          ORDER BY observed_at DESC, id DESC LIMIT 1`,
-        [row.product_identity_key, row.price_kind, row.product_text]
+        [row.product_identity_key, row.price_kind, row.product_text,
+          row.weight_g ?? null, row.volume_ml ?? null, row.offer_extra_weight_g ?? null,
+          row.package_type ?? null, row.unit_price_type ?? null]
       );
       const previous = history.rows?.[0] || null;
       // If today's post omits carton count, reuse a known count from the same product/size history.
       // Keep the source wording intact and mark the count as inherited; never override an explicit count.
       if ((row.pack_count == null || row.pack_count === "") &&
+          row.unit_price_type !== "بالقطعة" &&
+          previous?.unit_price_type === "بالكرتونة" &&
           previous?.pack_count != null && Number(previous.pack_count) > 0) {
         row.pack_count = Number(previous.pack_count);
         row.pack_count_inferred = true;

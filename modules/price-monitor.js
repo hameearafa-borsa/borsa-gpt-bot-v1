@@ -306,7 +306,7 @@ async function observe({ pool, message, merchantId = null, registry, requireCata
            AND volume_ml IS NOT DISTINCT FROM $5
            AND offer_extra_weight_g IS NOT DISTINCT FROM $6
            AND package_type IS NOT DISTINCT FROM $7
-           AND ($8::text IS NULL OR unit_price_type=$8)
+           AND unit_price_type IS NOT DISTINCT FROM $8
          ORDER BY observed_at DESC, id DESC LIMIT 1`,
         [row.product_identity_key, row.price_kind, row.product_text,
           row.weight_g ?? null, row.volume_ml ?? null, row.offer_extra_weight_g ?? null,

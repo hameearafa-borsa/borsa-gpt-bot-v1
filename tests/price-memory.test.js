@@ -113,4 +113,24 @@ assert.equal(resolveFromMemory({
   price_kind: "wholesale_candidate", unit_price_type: null, pack_count: null
 }, differentUseVariant).matched, false);
 
+// A promotional extra-weight pack is a distinct memory dimension.
+const regularPackMemory = buildPriceMemory([
+  { ...accepted[0], product_text: "أريال مسحوق 2 كجم", weight_g: 2000, volume_ml: null,
+    offer_extra_weight_g: null, package_sale_price: 490 }
+]);
+assert.equal(resolveFromMemory({
+  ...candidate, product_text: "أريال مسحوق 2 كجم", weight_g: 2000, volume_ml: null,
+  offer_extra_weight_g: 300, package_sale_price: 520
+}, regularPackMemory).matched, false,
+"2 kg + 300 g promotional pack must not borrow memory from the regular 2 kg pack");
+
+// Low-confidence accepted rows are not trusted enough to teach future observations.
+const lowConfidenceMemory = buildPriceMemory([
+  { ...accepted[0], confidence: 0.79, product_text: "منظف تجريبي", volume_ml: 500 }
+]);
+assert.equal(resolveFromMemory({
+  ...candidate, product_text: "منظف تجريبي", volume_ml: 500
+}, lowConfidenceMemory).matched, false,
+"accepted status alone must not allow a low-confidence observation to teach memory");
+
 console.log("price-memory.test.js: OK");

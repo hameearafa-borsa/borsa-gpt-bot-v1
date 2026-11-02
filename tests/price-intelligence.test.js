@@ -176,10 +176,10 @@ const unileverOctoberText = fs.readFileSync(path.join(__dirname, "fixtures-unile
 const unileverRows = deterministicList(unileverOctoberText);
 assert.equal(unileverRows.length, 66, "the actual Unilever October source should preserve all 66 price rows");
 
-assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 62,
-  "only unambiguous Unilever rows should be auto-accepted");
-assert.equal(unileverRows.filter(row => row.decision === "review").length, 4,
-  "only ambiguous promotional offers should remain reviewable");
+assert.equal(unileverRows.filter(row => row.decision === "accepted").length, 66,
+  "all clearly priced and unit-labelled Unilever rows, including offers, should be auto-accepted");
+assert.equal(unileverRows.filter(row => row.decision === "review").length, 0,
+  "clear gift and bundle offers with explicit price units should not require manual review");
 assert.equal(unileverRows.filter(row => row.decision === "skipped").length, 0,
   "no priced Unilever row should be silently discarded");
 const unileverCurrencyTypo = unileverRows.find(row => row.raw_line.includes("تريزيمي بلسم 600 مل"));

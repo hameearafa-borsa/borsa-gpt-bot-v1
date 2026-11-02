@@ -647,12 +647,14 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   // used by production memory lookup. It must not resolve the next message.
   const pearl503PersistedRows = pearl503Observed.savedRows.map(item => item.row);
   let pearl503FollowupMemoryRows = null;
+  let pearl503MemorySql = "";
   const pearl503FollowupPool = {
     async query(sql) {
       if (sql.includes("SELECT product_text, price_kind")) {
-        pearl503FollowupMemoryRows = pearl503PersistedRows.filter(row =>
-          row.decision === "accepted" && row.price_kind === "wholesale" && row.confidence >= 0.8
-        );
+        pearl503MemorySql = sql;
+        // Deliberately return the pending row from the fake adapter. The SQL
+        // predicates and buildPriceMemory's own guard must both protect memory.
+        pearl503FollowupMemoryRows = pearl503PersistedRows;
         return { rows: pearl503FollowupMemoryRows, rowCount: pearl503FollowupMemoryRows.length };
       }
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
@@ -668,6 +670,12 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   });
   assert.deepEqual(pearl503FollowupMemoryRows, [],
     "the earlier pending 503.31 observation must not be loaded as trusted memory for a later message");
+  assert.match(pearl503MemorySql, /decision\s*=\s*'accepted'/i,
+    "the real price-memory query must exclude pending decisions in SQL");
+  assert.match(pearl503MemorySql, /price_kind\s*=\s*'wholesale'/i,
+    "the real price-memory query must exclude non-wholesale candidates in SQL");
+  assert.match(pearl503MemorySql, /confidence\s*>=\s*0\.8/i,
+    "the real price-memory query must require high confidence in SQL");
   assert.equal(pearl503Followup.saved, 1);
   assert.equal(pearl503Followup.savedRows[0].row.decision, "pending");
   assert.ok(!/resolved_from_accepted_price_memory/.test(pearl503Followup.savedRows[0].row.price_selection_reason || ""),

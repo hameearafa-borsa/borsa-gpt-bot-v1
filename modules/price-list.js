@@ -148,9 +148,17 @@ function extractPackageSizes(line) {
 function extractPackageLabel(line) {
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
   const sizes = extractPackageSizes(line);
-  const count = ascii.match(/(?:[*×x]\s*(\d+)|(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu);
-  const countValue = count ? Number(count[1] || count[2]) : null;
-  return [...sizes, ...(countValue > 0 ? [String(countValue) + " قطعة"] : [])].join(" · ");
+  // Preserve commercial pack composition instead of flattening bags/cartons into generic pieces.
+  const diaperBundle = ascii.match(/(\d+)\s*(شنطة|شنط)?\s*[*×x]\s*(\d+)\s*(حفاضة|حفاضه)/iu);
+  if (diaperBundle) {
+    const prefix = diaperBundle[2] ? `${diaperBundle[1]} ${diaperBundle[2]} × ` : `${diaperBundle[1]} × `;
+    return [...sizes, `${prefix}${diaperBundle[3]} ${diaperBundle[4]}`].join(" · ");
+  }
+  const packageCounts = [...ascii.matchAll(/(?:^|[\s+])([0-9]+)\s*(كيس|أكياس|اكياس|شنطة|شنط|باكتة|باكت|زجاجة|زجاجات|جركن|وحدات|وحدة|قطعة|قطع)(?=\s|$)/giu)]
+    .map(match => `${match[1]} ${match[2]}`);
+  const pieceCount = ascii.match(/(?:[*×x]\s*(\d+)|(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu);
+  const fallbackCount = pieceCount ? `${Number(pieceCount[1] || pieceCount[2])} قطعة` : null;
+  return [...sizes, ...packageCounts, ...(!packageCounts.length && fallbackCount ? [fallbackCount] : [])].join(" · ");
 }
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);

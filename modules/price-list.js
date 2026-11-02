@@ -213,9 +213,12 @@ function deterministicList(text) {
       // Explicit per-piece markers and section headings take precedence above.
       (metadata.company && (metadata.isCompanyCatalog || metadata.priceType === "أسعار جملة") ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
-    const identitySizes = metadata.company && /(?:[*×x]\s*\d+|(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu.test(toAsciiDigits(line))
-      ? extractPackageSizes(line) : [];
-    const displayProductPrefix = [productPrefix.replace(/[+*×/]+\s*$/u, ""), identitySizes.join(" + ")].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
+    const identitySizes = metadata.company
+      ? [...toAsciiDigits(line).matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))/giu)]
+        .map(match => match[0].replace(/\s+/g, " ").trim())
+      : [];
+    const displayProductPrefix = [productPrefix.replace(/[+*×/]+\s*$/u, ""), identitySizes.join(" + ")]
+      .filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(displayProductPrefix);
     const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));

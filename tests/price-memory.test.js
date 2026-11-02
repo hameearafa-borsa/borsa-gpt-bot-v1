@@ -75,4 +75,31 @@ const normalizedAlias = resolveFromMemory({
 assert.equal(normalizedAlias.matched, true, "Arabic spelling variants should use normalized product memory");
 assert.equal(normalizedAlias.resolved, true);
 
+const familyAliasMemory = buildPriceMemory([
+  { ...accepted[0], product_text: "بريكس ارضيات 25 جم", weight_g: 25, volume_ml: null }
+]);
+const familyAliasMatch = resolveFromMemory({
+  ...accepted[0], product_text: "بريكس منظف ارضيات 25 جم", weight_g: 25, volume_ml: null,
+  price_kind: "wholesale_candidate", decision: undefined, unit_price_type: null, pack_count: null
+}, familyAliasMemory);
+assert.equal(familyAliasMatch.matched, true,
+  "known aliases for the same registered product family should share price memory");
+assert.equal(familyAliasMatch.resolved, true);
+
+const differentFamily = resolveFromMemory({
+  ...accepted[0], product_text: "بريكس متعدد الاسطح 25 جم", weight_g: 25, volume_ml: null,
+  price_kind: "wholesale_candidate", unit_price_type: null, pack_count: null
+}, familyAliasMemory);
+assert.equal(differentFamily.matched, false,
+  "a different registered product family must never inherit another family's price memory");
+
+const differentUseVariant = buildPriceMemory([
+  { ...accepted[0], product_text: "أريال 2 ك يدوي", weight_g: 2000, volume_ml: null }
+]);
+assert.equal(resolveFromMemory({
+  ...accepted[0], product_text: "أريال 2 ك اتوماتيك", weight_g: 2000, volume_ml: null,
+  price_kind: "wholesale_candidate", unit_price_type: null, pack_count: null
+}, differentUseVariant).matched, false,
+"canonical brand matching must preserve use variants such as manual and automatic");
+
 console.log("price-memory.test.js: OK");

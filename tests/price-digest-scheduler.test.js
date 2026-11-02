@@ -1,11 +1,20 @@
 "use strict";
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
 const {
   DAILY_HOUR, DAILY_MINUTE, currentPriceDigestSlot, formatDailyPriceDigest,
   ensurePriceDigestSchema, publishDailyPriceDigest
 } = require("../modules/price-digest-scheduler");
 
 (async () => {
+  const runtimeSource = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+  assert.match(runtimeSource, /ensurePriceDigestSchema\(db\.pool\)/,
+    "the Telegram runtime must create the durable daily digest delivery ledger");
+  assert.match(runtimeSource, /startPriceDigestScheduler\(/,
+    "the Telegram runtime must start the evening price digest scheduler");
+  assert.match(runtimeSource, /stopPriceDigest\(\)/,
+    "shutdown must stop the daily price digest scheduler");
   const now = new Date("2026-11-02T18:02:00.000Z"); // 20:02 Africa/Cairo
   assert.equal(DAILY_HOUR, 20);
   assert.equal(DAILY_MINUTE, 0);

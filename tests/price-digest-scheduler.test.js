@@ -71,6 +71,7 @@ const {
   assert.match(observationQuery.sql, /price_kind='wholesale'/);
   assert.match(observationQuery.sql, /confidence >= 0\.8/);
   assert.match(observationQuery.sql, /needs_review=FALSE/);
+  assert.match(observationQuery.sql, /reference_observation_id IS NOT NULL/, "only observations linked to an official catalog row may enter the evening digest");
   assert.match(observationQuery.sql, /AT TIME ZONE 'Africa\/Cairo'/);
   assert.match(observationQuery.sql, /DISTINCT ON/);
   assert.match(observationQuery.sql, /unit_price_type/);

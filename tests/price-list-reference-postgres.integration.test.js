@@ -48,6 +48,7 @@ if (!connectionString) {
     assert.equal(parsedList.priceType, "أسعار جملة");
     assert.equal(rows.length, 66);
     assert.equal(rows.filter(row => row.decision === "accepted").length, 66);
+    rows[0].package_type = "sachet"; // Exercise the real PostgreSQL persistence path for package form.
 
     const result = await db.withTransaction(client => persistPriceList(client, {
       message: { chatId: -1001234567890, messageId: 987654 },
@@ -80,6 +81,7 @@ if (!connectionString) {
     const liveObservations = await pool.query("SELECT COUNT(*)::int AS count FROM price_observations");
     assert.equal(catalog.rows[0].count, 66, "all parsed rows must persist in the company catalog");
     assert.equal(references.rowCount, 66, "all accepted company rows must persist as official references");
+    assert.equal(references.rows[0].package_type, "sachet", "official references must retain the parsed package form");
     assert.equal(liveObservations.rows[0].count, 0, "official list rows must not be mixed into live group observations");
 
     const unitCounts = await pool.query(

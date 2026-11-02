@@ -39,6 +39,12 @@ const { identityKey, formatReviewMessage, reviewKeyboard, resolveReview, saveEdi
   assert.match(calls[0].sql, /needs_review=FALSE/, "reviewed observations must clear the unresolved review flag");
   assert.equal(calls[0].params[0], "accepted");
   assert.equal(calls[2].params[0], "accepted");
+  assert.match(calls[0].sql, /price_kind=CASE WHEN \$1='accepted' THEN 'wholesale'/,
+    "a human-approved price must become a wholesale observation eligible for trusted memory");
+  assert.match(calls[0].sql, /confidence=CASE WHEN \$1='accepted' THEN GREATEST\(confidence, 0\.9\)/,
+    "human approval must meet the trusted-memory confidence threshold");
+  assert.match(calls[0].sql, /explicit_wholesale_label_price=CASE WHEN \$1='accepted' THEN package_sale_price/,
+    "the explicitly approved wholesale amount must be retained");
 
   const ignoredCalls = [];
   const ignoredDb = { async withTransaction(fn) { return fn({ async query(sql, params) {

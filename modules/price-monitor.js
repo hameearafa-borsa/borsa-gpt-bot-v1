@@ -203,7 +203,9 @@ async function observe({ pool, message, merchantId = null, registry }) {
       ? candidate.confidence
       : previouslyReviewed
         ? Math.max(candidate.confidence, 0.9)
-        : Math.min(candidate.confidence, match.matched ? 0.98 : 0.45);
+        : learned.resolved
+          ? Math.max(candidate.confidence, learned.confidence)
+          : Math.min(candidate.confidence, match.matched ? 0.98 : 0.45);
     row.decision = !row.needs_review && row.confidence >= 0.8 && row.price_kind === "wholesale" ? "accepted" : "pending";
     const fp = fingerprint(row);
     if (seen.has(fp)) continue;

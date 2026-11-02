@@ -16,6 +16,12 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "ambiguous observations must remain stored silently instead of being discarded");
   assert.match(runtimeSource, /الملاحظات غير المحسومة تُحفظ كبيانات معلّقة دون إشعار مراجعة/,
     "the admin panel must describe pending observations as silent, not as a manual review queue");
+  assert.match(runtimeSource, /bot\\.on\\(\\["text",\\s*"photo"\\],\\s*async ctx =>/,
+    "the Telegram runtime must receive both ordinary text and captioned photo messages");
+  assert.match(runtimeSource, /const merchantSourceText = text \\|\\| m\\.caption \\|\\| ""/,
+    "caption text must flow into merchant and price monitoring");
+  assert.match(runtimeSource, /priceMonitor\\.isEligibleMessage\\([\\s\\S]{0,180}text \\|\\| m\\.caption/,
+    "captioned photo prices must pass through the same eligibility gate as text prices");
   const base = { chatType: "supergroup", text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" };
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: false, ownMessage: false }), true);
   assert.equal(isEligibleMessage({ ...base, chatType: "private", isLogChannel: false, isCommand: false, ownMessage: false }), false);

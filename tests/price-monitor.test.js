@@ -309,7 +309,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(uncertain.saved, 1);
   assert.equal(uncertain.savedRows[0].row.decision, "pending");
   assert.ok(uncertain.savedRows[0].row.confidence < 0.8);
-  assert.equal(savedQueries.length, 7);
+  assert.equal(savedQueries.length, 9);
 
   // Deterministic Unilever catalogs must flow into the live observation store,
   // retaining per-piece/carton unit semantics instead of being dropped as bulk.

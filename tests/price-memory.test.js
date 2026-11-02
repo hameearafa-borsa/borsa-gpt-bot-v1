@@ -52,7 +52,11 @@ const conflicting = buildPriceMemory([
 ]);
 assert.equal(resolveFromMemory(candidate, conflicting).resolved, false,
   "conflicting piece/carton history must stay unresolved");
-assert.equal(resolveFromMemory({ ...candidate, unit_price_type: "بالقطعة" }, conflicting).pack_count, null,
+const mixedHistoryPiece = resolveFromMemory({ ...candidate, unit_price_type: "بالقطعة" }, conflicting);
+assert.equal(mixedHistoryPiece.resolved, true,
+  "an explicit unit may use matching evidence even when the wider history contains another unit");
+assert.equal(mixedHistoryPiece.unit_price_type, "بالقطعة");
+assert.equal(mixedHistoryPiece.pack_count, null,
   "mixed unit history must never transfer carton count to a piece candidate");
 
 const retailAcceptedOnly = buildPriceMemory([

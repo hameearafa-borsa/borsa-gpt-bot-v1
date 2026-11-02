@@ -309,8 +309,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(unileverObserved.savedRows.some(item => item.row.unit_price_type === "بالكرتونة"), "carton rows must remain distinguishable");
   assert.equal(unileverMonitorParams.filter(params => params[13] === "accepted").length, 62,
     "only trusted catalog observations should be persisted as accepted");
-  assert.equal(unileverMonitorParams.filter(params => params[13] === "pending").length, 5,
-    "ambiguous catalog observations must be persisted as pending");
+  assert.equal(unileverMonitorParams.filter(params => params[13] === "pending").length, 4,
+    "only the four ambiguous offer observations must be persisted as pending");
 
   // Pearl multi-column catalog: select the wholesale column, preserve base/consumer columns,
   // and keep rows reviewable when piece/carton semantics are not explicit.

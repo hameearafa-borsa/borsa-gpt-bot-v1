@@ -1,6 +1,6 @@
 "use strict";
 
-const { extractPriceCandidates, commercialMetrics, fingerprint, productIdentityKey, classifyObservationChange, parsePackageType, parseExtraWeight } = require("./price-intelligence");
+const { extractPriceCandidates, parseStructuredPriceTable, commercialMetrics, fingerprint, productIdentityKey, classifyObservationChange, parsePackageType, parseExtraWeight } = require("./price-intelligence");
 const { resolve } = require("../core/product-registry");
 const { identityKey } = require("./price-review");
 const { buildPriceMemory, resolveFromMemory } = require("./price-memory");
@@ -75,8 +75,22 @@ async function observe({ pool, message, merchantId = null, registry }) {
   let candidates;
   if (bulkCatalog) {
     const metadata = parseListMetadata(text);
-    const catalogRows = deterministicList(text);
-    candidates = catalogRows.filter(item => item.decision !== "skipped").map(item => {
+    const structuredRows = parseStructuredPriceTable(text) || [];
+    if (structuredRows.length) {
+      // Preserve the dedicated ASC2 parser's carton/piece consistency decision
+      // through the actual monitor and persistence path.
+      candidates = structuredRows.map(item => ({
+        ...item,
+        company: item.company || metadata.company || null,
+        section: item.section || null,
+        product_text: item.product_text,
+        price_kind: "wholesale",
+        trusted_catalog_row: item.trusted_catalog_row === true,
+        needs_review: item.needs_review === true
+      }));
+    } else {
+      const catalogRows = deterministicList(text);
+      candidates = catalogRows.filter(item => item.decision !== "skipped").map(item => {
       const wholesalePrice = item.wholesale_carton_price == null ? null : Number(item.wholesale_carton_price);
       const basePrice = item.package_sale_price == null ? null : Number(item.package_sale_price);
       const hasSeparateWholesale = wholesalePrice != null && Number.isFinite(wholesalePrice) && wholesalePrice > 0;
@@ -107,8 +121,9 @@ async function observe({ pool, message, merchantId = null, registry }) {
         price_selection_reason: hasSeparateWholesale ? "deterministic_catalog_explicit_wholesale_column" :
           declaredWholesale ? "deterministic_catalog_declared_wholesale" : "deterministic_catalog_price_unit_requires_review"
       };
-    }).filter(row => Number.isFinite(Number(row.package_sale_price)) && Number(row.package_sale_price) > 0 &&
-      String(row.product_text || "").trim().length >= 2);
+      }).filter(row => Number.isFinite(Number(row.package_sale_price)) && Number(row.package_sale_price) > 0 &&
+        String(row.product_text || "").trim().length >= 2);
+    }
   } else {
     candidates = extractPriceCandidates(text);
   }

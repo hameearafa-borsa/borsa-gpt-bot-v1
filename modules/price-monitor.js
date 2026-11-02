@@ -3,6 +3,7 @@
 const { extractPriceCandidates, commercialMetrics, fingerprint, productIdentityKey, classifyObservationChange, parsePackageType, parseExtraWeight } = require("./price-intelligence");
 const { resolve } = require("../core/product-registry");
 const { identityKey } = require("./price-review");
+const { buildPriceMemory, resolveFromMemory } = require("./price-memory");
 const { deterministicList, parseListMetadata } = require("./price-list");
 
 function isOwnMessage({ botUserId, fromId }) { return botUserId != null && String(botUserId) === String(fromId); }
@@ -113,6 +114,24 @@ async function observe({ pool, message, merchantId = null, registry }) {
   }
   const accepted = [];
   const seen = new Set();
+  // Load only accepted, high-confidence history once per source message.
+  // Pending observations never teach the resolver.
+  let priceMemory = new Map();
+  if (pool && candidates.length) {
+    const names = [...new Set(candidates.map(row => String(row.product_text || "").trim()).filter(Boolean))];
+    if (names.length) {
+      const learned = await pool.query(
+        `SELECT product_text, price_kind, package_sale_price, confidence, decision,
+                weight_g, volume_ml, offer_extra_weight_g, package_type, pack_count,
+                unit_price_type, observed_at
+         FROM price_observations
+         WHERE decision = 'accepted' AND product_text = ANY($1::text[])
+         ORDER BY observed_at DESC, id DESC LIMIT 2000`,
+        [names]
+      );
+      priceMemory = buildPriceMemory(learned.rows || []);
+    }
+  }
   // Infer the commercial context from the whole post, not only from the line
   // containing the amount. Sellers often put "جملة" in a heading or on just
   // one line while listing several products. Explicit consumer wording wins.
@@ -121,6 +140,20 @@ async function observe({ pool, message, merchantId = null, registry }) {
   const hasMultiProductContext = candidates.length >= 2 && !hasExplicitRetailContext;
   for (const candidate of candidates) {
     if (candidate.price_kind === "retail") continue;
+    const learned = resolveFromMemory(candidate, priceMemory);
+    if (learned.matched && learned.resolved) {
+      if (candidate.price_kind === "wholesale_candidate" && learned.price_kind === "wholesale") {
+        candidate.price_kind = "wholesale";
+        candidate.context_inferred_wholesale = true;
+      }
+      if (!candidate.unit_price_type && learned.unit_price_type) candidate.unit_price_type = learned.unit_price_type;
+      if ((candidate.pack_count == null || candidate.pack_count === "") && learned.pack_count != null) {
+        candidate.pack_count = learned.pack_count;
+        candidate.pack_count_inferred = true;
+      }
+      candidate.confidence = Math.max(Number(candidate.confidence) || 0, learned.confidence);
+      candidate.price_selection_reason = [candidate.price_selection_reason, "resolved_from_accepted_price_memory"].filter(Boolean).join(";");
+    }
     if (candidate.price_kind === "wholesale_candidate" &&
         !/(?:مستهلك|قطاعي|تجزئه|تجزئة|للمستهلك)/iu.test(candidate.raw_line || "") &&
         (hasExplicitWholesaleContext || hasMultiProductContext)) {
@@ -141,6 +174,7 @@ async function observe({ pool, message, merchantId = null, registry }) {
       brand_key: match.brand?.key || null,
     };
     row.product_identity_key = productIdentityKey(row);
+    row.memory_evidence_count = learned.evidence_count || 0;
     // An explicitly approved product identity prevents repeat review based on the name alone.
     // Other ambiguities (multiple prices, unknown price kind) still remain pending.
     let previouslyReviewed = false;

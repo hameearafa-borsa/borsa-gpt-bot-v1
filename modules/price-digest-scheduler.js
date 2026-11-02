@@ -91,7 +91,8 @@ async function publishDailyPriceDigest({ pool, telegram, now = new Date(), onErr
         unit_price_type, change_type, observed_at
       FROM price_observations
       WHERE decision='accepted' AND price_kind='wholesale' AND confidence >= 0.8
-        AND needs_review=FALSE AND package_sale_price > 0
+        AND needs_review=FALSE AND reference_observation_id IS NOT NULL
+        AND package_sale_price > 0
         AND observed_at >= ($1::date::timestamp AT TIME ZONE 'Africa/Cairo')
         AND observed_at < (($1::date + INTERVAL '1 day')::timestamp AT TIME ZONE 'Africa/Cairo')
       ORDER BY COALESCE(product_identity_key, product_text), weight_g, volume_ml,

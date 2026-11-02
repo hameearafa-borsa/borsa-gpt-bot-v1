@@ -41,7 +41,7 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.ok(fs.existsSync(logoPath), "the main-branch Borsa logo must exist for real rendering");
   const images = await renderPriceListImages({
     company: metadata.company, items: rows, watermark: "بورصة المنظفات لأصحاب المحلات",
-    month: metadata.month, priceType: metadata.priceType, pageSize: 16, logoPlacement: "both", logoPath
+    month: metadata.month, priceType: metadata.priceType, pageSize: 25, logoPlacement: "both", logoPath
   });
   assert.equal(images.length, 1, "the eight-row Bahey list should render to one image");
   const png = images[0];

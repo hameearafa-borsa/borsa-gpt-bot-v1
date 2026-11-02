@@ -1,16 +1,16 @@
 "use strict";
 const fs = require("node:fs");
 const path = require("node:path");
-const { render: shapeArabicForSvg } = require("bidi-shaper");
 
 function escapeXml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
 }
 function svgText(value) {
-  // bidi-shaper returns Arabic in final visual order. Force SVG to draw that
-  // prepared sequence left-to-right so its own bidi pass cannot reverse it twice.
-  const visual = escapeXml(shapeArabicForSvg(String(value ?? ""), { direction: "auto", paragraphs: "split" }));
-  return `<tspan direction="ltr" unicode-bidi="bidi-override">${visual}</tspan>`;
+  // Keep Arabic as logical Unicode. librsvg/Pango (used by sharp) performs
+  // contextual shaping and bidirectional layout with the installed Noto fonts.
+  // Pre-shaping into Arabic Presentation Forms can render as missing-glyph boxes.
+  const logicalText = escapeXml(String(value ?? ""));
+  return '<tspan direction="auto" unicode-bidi="plaintext">' + logicalText + '</tspan>';
 }
 function priceText(value) {
   const n = Number(value);
@@ -21,11 +21,11 @@ function splitPages(rows, pageSize) {
   for (let i = 0; i < rows.length; i += pageSize) pages.push(rows.slice(i, i + pageSize));
   return pages;
 }
-async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 16, logoPlacement = "both", logoPath = null, groupName = "بورصة المنظفات لأصحاب المحلات" }) {
+async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 25, logoPlacement = "both", logoPath = null, groupName = "بورصة المنظفات لأصحاب المحلات" }) {
   const rows = (Array.isArray(items) ? items : []).filter(x => x && String(x.product || x.product_label || "").trim() && Number.isFinite(Number(x.package_sale_price)) && Number(x.package_sale_price) > 0);
   if (rows.length < 3) throw new Error("price_list_image_requires_three_valid_products");
   if (rows.length > 100) throw new Error("price_list_image_exceeds_100_products_split_list_first");
-  const safePageSize = Math.max(6, Math.min(16, Math.trunc(Number(pageSize) || 16)));
+  const safePageSize = Math.max(6, Math.min(25, Math.trunc(Number(pageSize) || 25)));
   // Load lazily so parser/static tests can run before native dependencies are installed.
   let sharp;
   try { sharp = require("sharp"); }
@@ -54,15 +54,15 @@ async function renderPriceListImages({ company, items, watermark = "بورصة �
       const y = rowsTop + i * rowHeight;
       const rawName = String(item.product || item.product_label || "منتج");
       const name = svgText(rawName.slice(0, 150));
-      const rawCategory = String(item.category || item.section || "");
-      const category = svgText(rawCategory);
       const variant = String(item.variant || "");
-      const size = item.weight_g ? `${item.weight_g} جم` : item.volume_ml ? `${item.volume_ml} مل` : "";
-      const productNote = variant && variant !== rawCategory ? svgText(variant) : "";
+      const size = String(item.package_label || "").trim() || (item.weight_g ? `${item.weight_g} جم` : item.volume_ml ? `${item.volume_ml} مل` : "");
+      const rawCategory = String(item.category || item.raw_category || "");
+      const isGenericCategory = /^(منتجات متنوعة|متنوع|عام|غير محدد)$/u.test(rawCategory.trim());
+      const productNote = variant && !isGenericCategory ? svgText(variant) : "";
       const packageSize = size ? svgText(size) : "";
       const unitLabel = item.unit_price_type === "بالقطعة" ? "بالقطعة" : item.unit_price_type === "بالكرتونة" ? "بالكرتونة" : "";
       const fill = i % 2 ? "#f3f7f5" : "#ffffff";
-      return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><text x="1125" y="${y+14}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" font-weight="700" fill="#000000">${category}</text><g clip-path="url(#productColumnClip)"><text x="1125" y="${y+32}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">${name}</text></g><text x="600" y="${y+27}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="14" font-weight="700" fill="#000000">${packageSize || "—"}</text>${productNote ? `<text x="600" y="${y+43}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="9" fill="#000000">${productNote}</text>` : ""}<text x="72" y="${y+27}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="18" font-weight="700" fill="#000000">${svgText(priceText(item.package_sale_price))}</text>${unitLabel ? `<text x="72" y="${y+43}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" fill="#000000">${svgText(unitLabel)}</text>` : ""}`;
+      return `<rect x="36" y="${y}" width="1128" height="${rowHeight-5}" rx="12" fill="${fill}"/><g clip-path="url(#productColumnClip)"><text x="1125" y="${y+32}" text-anchor="end" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="15" font-weight="700" fill="#000000">${name}</text></g><text x="600" y="${y+27}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="14" font-weight="700" fill="#000000">${packageSize || "—"}</text>${productNote ? `<text x="600" y="${y+43}" text-anchor="middle" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="9" fill="#000000">${productNote}</text>` : ""}<text x="72" y="${y+27}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="18" font-weight="700" fill="#000000">${svgText(priceText(item.package_sale_price))}</text>${unitLabel ? `<text x="72" y="${y+43}" text-anchor="start" font-family="Noto Sans Arabic,Noto Naskh Arabic,sans-serif" font-size="10" fill="#000000">${svgText(unitLabel)}</text>` : ""}`;
     }).join("");
     const rowBackgroundSvg = (rowSvg.match(/<rect x="36" y="[^"]+" width="1128" height="47" rx="12" fill="[^"]+"\/>/g) || []).join("");
     const rowTextSvg = rowSvg.replace(/<rect x="36" y="[^"]+" width="1128" height="47" rx="12" fill="[^"]+"\/>/g, "");

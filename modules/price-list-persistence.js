@@ -29,12 +29,12 @@ async function persistPriceList(client, { message, sourceText, parsedList, rows 
     if (decision === "accepted") {
       await client.query(`INSERT INTO price_reference_observations
         (run_id,source_kind,company_label,source_period,declared_price_type,price_kind,product_label,variant_label,weight_g,volume_ml,
-         package_sale_price,wholesale_carton_price,consumer_price,pack_count,unit_price_type,list_price,confidence,raw_line,decision)
-        VALUES($1,'company_catalog',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'accepted')`,
+         package_sale_price,wholesale_carton_price,consumer_price,pack_count,unit_price_type,list_price,confidence,raw_line,package_type,decision)
+        VALUES($1,'company_catalog',$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,'accepted')`,
       [runId, companyLabel, parsedList.month || null, declaredPriceType || null, referencePriceKind, productLabel,
        row.variant || null, row.weight_g ?? null, row.volume_ml ?? null, row.package_sale_price ?? null,
        row.wholesale_carton_price ?? null, row.consumer_price ?? null, row.pack_count ?? null,
-       row.unit_price_type || null, row.list_price ?? null, row.confidence ?? null, rawLine]);
+       row.unit_price_type || null, row.list_price ?? null, row.confidence ?? null, rawLine, row.package_type || null]);
     }
   }
   return { runId, extracted: rows.length, accepted: accepted.length, referenceKind: referencePriceKind };

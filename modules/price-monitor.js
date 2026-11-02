@@ -5,6 +5,7 @@ const { resolve } = require("../core/product-registry");
 const { identityKey } = require("./price-review");
 const { buildPriceMemory, resolveFromMemory } = require("./price-memory");
 const { deterministicList, parseListMetadata } = require("./price-list");
+const { comparableName } = require("./price-reference-comparison");
 
 function isOwnMessage({ botUserId, fromId }) { return botUserId != null && String(botUserId) === String(fromId); }
 function isBulkPriceList(text) {
@@ -71,7 +72,51 @@ function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage
     return (hasProductSize && numericCount >= 2) || (hasProductName && hasCurrency);
   });
 }
-async function observe({ pool, message, merchantId = null, registry }) {
+async function findOfficialCatalogMatch(pool, candidate) {
+  if (!pool || typeof pool.query !== "function") return null;
+  const unit = candidate.unit_price_type || null;
+  if (candidate.offer_extra_weight_g != null) return null;
+  const result = await pool.query(
+    `SELECT id, company_label, price_kind, product_label, weight_g, volume_ml, pack_count,
+            unit_price_type, package_type, raw_line
+     FROM price_reference_observations
+     WHERE decision='accepted'
+       AND price_kind IN ('wholesale','retail')
+       AND weight_g IS NOT DISTINCT FROM $1
+       AND volume_ml IS NOT DISTINCT FROM $2
+     ORDER BY created_at DESC, id DESC
+     LIMIT 500`,
+    [candidate.weight_g ?? null, candidate.volume_ml ?? null]
+  );
+  const name = comparableName(candidate.product_text);
+  if (!name) return null;
+  const matches = (result.rows || []).filter(reference => {
+    if (comparableName(reference.product_label) !== name) return false;
+    if (unit && reference.unit_price_type !== unit) return false;
+    if ((candidate.package_type || null) !== (reference.package_type || null)) return false;
+    if (reference.price_kind === "retail" && candidate.price_kind !== "retail") return false;
+    if (reference.price_kind === "wholesale" && candidate.price_kind === "retail") return false;
+    // Carton identity is unsafe when either side lacks its pack count.
+    // Never attach a live observation to a guessed carton configuration.
+    if (reference.unit_price_type === "بالكرتونة" &&
+        (candidate.pack_count == null || reference.pack_count == null ||
+         Number(candidate.pack_count) !== Number(reference.pack_count))) return false;
+    if (/[+]\s*\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|ml|مل)|هدية|هديه|بونص|مجانا/iu.test(reference.raw_line || "")) return false;
+    return true;
+  });
+  if (!matches.length) return null;
+  // Multiple historical rows from the same company and commercial unit are
+  // expected; the newest one wins. Different official companies for the same
+  // visible product identity are ambiguous unless the source can disambiguate them.
+  const distinct = new Set(matches.map(row => [
+    comparableName(row.company_label), row.price_kind, row.unit_price_type,
+    row.unit_price_type === "بالكرتونة" ? Number(row.pack_count) : "",
+  ].join("|")));
+  if (distinct.size !== 1) return null;
+  return matches[0];
+}
+
+async function observe({ pool, message, merchantId = null, registry, requireCatalogMatch = false }) {
   const text = message.text || message.caption || "";
   const bulkCatalog = isBulkPriceList(text);
   let candidates;
@@ -156,6 +201,22 @@ async function observe({ pool, message, merchantId = null, registry }) {
   const hasExplicitRetailContext = /(?:مستهلك|قطاعي|تجزئه|تجزئة|للمستهلك)/iu.test(text);
   const hasMultiProductContext = candidates.length >= 2 && !hasExplicitRetailContext;
   for (const candidate of candidates) {
+    if (requireCatalogMatch) {
+      let officialReference = null;
+      try {
+        officialReference = await findOfficialCatalogMatch(pool, candidate);
+      } catch {
+        // Fail closed: a member observation cannot seed history if the official catalog is unavailable.
+        continue;
+      }
+      if (!officialReference) continue;
+      candidate.reference_observation_id = officialReference.id;
+      candidate.price_kind = officialReference.price_kind;
+      candidate.unit_price_type = officialReference.unit_price_type;
+      if (candidate.pack_count == null && officialReference.pack_count != null) {
+        candidate.pack_count = Number(officialReference.pack_count);
+      }
+    }
     if (candidate.price_kind === "retail") continue;
     const learned = resolveFromMemory(candidate, priceMemory);
     if (learned.matched && learned.resolved) {
@@ -238,7 +299,7 @@ async function observe({ pool, message, merchantId = null, registry }) {
     if (duplicate.rowCount) continue;
     if (row.decision === "accepted") {
       const history = await pool.query(
-        `SELECT product_identity_key, brand_key, price_kind, package_sale_price, weight_g, volume_ml,
+        `SELECT product_identity_key, product_text, brand_key, price_kind, package_sale_price, weight_g, volume_ml,
                 pack_count, offer_extra_weight_g, package_type, unit_price_type
          FROM price_observations
          WHERE price_kind=$2 AND decision='accepted'
@@ -247,7 +308,7 @@ async function observe({ pool, message, merchantId = null, registry }) {
            AND volume_ml IS NOT DISTINCT FROM $5
            AND offer_extra_weight_g IS NOT DISTINCT FROM $6
            AND package_type IS NOT DISTINCT FROM $7
-           AND ($8::text IS NULL OR unit_price_type=$8)
+           AND unit_price_type IS NOT DISTINCT FROM $8
          ORDER BY observed_at DESC, id DESC LIMIT 1`,
         [row.product_identity_key, row.price_kind, row.product_text,
           row.weight_g ?? null, row.volume_ml ?? null, row.offer_extra_weight_g ?? null,
@@ -274,14 +335,15 @@ async function observe({ pool, message, merchantId = null, registry }) {
       `INSERT INTO price_observations
        (merchant_id,price_kind,package_sale_price,source_chat_id,source_message_id,source_user_id,raw_text,confidence,
         product_text,weight_g,volume_ml,pack_count,offer_extra_weight_g,decision,brand_key,package_type,product_identity_key,change_type,
-        listed_base_price,explicit_wholesale_label_price,price_selection_reason,needs_review,consumer_price,unit_price_type)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)
+        listed_base_price,explicit_wholesale_label_price,price_selection_reason,needs_review,consumer_price,unit_price_type,
+        package_description,reference_observation_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26)
        ON CONFLICT DO NOTHING RETURNING id`,
       [merchantId, row.price_kind, row.package_sale_price, message.chatId || null, message.messageId || null,
        message.userId || null, row.raw_line, row.confidence, row.product_text, row.weight_g, row.volume_ml,
        row.pack_count, row.offer_extra_weight_g, row.decision, row.brand_key, row.package_type,
        row.product_identity_key, row.change_type, row.listed_base_price ?? null,
-       row.explicit_wholesale_label_price ?? null, row.price_selection_reason ?? null, Boolean(row.needs_review), row.consumer_price ?? null, row.unit_price_type ?? null]
+       row.explicit_wholesale_label_price ?? null, row.price_selection_reason ?? null, Boolean(row.needs_review), row.consumer_price ?? null, row.unit_price_type ?? null, row.package_description ?? null, row.reference_observation_id ?? null]
     );
     // ON CONFLICT DO NOTHING returns no row when another worker already saved this source row.
     if (!inserted.rows?.[0]) continue;
@@ -290,4 +352,4 @@ async function observe({ pool, message, merchantId = null, registry }) {
   return { accepted, saved: savedRows.length, savedRows, silent: true };
 }
 
-module.exports = { isOwnMessage, isBulkPriceList, isEligibleMessage, observe };
+module.exports = { isOwnMessage, isBulkPriceList, isEligibleMessage, findOfficialCatalogMatch, observe };

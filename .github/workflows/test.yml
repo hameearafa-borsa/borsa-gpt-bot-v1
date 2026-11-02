@@ -80,3 +80,15 @@ jobs:
           path: artifacts/unilever-oct-2026/
           if-no-files-found: error
           retention-days: 7
+
+      - name: Render Ariel November 2026 fixture pages for visual QA
+        env:
+          PRICE_LIST_TEST_OUTPUT_DIR: artifacts/ariel-nov-2026
+        run: node tests/price-list-image-ariel-real.test.js
+      - name: Upload Ariel PNG visual QA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ariel-nov-2026-price-list-pngs
+          path: artifacts/ariel-nov-2026/
+          if-no-files-found: error
+          retention-days: 7

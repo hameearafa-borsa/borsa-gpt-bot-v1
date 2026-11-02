@@ -71,10 +71,18 @@ const {
   assert.match(observationQuery.sql, /price_kind='wholesale'/);
   assert.match(observationQuery.sql, /confidence >= 0\.8/);
   assert.match(observationQuery.sql, /needs_review=FALSE/);
+  assert.match(observationQuery.sql, /reference_observation_id IS NOT NULL/, "only observations linked to an official catalog row may enter the evening digest");
   assert.match(observationQuery.sql, /AT TIME ZONE 'Africa\/Cairo'/);
   assert.match(observationQuery.sql, /DISTINCT ON/);
   assert.match(observationQuery.sql, /unit_price_type/);
   assert.match(observationQuery.sql, /pack_count/);
+  assert.match(observationQuery.sql, /package_type, unit_price_type, pack_count\s*\)/,
+    "piece and carton observations with different carton counts must remain separate digest rows");
+  assert.match(observationQuery.sql, /package_type, unit_price_type, pack_count, observed_at DESC, id DESC/,
+    "the latest accepted observation must win for each commercial-unit identity");
+  assert.doesNotMatch(observationQuery.sql.match(/SELECT DISTINCT ON \([\s\S]*?\) product_text/)?.[0] || "",
+    /package_sale_price/,
+    "price changes must not create duplicate digest rows for the same product and commercial unit");
   assert.match(observationQuery.sql, /package_sale_price/);
   assert.match(observationQuery.sql, /LIMIT 100/);
   assert.equal(observationQuery.params[0], "2026-11-02");

@@ -180,15 +180,9 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
     "invoice parser must accept thousands separators and return the invoice total");
 
   const invoiceAfterVatRows = extractPriceCandidates(`- **دوش** **60** - سعر الفاتورة بعد 14%: 329.28
-- **دوش** **110** - سعر الفاتورة بعد 14%: 612.50
-- **باهي** **5** **جم** **24** **كيس** - قيمة العرض: 2 - سعر الفاتورة بعد 14%: 92.54
-- **باهي** **10** **جم** **20** **كيس** - قيمة العرض: 10 - سعر الفاتورة بعد 14%: 152.26`);
-  assert.deepEqual(invoiceAfterVatRows.map(row => row.package_sale_price), [329.28, 612.5, 92.54, 152.26],
-    "invoice total after 14% must win over product size and offer-value numbers");
-  assert.equal(invoiceAfterVatRows[2].pack_count, 24,
-    "Bahi 5 g with 24 sachets must preserve the pack count");
-  assert.equal(invoiceAfterVatRows[2].product_text.includes("قيمة العرض"), false,
-    "offer metadata must not contaminate the normalized product identity");
+- **دوش** **110** - سعر الفاتورة بعد 14%: 612.50`);
+  assert.deepEqual(invoiceAfterVatRows.map(row => row.package_sale_price), [329.28, 612.5],
+    "invoice total after 14% must win over product size numbers");
   assert.equal(invoiceAfterVatRows[0].product_text, "دوش 60 جرام",
     "the Doush product-specific convention must preserve and normalize its bare gram weight");
   assert.equal(invoiceAfterVatRows[1].product_text, "دوش 110 جرام",

@@ -34,6 +34,8 @@ const MIGRATION_FILES = Object.freeze([
   "026_service_settings.sql",
   "027_price_observation_change_types.sql",
   "028_price_observation_source_idempotency.sql",
+  "029_price_observation_catalog_link.sql",
+  "030_price_reference_package_type.sql",
 ]);
 
 // A single transaction prevents a failed migration from leaving a partially

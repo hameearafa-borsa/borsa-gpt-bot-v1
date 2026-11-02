@@ -86,16 +86,17 @@ async function publishDailyPriceDigest({ pool, telegram, now = new Date(), onErr
 
     const observations = await client.query(`SELECT DISTINCT ON (
         COALESCE(product_identity_key, product_text), weight_g, volume_ml,
-        offer_extra_weight_g, package_type, package_sale_price
+        offer_extra_weight_g, package_type, unit_price_type, pack_count
       ) product_text, package_sale_price, weight_g, volume_ml, pack_count,
         unit_price_type, change_type, observed_at
       FROM price_observations
       WHERE decision='accepted' AND price_kind='wholesale' AND confidence >= 0.8
-        AND needs_review=FALSE AND package_sale_price > 0
+        AND needs_review=FALSE AND reference_observation_id IS NOT NULL
+        AND package_sale_price > 0
         AND observed_at >= ($1::date::timestamp AT TIME ZONE 'Africa/Cairo')
         AND observed_at < (($1::date + INTERVAL '1 day')::timestamp AT TIME ZONE 'Africa/Cairo')
       ORDER BY COALESCE(product_identity_key, product_text), weight_g, volume_ml,
-        offer_extra_weight_g, package_type, package_sale_price, observed_at DESC, id DESC
+        offer_extra_weight_g, package_type, unit_price_type, pack_count, observed_at DESC, id DESC
       LIMIT ${MAX_DIGEST_ROWS}`, [slot.date]);
     const message = formatDailyPriceDigest(observations.rows || [], slot.date);
     let sent = 0, failed = 0, alreadyHandled = 0;

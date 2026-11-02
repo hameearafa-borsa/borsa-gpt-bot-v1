@@ -48,6 +48,7 @@ if (!connectionString) {
     assert.equal(parsedList.priceType, "أسعار جملة");
     assert.equal(rows.length, 66);
     assert.equal(rows.filter(row => row.decision === "accepted").length, 66);
+    rows[0].package_type = "sachet"; // Exercise the real PostgreSQL persistence path for package form.
 
     const result = await db.withTransaction(client => persistPriceList(client, {
       message: { chatId: -1001234567890, messageId: 987654 },
@@ -73,13 +74,14 @@ if (!connectionString) {
     );
     const references = await pool.query(
       `SELECT company_label, source_period, declared_price_type, price_kind, product_label,
-              package_sale_price, unit_price_type, raw_line, decision
+              package_sale_price, unit_price_type, raw_line, package_type, decision
        FROM price_reference_observations WHERE run_id=$1 ORDER BY id`,
       [result.runId]
     );
     const liveObservations = await pool.query("SELECT COUNT(*)::int AS count FROM price_observations");
     assert.equal(catalog.rows[0].count, 66, "all parsed rows must persist in the company catalog");
     assert.equal(references.rowCount, 66, "all accepted company rows must persist as official references");
+    assert.equal(references.rows[0].package_type, "sachet", "official references must retain the parsed package form");
     assert.equal(liveObservations.rows[0].count, 0, "official list rows must not be mixed into live group observations");
 
     const unitCounts = await pool.query(
@@ -103,11 +105,16 @@ if (!connectionString) {
     assert.ok(signal, "the Signal 120 ml row must be persisted");
     assert.equal(Number(signal.package_sale_price), 42.33);
     assert.equal(signal.unit_price_type, "بالقطعة");
+    assert.equal(signal.package_type, "sachet", "official references must retain package type for exact product matching");
 
     const carton = references.rows.find(row => /كلير أكياس 5 مل الكرتونة/.test(row.raw_line || ""));
     assert.ok(carton, "the explicit Clear sachet carton row must be persisted");
     assert.equal(Number(carton.package_sale_price), 346);
     assert.equal(carton.unit_price_type, "بالكرتونة");
+    const expectedCarton = rows.find(row => /كلير أكياس 5 مل الكرتونة/.test(row.raw_line || ""));
+    assert.ok(expectedCarton?.package_type, "the source parser must classify the sachet package type");
+    assert.equal(carton.package_type, expectedCarton.package_type,
+      "the official reference must persist the package type derived from the exact source row");
 
     const bonus = references.rows.find(row => /سيجنال قرنفل 100مل \+25مل هدية/.test(row.raw_line || ""));
     assert.ok(bonus, "the Signal bonus quantity must remain visible in the original row");

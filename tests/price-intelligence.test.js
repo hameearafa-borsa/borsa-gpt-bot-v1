@@ -30,6 +30,18 @@ assert.equal(ambiguousCurrency.length, 1);
 assert.equal(ambiguousCurrency[0].package_sale_price, 205);
 
 
+const explicitFieldRow = extractPriceCandidates("اريال 50 جرام - 32 كيس - 134.60");
+assert.equal(explicitFieldRow.length, 1);
+assert.equal(explicitFieldRow[0].product_text, "اريال 50 جرام",
+  "the product field must remain intact, including its size");
+assert.equal(explicitFieldRow[0].weight_g, 50);
+assert.equal(explicitFieldRow[0].package_description, "32 كيس");
+assert.equal(explicitFieldRow[0].pack_count, 32);
+assert.equal(explicitFieldRow[0].package_sale_price, 134.60);
+assert.equal(explicitFieldRow[0].price_kind, "wholesale_candidate");
+assert.equal(explicitFieldRow[0].needs_review, true,
+  "an explicit field split does not by itself prove the amount is wholesale");
+
 const rows = extractPriceCandidates(`أريال ٢ك يدوي ٤٩٠ج ٤ق\nبريكس ارضيات ٢٥ جم ١٨.٧٥ ج\nبريكس 1 لتر مستهلك 55 ج`);
 assert.ok(rows.length >= 2);
 assert.equal(rows[0].pack_count, 4);
@@ -256,6 +268,33 @@ const historyBase = {
   pack_count: null,
   package_type: null
 };
+// Legacy PostgreSQL NUMERIC values arrive as strings (for example "9000.000"),
+// while newly parsed values are JavaScript numbers. They must produce one identity.
+const legacyNumericRow = {
+  brand_key: null,
+  product_text: "صابون جديد",
+  price_kind: "wholesale",
+  weight_g: "500.000",
+  volume_ml: null,
+  offer_extra_weight_g: null,
+  package_type: null,
+  unit_price_type: "بالكرتونة"
+};
+const currentNumericRow = { ...legacyNumericRow, weight_g: 500 };
+assert.equal(productIdentityKey(legacyNumericRow), productIdentityKey(currentNumericRow),
+  "numeric dimensions from PostgreSQL and parser values must normalize to the same identity");
+assert.equal(classifyObservationChange(
+  { ...legacyNumericRow, package_sale_price: "42.00" },
+  { ...currentNumericRow, package_sale_price: 45 }
+), "price_change", "a legacy row without a stored identity must compare as a price change");
+assert.notEqual(productIdentityKey(currentNumericRow), productIdentityKey({ ...currentNumericRow, weight_g: 600 }),
+  "different weights must keep separate product identities");
+assert.notEqual(productIdentityKey(currentNumericRow), productIdentityKey({ ...currentNumericRow, price_kind: "retail" }),
+  "wholesale and retail must keep separate product identities");
+assert.notEqual(productIdentityKey(currentNumericRow), productIdentityKey({ ...currentNumericRow, unit_price_type: "بالقطعة" }),
+  "piece and carton units must keep separate product identities");
+assert.notEqual(productIdentityKey(currentNumericRow), productIdentityKey({ ...currentNumericRow, package_type: "sachet" }),
+  "different package types must keep separate product identities");
 assert.equal(classifyObservationChange(null, historyBase), "new_observation");
 assert.equal(classifyObservationChange(historyBase, { ...historyBase }), "same_observation");
 assert.equal(classifyObservationChange(historyBase, { ...historyBase, package_sale_price: 500 }), "price_change");
@@ -265,6 +304,7 @@ assert.equal(classifyObservationChange(historyBase, { ...historyBase, brand_key:
 assert.equal(classifyObservationChange(historyBase, { ...historyBase, price_kind: "retail", product_identity_key: "pearl|بيرل اوتوماتيك|retail" }), "new_observation");
 assert.equal(parsePackageType("شكارة 10 ك"), "sack");
 assert.equal(parsePackageType("كيس 50 جم"), "sachet");
+assert.equal(parsePackageType("32 أكياس"), "sachet", "plural Arabic bag wording must resolve to sachet packaging");
 assert.equal(parsePackageType("9 ك"), null);
 assert.equal(productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 5 ك" }), productIdentityKey({ ...historyBase, product_text: "بيرل أوتوماتيك 9 ك" }), "normalized product wording should not alone change the stable identity when dimensions are equal");
 assert.notEqual(

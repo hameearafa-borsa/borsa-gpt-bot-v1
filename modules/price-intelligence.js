@@ -34,8 +34,14 @@ function classifyPriceKind(text) {
 }
 
 function parsePackCount(text) {
-  const s = toAsciiDigits(text);
-  const m = s.match(PACK_RE) || s.match(PACK_ANY_RE);
+  // Telegram and invoice exports often wrap each token in Markdown emphasis,
+  // leaving punctuation between the count and its Arabic package unit.
+  const s = toAsciiDigits(String(text || ""))
+    .replace(/[*_`]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const m = s.match(PACK_RE) || s.match(PACK_ANY_RE) ||
+    s.match(/(?:^|\s)(\d+)\s*(?:كيس|جوال|شكاره|شكارة|زجاجه|زجاجة|زجاجات|جركن|عبوه|عبوة|عبوات|قطعه|قطعة|قط|ق)(?=\s|$|[،,;])/iu);
   if (!m) return null;
   const n = m[1] ?? m[2];
   return n ? Number(n) : null;
@@ -221,7 +227,7 @@ function parseInvoiceTable(text) {
     const price = Number(amountMatch[1].replace(/,/g, ""));
     if (!Number.isFinite(price) || price <= 0 || price >= 100000) return;
 
-    const packCount = parsePackCount(rawProduct);
+    const packCount = parsePackCount(rawProduct.replace(/\*\*/g, ""));
     const quantityMatch = toAsciiDigits(rawProduct).match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|غرام|g|لتر|ل|liter|l|مل|ملل|ml)/iu);
     const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
     const productText = rawProduct
@@ -304,6 +310,45 @@ function isConversationalNumericNoise(line) {
   return conversational && !productOrCommerceCue && /\d/.test(toAsciiDigits(source));
 }
 
+function parseExplicitDelimitedPriceRow(line) {
+  // Explicit three-field seller format: product name - package description - price.
+  // The separators are authoritative: preserve the product and package fields as written.
+  const fields = String(line || "").trim().split(/\s+-\s+/u);
+  if (fields.length !== 3) return null;
+  const [productText, packageText, priceText] = fields.map(value => value.trim());
+  if (!productText || !packageText || !priceText) return null;
+  const priceNumbers = numericPriceTokens(priceText);
+  if (priceNumbers.length !== 1) return null;
+  const explicitWholesalePrice = extractExplicitWholesalePrice(priceText);
+  const quantityMatch = toAsciiDigits(productText).match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ملل|ml)/iu);
+  const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
+  const packCount = parsePackCount(packageText);
+  const unitPriceType = detectUnitPriceType(packageText, packCount);
+  return {
+    raw_line: String(line || "").trim(),
+    company: null,
+    section: null,
+    product_text: productText,
+    package_description: packageText,
+    package_sale_price: explicitWholesalePrice ?? priceNumbers[0],
+    listed_base_price: null,
+    explicit_wholesale_label_price: explicitWholesalePrice,
+    consumer_price: null,
+    price_kind: explicitWholesalePrice != null ? "wholesale" : "wholesale_candidate",
+    unit_price_type: unitPriceType,
+    weight_g: quantity?.grams ?? null,
+    volume_ml: quantity?.milliliters ?? null,
+    offer_extra_weight_g: parseExtraWeight(productText + " " + packageText),
+    pack_count: packCount,
+    package_type: parsePackageType(packageText) || parsePackageType(productText),
+    confidence: explicitWholesalePrice != null ? 0.92 : 0.65,
+    needs_review: explicitWholesalePrice == null || !unitPriceType,
+    price_selection_reason: explicitWholesalePrice != null
+      ? "explicit_three_field_row_with_wholesale_label"
+      : "explicit_three_field_row_preserved_without_wholesale_confirmation"
+  };
+}
+
 function extractPriceCandidates(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const invoiceRows = parseInvoiceTable(text);
@@ -318,6 +363,8 @@ function extractPriceCandidates(text) {
 
   for (const line of lines) {
     if (isConversationalNumericNoise(line)) continue;
+    const explicitRow = parseExplicitDelimitedPriceRow(line);
+    if (explicitRow) { out.push(explicitRow); continue; }
     if (/^\/|^[-_=.*]+$/.test(line)) continue;
     if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
 
@@ -463,7 +510,7 @@ function extractPriceCandidates(text) {
 function parsePackageType(text) {
   const s = normalizeArabic(text);
   if (/(?:شكاره|شوال)/u.test(s)) return "sack";
-  if (/(?:كيس|ساشيه)/u.test(s)) return "sachet";
+  if (/(?:كيس|اكياس|ساشيه|ساشيهات)/u.test(s)) return "sachet";
   return null;
 }
 
@@ -481,10 +528,18 @@ function productIdentityKey(row) {
   // Product identity describes the item itself, not the supplier's temporary carton configuration.
   // Keep size, extra free weight and package type in identity, but track carton count per observation:
   // promotions and carton-merging can change count without changing the underlying product.
+  const numericDimension = value => {
+    if (value == null || value === "") return "";
+    const number = Number(value);
+    return Number.isFinite(number) ? String(number) : String(value);
+  };
   const dimensions = [
-    row?.weight_g, row?.volume_ml, row?.offer_extra_weight_g,
-    row?.package_type, row?.unit_price_type
-  ].map(value => value == null || value === "" ? "" : String(value));
+    numericDimension(row?.weight_g),
+    numericDimension(row?.volume_ml),
+    numericDimension(row?.offer_extra_weight_g),
+    row?.package_type == null || row.package_type === "" ? "" : String(row.package_type),
+    row?.unit_price_type == null || row.unit_price_type === "" ? "" : String(row.unit_price_type)
+  ];
   // Piece and carton prices are different commercial units and must never
   // share a price history or inherit each other's carton count.
   return [String(row?.brand_key || ""), stableName, String(row?.price_kind || ""), ...dimensions].join("|");

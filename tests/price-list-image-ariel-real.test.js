@@ -1,0 +1,57 @@
+"use strict";
+const assert = require("node:assert/strict");
+const fs = require("node:fs");
+const path = require("node:path");
+const sharp = require("sharp");
+const { deterministicList, parseListMetadata } = require("../modules/price-list");
+const { renderPriceListImages } = require("../modules/price-list-image");
+const ARIEL_PAGE_SIZE = 25;
+
+(async () => {
+  const fixture = fs.readFileSync(path.join(__dirname, "fixtures-ariel-nov-2026.txt"), "utf8");
+  const metadata = parseListMetadata(fixture);
+  const parsed = deterministicList(fixture);
+  const accepted = parsed.filter(row => row.decision === "accepted");
+  const review = parsed.filter(row => row.decision === "review");
+  const skipped = parsed.filter(row => row.decision === "skipped");
+  assert.ok(metadata.company, "Ariel company must be recognized");
+  assert.ok(/نوفمبر 2026/.test(metadata.month), "November 2026 must be recognized");
+  assert.equal(parsed.length, 77, "all supplied Ariel source rows must be retained for audit");
+  assert.ok(accepted.length >= 65, "most rows should be deterministically accepted");
+  assert.equal(skipped.length, 0, "no priced source row should disappear silently");
+  assert.ok(accepted.some(row => /اريال 50 جرام/.test(row.raw_line) && /32 كيس/.test(row.package_label)), "bag counts must survive in labels");
+  const ariel50 = accepted.find(row => /اريال 50 جرام/.test(row.raw_line));
+  assert.equal(ariel50.product, "اريال 50 جرام", "the first dash-delimited field is the complete product name");
+  assert.equal(ariel50.package_label, "32 كيس", "the second dash-delimited field is the complete package description");
+  assert.equal(ariel50.package_sale_price, 134.6, "the third dash-delimited field is the price");
+  const diaper1 = accepted.find(row => /بامبرز ماكسي مقاس 1/.test(row.raw_line));
+  assert.equal(diaper1.product, "بامبرز ماكسي مقاس 1", "the complete first field must remain the diaper product identity");
+  assert.equal(diaper1.package_label, "3 شنطة × 60 حفاضة", "the complete second field must remain the diaper package description");
+  assert.ok(accepted.some(row => /بامبرز ماكسي مقاس 1/.test(row.raw_line) && /3 شنطة/.test(row.package_label) && /60 حفاضة/.test(row.package_label)), "diaper bundle composition must be preserved");
+  assert.ok(accepted.some(row => /فيري اقراص 20/.test(row.raw_line) && /5 وحدات/.test(row.package_label)), "unit counts must be retained");
+  assert.ok(accepted.some(row => /ماكينة بلوتو بلس 10\+4/.test(row.raw_line)), "promotional multipacks must remain in product identity");
+  assert.ok(accepted.some(row => /شامبو بانتين 200 مل/.test(row.raw_line) && row.unit_price_type === "بالقطعة"), "explicit piece prices must remain piece prices");
+  const arielGel = accepted.find(row => /اريال جل 1.8 لتر/.test(row.raw_line));
+  assert.equal(arielGel.product, "اريال جل 1.8 لتر", "Ariel gel capacity belongs in the product name");
+  assert.equal(arielGel.package_label, "4 جركن", "Ariel gel carton count belongs in package description");
+  assert.ok(arielGel.unit_price_type === "بالكرتونة", "company list carton price inference must be retained");
+  const automatic = accepted.find(row => /اريال اتوماتيك 2.5 كيلو/.test(row.raw_line));
+  assert.equal(automatic.product, "اريال اتوماتيك 2.5 كيلو", "automatic product name and capacity must remain complete");
+  assert.equal(automatic.package_label, "4 كيس", "automatic bag count belongs only in package description");
+  const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType || "قائمة أسعار", pageSize: ARIEL_PAGE_SIZE });
+  assert.equal(images.length, Math.ceil(accepted.length / ARIEL_PAGE_SIZE), "long Ariel list should split into readable pages");
+  const outputDir = process.env.PRICE_LIST_TEST_OUTPUT_DIR;
+  if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
+  for (const [index, png] of images.entries()) {
+    if (outputDir) fs.writeFileSync(path.join(outputDir, `ariel-nov-2026-page-${index + 1}.png`), png);
+    assert.deepEqual([...png.subarray(0, 8)], [137,80,78,71,13,10,26,10], "output must be a real PNG");
+    const meta = await sharp(png).metadata();
+    assert.equal(meta.format, "png");
+    assert.equal(meta.width, 1200);
+    assert.equal(meta.channels, 4);
+    assert.ok(meta.height >= 250 && meta.height <= 1700, "long-form Telegram page must retain readable row height");
+    if (index < images.length - 1) assert.equal(meta.height, 164 + 42 + ARIEL_PAGE_SIZE * 52 + 85, "full pages must use the expanded long-form canvas");
+    assert.ok(png.length > 1000);
+  }
+  console.log(`Ariel November 2026 visual QA: OK (${parsed.length} source rows, ${accepted.length} accepted, ${review.length} review, ${skipped.length} skipped, ${images.length} pages)`);
+})().catch(error => { console.error(error); process.exitCode = 1; });

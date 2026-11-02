@@ -91,7 +91,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "بيانات جملة",
     "الاصناف | عدد القطع | السعر الصافي بعد الخصم 2% | صافي سعر القطعة",
     ...monitorStructuredRows
-  ].join("\\n");
+  ].join("\n");
   assert.equal(isBulkPriceList(monitorStructuredText), true,
     "a structured ASC2 table must enter the bulk monitor path");
   const structuredInserts = [];

@@ -40,6 +40,7 @@ assert.equal(extractPackageLabel("ماكينة ناست حصائر 48 ماكين
     assert.equal(png.toString(), "mock-png");
     assert.ok(capturedSvg.includes("شركة اختبار"), "Arabic company heading must remain logical Unicode in SVG");
     assert.ok(capturedSvg.includes("بورصة المنظفات"), "watermark must retain readable Arabic Unicode");
+    assert.doesNotMatch(capturedSvg, /منتجات متنوعة/, "generic category labels must not be repeated above each product");
     assert.match(capturedSvg, /<tspan direction="auto" unicode-bidi="plaintext">/,
       "SVG must delegate Arabic shaping and mixed-direction layout to its text engine");
     assert.doesNotMatch(capturedSvg, /[\uFB50-\uFDFF\uFE70-\uFEFF]/,

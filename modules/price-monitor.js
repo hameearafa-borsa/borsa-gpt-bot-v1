@@ -192,6 +192,22 @@ async function observe({ pool, message, merchantId = null, registry, requireCata
   const hasExplicitRetailContext = /(?:مستهلك|قطاعي|تجزئه|تجزئة|للمستهلك)/iu.test(text);
   const hasMultiProductContext = candidates.length >= 2 && !hasExplicitRetailContext;
   for (const candidate of candidates) {
+    if (requireCatalogMatch) {
+      let officialReference = null;
+      try {
+        officialReference = await findOfficialCatalogMatch(pool, candidate);
+      } catch {
+        // Fail closed: a member observation cannot seed history if the official catalog is unavailable.
+        continue;
+      }
+      if (!officialReference) continue;
+      candidate.reference_observation_id = officialReference.id;
+      candidate.price_kind = officialReference.price_kind;
+      candidate.unit_price_type = officialReference.unit_price_type;
+      if (candidate.pack_count == null && officialReference.pack_count != null) {
+        candidate.pack_count = Number(officialReference.pack_count);
+      }
+    }
     if (candidate.price_kind === "retail") continue;
     const learned = resolveFromMemory(candidate, priceMemory);
     if (learned.matched && learned.resolved) {

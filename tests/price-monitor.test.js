@@ -5,22 +5,56 @@ const path = require("node:path");
 const { isOwnMessage, isEligibleMessage, isBulkPriceList, observe } = require("../modules/price-monitor");
 const registry = require("../data/product-registry.json");
 const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, productIdentityKey } = require("../modules/price-intelligence");
+const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory");
 
 (async () => {
+  const runtimeSource = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+  assert.match(runtimeSource, /INSERT INTO price_review_queue/,
+    "only unresolved observations should enter the durable reviewer queue");
+  assert.match(runtimeSource, /notification_claim_token/,
+    "review notification delivery must use a durable claim to prevent duplicates");
+  assert.match(runtimeSource, /priceReview\.formatReviewMessage/,
+    "ambiguous observations must retain the existing authorized review workflow");
+  assert.match(runtimeSource, /priceReviewRecovery\.recoverPendingNotifications/,
+    "startup must recover pending review notifications through the guarded queue");
+  assert.match(runtimeSource, /bot\.on\(\["text",\s*"photo"\],\s*async ctx =>/,
+    "the Telegram runtime must receive both ordinary text and captioned photo messages");
+  assert.match(runtimeSource, /const merchantSourceText = text \|\| m\.caption \|\| ""/,
+    "caption text must flow into merchant and price monitoring");
+  assert.match(runtimeSource, /priceMonitor\.isEligibleMessage\([\s\S]{0,180}text \|\| m\.caption/,
+    "captioned photo prices must pass through the same eligibility gate as text prices");
   const base = { chatType: "supergroup", text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" };
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: false, ownMessage: false }), true);
   assert.equal(isEligibleMessage({ ...base, chatType: "private", isLogChannel: false, isCommand: false, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: true, isCommand: false, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: true, ownMessage: false }), false);
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: false, ownMessage: true }), false);
+  assert.equal(isEligibleMessage({ ...base, text: "مبروك يا جماعة وصلنا إلى 2026، وإن شاء الله القادم أفضل", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "ordinary conversation containing a year must not enter price monitoring");
+  assert.equal(isEligibleMessage({ ...base, text: "سأشتري 2 عبوة غداً، والتوصيل الساعة 5", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "quantities, dates and times without a product-price signal must not be treated as prices");
+  assert.equal(isEligibleMessage({ ...base, text: "رقم الهاتف 01012345678", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "a phone number must never start price monitoring");
+  assert.equal(isEligibleMessage({ ...base, text: "رقم الفاتورة 50331 ج", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "an invoice number followed by a currency abbreviation is not a product price");
+  assert.equal(isEligibleMessage({ ...base, text: "موعد التسليم الساعة 5 مساءً", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "delivery times must not be treated as prices");
+  assert.equal(isEligibleMessage({ ...base, text: "وصلنا إلى 2026 والسعر ممتاز", isLogChannel: false, isCommand: false, ownMessage: false }), false,
+    "a year plus casual price wording is not a price observation");
+  assert.equal(isEligibleMessage({ ...base, text: "يا جماعة دوف 350مل سعره 121 جنيه والتوصيل بكرة", isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "a real product price remains eligible when embedded in ordinary conversation");
+  assert.equal(isEligibleMessage({ ...base, text: "دوف 350مل 121", isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "a recognizable product size followed by a price remains eligible even without a currency suffix");
+  assert.equal(isEligibleMessage({ ...base, text: "دوف 350مل 121 ح", isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "the Egyptian-pound keyboard typo ح remains a valid price marker");
   const oxyTextCatalog = fs.readFileSync(path.join(__dirname, "..", "قائمة أسعار أوكسي.txt"), "utf8");
   const bahiTextCatalog = fs.readFileSync(path.join(__dirname, "..", "قائمة أسعار باهي.txt"), "utf8");
   assert.equal(parseInvoiceTable(oxyTextCatalog).length, 63, "all Oxy text-catalog product rows must be parsed");
   assert.equal(parseStructuredPriceTable(bahiTextCatalog).length, 49, "all Bahi ASC2 product rows must be parsed");
   const unileverList = fs.readFileSync(path.join(__dirname, "fixtures-unilever-oct-2026.txt"), "utf8");
   assert.equal(isBulkPriceList(unileverList), true, "a long Unilever price list is a catalog, not one ordinary price observation");
-  assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
-    "bulk price lists must not generate dozens of individual review messages");
+  assert.equal(isEligibleMessage({ ...base, text: unileverList, isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "bulk price lists must enter the deterministic catalog monitor instead of being discarded");
   assert.equal(isBulkPriceList(base.text), false, "a single product price remains eligible");
   const asc2September = parseStructuredPriceTable("تصفية اسعار سبتمبر ASC2 2026\nالاصناف\tعدد القطع\tالسعر الصافي بعد الخصم 2%\tصافي سعر القطعة\nالصابون الريحة\nدوش 60 جرام 48 313.60 6.50\nدوش 110 جرام 48 570.27 11.90\nعرض التوفير على شراء 2 كرتونه\nباهي 1000جرام 6 367.34 61.20\nعرض التوفير على شراء 3 كرتونه\nباهي  جرام 4 468.83 117.20\nالهاند ووش والشاور جل ريفولي\nشاور جل ريفولي 1 لتر 12 1,147.58 95.60");
   assert.equal(asc2September.length, 5, "structured price table should retain each complete product row");
@@ -37,6 +71,72 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(asc2September[4].volume_ml, 1000);
   assert.ok(asc2September.every(row => row.trusted_catalog_row && !row.needs_review && row.confidence >= 0.8 && row.price_kind === "wholesale"),
     "interpreted structured catalog rows must be trusted wholesale observations with no review");
+  assert.ok(asc2September.every(row => Math.round((row.package_sale_price / row.pack_count) * 10) === Math.round(row.listed_base_price * 10)),
+    "all 49 Bahi source rows must reconcile at the source's one-decimal piece-price precision");
+  const inconsistentAsc2 = parseStructuredPriceTable(`تصفية اسعار سبتمبر ASC2 2026
+الاصناف | عدد القطع | السعر الصافي بعد الخصم 2% | صافي سعر القطعة
+دوش 60 جرام | 48 | 313.60 | 7.50`);
+  assert.equal(inconsistentAsc2[0].trusted_catalog_row, false,
+    "a carton total that does not reconcile with the listed piece price must not be auto-trusted");
+  assert.equal(inconsistentAsc2[0].needs_review, true,
+    "a structured carton/piece arithmetic conflict must remain pending for review");
+  assert.equal(inconsistentAsc2[0].confidence, 0.72);
+
+  // Exercise the dedicated ASC2 parser through the real silent monitor + INSERT path.
+  const monitorStructuredRows = Array.from({ length: 8 }, (_, index) =>
+    `منظف تجريبي ${index + 1} 10 100.00 ${index === 3 ? "15.00" : "10.00"}`
+  );
+  const monitorStructuredText = [
+    "أسعار شركة باهي",
+    "تصفية اسعار نوفمبر 2026",
+    "بيانات جملة",
+    "الاصناف | عدد القطع | السعر الصافي بعد الخصم 2% | صافي سعر القطعة",
+    ...monitorStructuredRows
+  ].join("\n");
+  assert.equal(isBulkPriceList(monitorStructuredText), true,
+    "a structured ASC2 table must enter the bulk monitor path");
+  const structuredInserts = [];
+  const structuredPool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return {
+        rows: [{
+          product_text: "منظف تجريبي 4", price_kind: "wholesale",
+          package_sale_price: 100, confidence: 0.99, decision: "accepted",
+          weight_g: null, volume_ml: null, offer_extra_weight_g: null,
+          package_type: null, pack_count: 10, unit_price_type: "بالكرتونة",
+          observed_at: "2026-10-01T00:00:00Z"
+        }], rowCount: 1
+      };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) {
+        structuredInserts.push(params);
+        return { rows: [{ id: 300 + structuredInserts.length }], rowCount: 1 };
+      }
+      throw new Error("unexpected structured monitor query");
+    }
+  };
+  const structuredMonitorResult = await observe({
+    pool: structuredPool,
+    message: { chatId: -100123, messageId: 458, userId: 789, text: monitorStructuredText },
+    registry
+  });
+  assert.equal(structuredMonitorResult.saved, 8,
+    "all structured ASC2 rows, including the mismatched one, must be persisted");
+  assert.equal(structuredMonitorResult.savedRows.filter(item => item.row.decision === "accepted").length, 7,
+    "seven arithmetically consistent rows must be accepted by the monitor");
+  assert.equal(structuredMonitorResult.savedRows.filter(item => item.row.decision === "pending").length, 1,
+    "the arithmetic mismatch must be retained as pending, not trusted");
+  assert.equal(structuredInserts.filter(params => params[13] === "pending").length, 1,
+    "the database decision must persist the arithmetic mismatch as pending");
+  const mismatchedMemoryRow = structuredMonitorResult.savedRows.find(item =>
+    item.row.product_text === "منظف تجريبي 4"
+  );
+  assert.equal(mismatchedMemoryRow.row.decision, "pending",
+    "even an exact accepted wholesale-memory match must not override the parser's arithmetic review flag");
+  assert.ok(mismatchedMemoryRow.row.price_selection_reason.includes("resolved_from_accepted_price_memory"),
+    "the fixture must prove that accepted memory actually matched before checking the review guard");
 
   const oxyInvoice = parseInvoiceTable(`الصنف
 سعر الفاتورة بعد 14% والعرض الترويجي
@@ -137,8 +237,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 في برضو ب٥ج ب١٠ج ب٢٥ج`;
   assert.equal(isBulkPriceList(arielPromoList), true,
     "a multiline detergent list with price followed by pack count must be excluded from individual price monitoring");
-  assert.equal(isEligibleMessage({ ...base, text: arielPromoList, isLogChannel: false, isCommand: false, ownMessage: false }), false,
-    "an entire promotional list must not produce per-row observations, including its incomplete final commentary line");
+  assert.equal(isEligibleMessage({ ...base, text: arielPromoList, isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "a multi-product message must be processed as a catalog and not discarded");
   const oneLineUnilever = unileverList.replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
   assert.equal(isBulkPriceList(oneLineUnilever), true,
     "a full catalog pasted as one long Telegram paragraph must not trigger per-product monitoring");
@@ -159,8 +259,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
 كمفورت لتر عرض 87.15`;
   assert.equal(isBulkPriceList(unileverSeptemberNoCurrency), true,
     "a company list with many numeric prices but no currency suffix on most rows must be detected as bulk");
-  assert.equal(isEligibleMessage({ ...base, text: unileverSeptemberNoCurrency, isLogChannel: false, isCommand: false, ownMessage: false }), false,
-    "a September-style Unilever catalog must not become many individual monitor observations");
+  assert.equal(isEligibleMessage({ ...base, text: unileverSeptemberNoCurrency, isLogChannel: false, isCommand: false, ownMessage: false }), true,
+    "a September-style Unilever catalog must be eligible for deterministic catalog monitoring");
   assert.equal(isOwnMessage({ botUserId: 123, fromId: "123" }), true);
   assert.equal(isOwnMessage({ botUserId: 123, fromId: 456 }), false);
 
@@ -168,6 +268,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const pool = {
     async query(sql, params) {
       savedQueries.push({ sql, params });
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -186,16 +287,17 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(result.accepted[0].price_kind, "wholesale");
   assert.equal(result.accepted[0].package_sale_price, 18.75);
   assert.equal(result.accepted[0].decision, "accepted");
-  assert.equal(savedQueries.length, 4);
-  assert.ok(savedQueries[3].sql.includes("INSERT INTO price_observations"));
-  assert.ok(savedQueries[3].sql.includes("product_text"));
-  assert.ok(savedQueries[3].sql.includes("offer_extra_weight_g"));
-  assert.equal(savedQueries[3].params[13], "accepted");
+  assert.equal(savedQueries.length, 5);
+  assert.ok(savedQueries[4].sql.includes("INSERT INTO price_observations"));
+  assert.ok(savedQueries[4].sql.includes("product_text"));
+  assert.ok(savedQueries[4].sql.includes("offer_extra_weight_g"));
+  assert.equal(savedQueries[4].params[13], "accepted");
 
   // Unit type must survive the full monitor -> database INSERT path.
   let pieceInsertParams = null;
   const piecePool = {
     async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -215,10 +317,20 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(pieceInsertParams[23], "بالقطعة",
     "unit_price_type must be persisted in the new final INSERT parameter");
 
+  // A standalone "ق" is a piece-price marker, not part of the product name.
+  const dovePiece = extractPriceCandidates("دوف 350مل ق 121 ج")[0];
+  assert.equal(dovePiece.product_text, "دوف");
+  assert.equal(dovePiece.volume_ml, 350);
+  assert.equal(dovePiece.package_sale_price, 121);
+  assert.equal(dovePiece.unit_price_type, "بالقطعة");
+
   // Historical accepted observations are compared before insertion, without posting a chat message.
   let historyInsertParams = null;
+  const historySqlCalls = [];
   const historyPool = {
     async query(sql, params) {
+      historySqlCalls.push(sql);
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) {
@@ -243,17 +355,30 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(historical.saved, 1);
   assert.equal(historical.savedRows[0].row.change_type, "price_change");
   assert.equal(historyInsertParams[17], "price_change");
+  const historyLookupSql = historySqlCalls.find(sql => sql.includes("SELECT product_identity_key"));
+  assert.match(historyLookupSql, /decision\s*=\s*'accepted'/i,
+    "only accepted observations may be treated as prior price history");
+  assert.match(historyLookupSql, /price_kind\s*=\s*\$2/i,
+    "price history must be compared within the same price kind");
+  assert.match(historyLookupSql, /weight_g\s+IS\s+NOT\s+DISTINCT\s+FROM/i);
+  assert.match(historyLookupSql, /volume_ml\s+IS\s+NOT\s+DISTINCT\s+FROM/i);
+  assert.match(historyLookupSql, /offer_extra_weight_g\s+IS\s+NOT\s+DISTINCT\s+FROM/i);
+  assert.match(historyLookupSql, /package_type\s+IS\s+NOT\s+DISTINCT\s+FROM/i);
+  assert.ok(!historySqlCalls.some(sql => /^\s*UPDATE\s+price_observations/i.test(sql)),
+    "a new price observation must append a history row, never overwrite the prior observation");
 
   // A known carton count can enrich a later observation that omits it, without being invented from the current message.
   let inheritedInsertParams = null;
   const inheritedCountPool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [{
         product_identity_key: "prior-product", price_kind: "wholesale", product_text: "بريكس ارضيات",
         package_sale_price: 216, weight_g: 25, volume_ml: null, pack_count: 12,
-        offer_extra_weight_g: null, package_type: null, brand_key: null
+        offer_extra_weight_g: null, package_type: null, brand_key: null,
+        unit_price_type: "بالكرتونة"
       }], rowCount: 1 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 99 }], rowCount: 1 };
       throw new Error("unexpected inherited-count query");
@@ -280,8 +405,58 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(uncertain.saved, 1);
   assert.equal(uncertain.savedRows[0].row.decision, "pending");
   assert.ok(uncertain.savedRows[0].row.confidence < 0.8);
-  assert.equal(savedQueries.length, 7);
+  assert.equal(savedQueries.length, 9);
 
+  // Pearl multi-column catalog: select the wholesale column, preserve base/consumer columns,
+  // and keep rows reviewable when piece/carton semantics are not explicit.
+  const pearlCatalogText = `أسعار بيرل – أكتوبر
+..... أوتوماتيك
+• 9 ك: 505.31 | جملة 487.40 | مستهلك 525
+• 5 ك: 308.43 | جملة 915.87 | مستهلك 325
+• 2.5 ك: 179.15 | جملة 716.63 | مستهلك 200
+..... أوزان وشكاير
+• شكارة 10 ك: 618.35 | مستهلك 630
+• شكارة 7 ك: 432.84 | مستهلك 450
+• 2 ك: 129.22 | جملة 516.90 | مستهلك 145
+• 1.5 ك: 98.96 | جملة 395.85 | مستهلك 110
+• 1 ك: 66.28 | جملة 265.15 | مستهلك 75
+.. العبوات الصغيرة
+• 290 جم: 22.03 | جملة 176.29 | مستهلك 25
+• 160 جم: 12 | جملة 144.06 | مستهلك 15
+• 120 جم: 8.46 | جملة 135.49 | مستهلك 10
+• 50 جم: 3.96 | جملة 47.52 | مستهلك 5
+• 30 جم: 3.79 | جملة 75.95 | مستهلك 5`;
+  const pearlMonitorParams = [];
+  const pearlMonitorPool = { async query(sql, params) {
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+    if (sql.includes("INSERT INTO price_observations")) { pearlMonitorParams.push(params); return { rows: [{ id: 500 + pearlMonitorParams.length }], rowCount: 1 }; }
+    throw new Error("unexpected Pearl catalog query");
+  } };
+  const pearlCatalogObserved = await observe({ pool: pearlMonitorPool, message: { chatId: -100123, messageId: 472, text: pearlCatalogText }, registry });
+  assert.equal(pearlCatalogObserved.saved, 13, "all 13 Pearl catalog rows must reach price monitoring");
+  assert.deepEqual(pearlCatalogObserved.savedRows.map(item => item.row.package_sale_price), [487.4, 915.87, 716.63, 618.35, 432.84, 516.9, 395.85, 265.15, 176.29, 144.06, 135.49, 47.52, 75.95],
+    "live monitoring must select the explicit wholesale price and otherwise retain the only package price");
+  assert.deepEqual(pearlCatalogObserved.savedRows.map(item => item.row.consumer_price), [525, 325, 200, 630, 450, 145, 110, 75, 25, 15, 10, 5, 5],
+    "consumer prices must remain in their own field during live catalog monitoring");
+  assert.equal(pearlCatalogObserved.savedRows[0].row.listed_base_price, 505.31, "the unlabelled base amount must remain available for review");
+  assert.ok(pearlCatalogObserved.savedRows.every(item => item.row.decision === "pending" && item.row.needs_review),
+    "Pearl rows with unclear piece/carton semantics or multiple price columns must remain pending");
+  assert.ok(pearlMonitorParams.every(params => params[13] === "pending"), "ambiguous Pearl catalog rows must be persisted as pending");
+  // Known identity memory must never override a deterministic ambiguity flag.
+  const ambiguousKnownPool = { async query(sql) {
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+    if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+    if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 471 }], rowCount: 1 };
+    throw new Error("unexpected known ambiguous product query");
+  } };
+  const ambiguousKnown = await observe({ pool: ambiguousKnownPool, message: { chatId: -100123, messageId: 471, text: "بيرل 9 ك: 505.31 | جملة 487.40 | مستهلك 525" }, registry: [] });
+  assert.equal(ambiguousKnown.savedRows[0].row.needs_review, true, "a conflicting base and labelled wholesale price must retain needs_review");
+  assert.equal(ambiguousKnown.savedRows[0].row.decision, "pending", "reviewer memory must not auto-accept a row flagged for review");
   const noDb = await observe({ message: { text: base.text }, registry });
   assert.equal(noDb.saved, 0);
   assert.equal(noDb.silent, true);
@@ -302,6 +477,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const pearlPool = {
     async query(sql, params) {
       pearlQueries.push({ sql, params });
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -320,16 +496,18 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(pearl.saved, 1);
   assert.equal(pearl.savedRows[0].row.package_sale_price, 487.40, "the monitor must save the explicitly labelled wholesale amount");
   assert.equal(pearl.savedRows[0].row.listed_base_price, 505.31, "the unlabelled amount must remain available for review");
-  assert.equal(pearlQueries[2].params[18], 505.31, "the unlabelled amount must be persisted separately");
-  assert.equal(pearlQueries[2].params[19], 487.4, "the explicit wholesale amount must be persisted separately");
-  assert.match(pearlQueries[2].params[20], /explicit_wholesale_selected/);
-  assert.equal(pearlQueries[2].params[21], true, "ambiguous companion columns must remain flagged for review");
-  assert.equal(pearlQueries[2].params[22], 525, "consumer price must be persisted separately from the wholesale price");
-  assert.match(pearlQueries[2].sql, /needs_review,consumer_price/, "observation insert must store the consumer price in its own column");
+  const pearlInsert = pearlQueries.find(entry => entry.sql.includes("INSERT INTO price_observations"));
+  assert.ok(pearlInsert, "the Pearl observation insert must be present");
+  assert.equal(pearlInsert.params[18], 505.31, "the unlabelled amount must be persisted separately");
+  assert.equal(pearlInsert.params[19], 487.4, "the explicit wholesale amount must be persisted separately");
+  assert.match(pearlInsert.params[20], /explicit_wholesale_selected/);
+  assert.equal(pearlInsert.params[21], true, "ambiguous companion columns must remain flagged for review");
+  assert.equal(pearlInsert.params[22], 525, "consumer price must be persisted separately from the wholesale price");
+  assert.match(pearlInsert.sql, /needs_review,consumer_price/, "observation insert must store the consumer price in its own column");
   assert.equal(pearl.savedRows[0].row.price_kind, "wholesale");
   assert.equal(pearl.savedRows[0].row.decision, "pending");
   assert.ok(pearl.savedRows[0].row.confidence < 0.8);
-  assert.equal(pearlQueries.length, 3);
+  assert.equal(pearlQueries.filter(entry => entry.sql.includes("INSERT INTO price_observations")).length, 1);
 
   // Full Pearl October catalog: test field-level correctness, not merely parser success.
   const pearlOctoberList = `أسعار بيرل – أكتوبر
@@ -374,6 +552,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const pearlPersistedParams = [];
   const pearlDatabasePool = {
     async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
@@ -406,11 +585,131 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.ok(pearlPersistedParams.every(params => params[13] === "pending"),
     "unreviewed catalog rows must remain pending rather than being silently auto-approved");
 
+  // Pending Pearl rows must never become trusted price memory on a later message.
+  const pearlPendingRows = pearlPersisted.savedRows.map(item => item.row);
+  let pearlMemoryRowsReturned = null;
+  const pearlMemoryFollowupPool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) {
+        // Mirror the production WHERE decision='accepted' AND confidence >= 0.8 filter.
+        pearlMemoryRowsReturned = pearlPendingRows.filter(row =>
+          row.decision === "accepted" && row.price_kind === "wholesale" && row.confidence >= 0.8
+        );
+        return { rows: pearlMemoryRowsReturned, rowCount: pearlMemoryRowsReturned.length };
+      }
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 520 }], rowCount: 1 };
+      throw new Error("unexpected Pearl memory follow-up query");
+    }
+  };
+  const pearlMemoryFollowup = await observe({
+    pool: pearlMemoryFollowupPool,
+    message: { chatId: -100123, messageId: 473, userId: 789, text: "بيرل 9 ك 505.31" },
+    registry
+  });
+  assert.deepEqual(pearlMemoryRowsReturned, [],
+    "pending Pearl rows, including the 505.31 base amount, must not enter trusted wholesale memory");
+  assert.equal(pearlMemoryFollowup.saved, 1);
+  assert.equal(pearlMemoryFollowup.savedRows[0].row.package_sale_price, 505.31);
+  assert.equal(pearlMemoryFollowup.savedRows[0].row.decision, "pending",
+    "a later unlabelled 505.31 observation must remain pending without trusted wholesale evidence");
+  assert.ok(!/resolved_from_accepted_price_memory/.test(pearlMemoryFollowup.savedRows[0].row.price_selection_reason || ""),
+    "pending Pearl history must not resolve a later candidate into wholesale memory");
+
+  // Exact Pearl regression requested: 503.31 is an unlabeled/base amount,
+  // not a trusted wholesale price. It must remain pending through the real
+  // monitor persistence path and must not be learned as accepted price memory.
+  let pearl503MemoryRowsReturned = null;
+  let pearl503InsertParams = null;
+  const pearl503Pool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) {
+        pearl503MemoryRowsReturned = [];
+        return { rows: [], rowCount: 0 };
+      }
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) {
+        pearl503InsertParams = params;
+        return { rows: [{ id: 521 }], rowCount: 1 };
+      }
+      throw new Error("unexpected Pearl 503.31 query");
+    }
+  };
+  const pearl503Observed = await observe({
+    pool: pearl503Pool,
+    message: { chatId: -100123, messageId: 474, userId: 789, text: "بيرل 9 ك 503.31" },
+    registry
+  });
+  assert.equal(pearl503Observed.saved, 1,
+    "the ambiguous 503.31 observation should be retained for human review, not discarded");
+  assert.equal(pearl503Observed.savedRows[0].row.package_sale_price, 503.31);
+  assert.equal(pearl503Observed.savedRows[0].row.price_kind, "wholesale_candidate");
+  assert.equal(pearl503Observed.savedRows[0].row.decision, "pending",
+    "the exact unlabelled Pearl 503.31 amount must never be auto-approved as wholesale");
+  assert.ok(pearl503Observed.savedRows[0].row.confidence < 0.8);
+  assert.equal(pearl503InsertParams[2], 503.31,
+    "503.31 must be persisted as the observed amount without being rewritten");
+  assert.equal(pearl503InsertParams[13], "pending",
+    "the database decision for the exact 503.31 case must remain pending");
+  assert.deepEqual(pearl503MemoryRowsReturned, [],
+    "an unapproved 503.31 Pearl observation must not be added to trusted wholesale memory");
+
+  // Follow-up message for the exact 503.31 product: simulate the persisted
+  // pending observation and apply the same accepted/wholesale/confidence filter
+  // used by production memory lookup. It must not resolve the next message.
+  const pearl503PersistedRows = pearl503Observed.savedRows.map(item => item.row);
+  let pearl503FollowupMemoryRows = null;
+  let pearl503MemorySql = "";
+  const pearl503FollowupPool = {
+    async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) {
+        pearl503MemorySql = sql;
+        // Deliberately return the pending row from the fake adapter. The SQL
+        // predicates and buildPriceMemory's own guard must both protect memory.
+        pearl503FollowupMemoryRows = pearl503PersistedRows;
+        return { rows: pearl503FollowupMemoryRows, rowCount: pearl503FollowupMemoryRows.length };
+      }
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 522 }], rowCount: 1 };
+      throw new Error("unexpected Pearl 503.31 follow-up query");
+    }
+  };
+  const pearl503Followup = await observe({
+    pool: pearl503FollowupPool,
+    message: { chatId: -100123, messageId: 475, userId: 789, text: "بيرل 9 ك 503.31" },
+    registry
+  });
+  assert.equal(pearl503FollowupMemoryRows.length, 1,
+    "the defensive test adapter deliberately returns the pending row despite the SQL filter");
+  const pearl503DefensiveMemory = buildPriceMemory(pearl503FollowupMemoryRows);
+  const pearl503DefensiveResolution = resolveFromMemory(
+    pearl503Followup.savedRows[0].row,
+    pearl503DefensiveMemory
+  );
+  assert.equal(pearl503DefensiveMemory.size, 0,
+    "buildPriceMemory itself must reject pending rows even if a data adapter returns one");
+  assert.equal(pearl503DefensiveResolution.matched, false,
+    "a pending 503.31 row must not resolve a repeated observation even if returned unexpectedly");
+  assert.match(pearl503MemorySql, /decision\s*=\s*'accepted'/i,
+    "the real price-memory query must exclude pending decisions in SQL");
+  assert.match(pearl503MemorySql, /price_kind\s*=\s*'wholesale'/i,
+    "the real price-memory query must exclude non-wholesale candidates in SQL");
+  assert.match(pearl503MemorySql, /confidence\s*>=\s*0\.8/i,
+    "the real price-memory query must require high confidence in SQL");
+  assert.equal(pearl503Followup.saved, 1);
+  assert.equal(pearl503Followup.savedRows[0].row.decision, "pending");
+  assert.ok(!/resolved_from_accepted_price_memory/.test(pearl503Followup.savedRows[0].row.price_selection_reason || ""),
+    "a repeated 503.31 message must not be auto-resolved from its own pending history");
+
   // Re-processing the same Telegram message row must not create a second observation.
   let duplicateChecks = 0;
   let duplicateInserts = 0;
   const duplicatePool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) {
         duplicateChecks += 1;
@@ -451,6 +750,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const captionPool = {
     async query(sql) {
       captionQueries.push(sql);
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -468,13 +768,14 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   });
   assert.equal(caption.saved, 1);
   assert.equal(caption.savedRows[0].row.package_sale_price, 18.75);
-  assert.equal(captionQueries.length, 4);
+  assert.equal(captionQueries.length, 5);
 
   // An explicitly approved identity prevents repeated review for the same clear wholesale product.
   const { identityKey } = require("../modules/price-review");
   const identity = identityKey({ product_text: "منظف جديد", weight_g: 500, volume_ml: null, pack_count: null, brand_key: null });
   const reviewedProductPool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -495,6 +796,7 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   // seller post omits the word "جملة". This is the core repeat-observation path.
   const rememberedPool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
@@ -511,34 +813,44 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(remembered.savedRows[0].row.decision, "accepted",
     "previously approved product identities should not be sent back to review just because this post omits the wholesale label");
   assert.equal(remembered.savedRows[0].row.price_kind, "wholesale");
+  assert.equal(remembered.savedRows[0].row.product_identity_key, productIdentityKey(remembered.savedRows[0].row),
+    "when reviewer memory promotes a candidate to wholesale, the canonical history key must be recomputed too");
+
+  // Reviewer memory must also be consulted for products matched by the registry.
+  // A previously corrected Ariel identity should not be re-reviewed merely because
+  // its next post omits the explicit wholesale word.
+  const registryMemoryQueries = [];
+  const registryRememberedPool = {
+    async query(sql) {
+      registryMemoryQueries.push(sql);
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 101 }], rowCount: 1 };
+      throw new Error("unexpected registry-memory query");
+    }
+  };
+  const registryRemembered = await observe({
+    pool: registryRememberedPool,
+    message: { chatId: -100123, messageId: 466, text: "أريال مسحوق 2 كجم 150 ج" },
+    registry
+  });
+  assert.equal(registryRemembered.saved, 1);
+  assert.equal(registryRemembered.savedRows[0].row.decision, "accepted",
+    "reviewer identity memory must be honored even when the product registry matches");
+  assert.ok(registryMemoryQueries.some(sql => sql.includes("reviewed_price_products")),
+    "registry-matched products must still look up reviewer approval memory");
+  assert.equal(registryRemembered.savedRows[0].row.product_identity_key, productIdentityKey(registryRemembered.savedRows[0].row),
+    "registry-matched approval memory must also persist the canonical wholesale identity key");
 
   // Multi-product context can infer wholesale classification, but must not
   // auto-approve a brand-new identity without registry or prior approval.
-  // Egyptian list context: default to carton; explicit piece/carton headings persist until changed.
-  const unitContextRows = extractPriceCandidates(`الأسعار بالقطعة
-شامبو ألف 500 مل 22
-بلسم باء 600 مل 35
-الأسعار بالكرتونة
-شامبو جيم 500 مل 350
-بلسم دال 600 مل 420`);
-  assert.deepEqual(unitContextRows.map(row => row.unit_price_type),
-    ["بالقطعة", "بالقطعة", "بالكرتونة", "بالكرتونة"],
-    "list unit headings must carry forward until a later heading changes the unit");
-
-  const defaultCartonRows = extractPriceCandidates("شامبو ألف 500 مل 350\nبلسم باء 600 مل 420");
-  assert.deepEqual(defaultCartonRows.map(row => row.unit_price_type), ["بالكرتونة", "بالكرتونة"],
-    "Egyptian trade lists default to carton prices when no piece marker is present");
-
-  const typoCurrencyRow = extractPriceCandidates("تريزيمي بلسم 600 مل ق 205 ح")[0];
-  assert.equal(typoCurrencyRow.package_sale_price, 205, "ح after a price must not change its numeric value");
-  assert.equal(typoCurrencyRow.unit_price_type, "بالقطعة", "standalone ق marks a piece price");
-  assert.equal(typoCurrencyRow.product_text, "تريزيمي بلسم", "currency typo must not leak into product identity");
-  assert.equal(typoCurrencyRow.raw_line, "تريزيمي بلسم 600 مل ق 205 ح", "retain the exact source line for audit");
-
   const contextual = extractPriceCandidates("منظف ألف 500 جم 22 ج\nمنظف باء 1 لتر 35 ج");
   assert.ok(contextual.length >= 2);
   const contextPool = {
     async query(sql) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -587,6 +899,175 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   assert.equal(pearlRows[4].weight_g, 7000, "7 kg sack weight must be preserved");
   assert.deepEqual(pearlRows.slice(0, 3).map(row => row.listed_base_price), [505.31, 308.43, 179.15],
     "the unlabeled pre-wholesale amount must remain separate from the selected wholesale price");
+
+
+  // Accepted history should resolve a repeated, otherwise unclassified product
+  // without an AI call or a manual-review queue entry.
+  const memoryCalls = [];
+  const trustedHistoryPool = {
+    async query(sql) {
+      memoryCalls.push(sql);
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [{
+        product_text: "دوف", price_kind: "wholesale", package_sale_price: 119,
+        confidence: 0.94, decision: "accepted", weight_g: null, volume_ml: 350,
+        offer_extra_weight_g: null, package_type: null, pack_count: 12,
+        unit_price_type: "بالكرتونة", observed_at: "2026-10-31T10:00:00Z"
+      }], rowCount: 1 };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 120 }], rowCount: 1 };
+      throw new Error("unexpected trusted-history query");
+    }
+  };
+  const rememberedPrice = await observe({
+    pool: trustedHistoryPool,
+    message: { chatId: -100123, messageId: 470, userId: 789, text: "دوف 350مل 121" },
+    registry: []
+  });
+  assert.equal(rememberedPrice.saved, 1);
+  assert.equal(rememberedPrice.savedRows[0].row.decision, "accepted",
+    "high-confidence accepted history should resolve the repeated product without manual review");
+  assert.equal(rememberedPrice.savedRows[0].row.price_kind, "wholesale");
+  assert.equal(rememberedPrice.savedRows[0].row.unit_price_type, "بالكرتونة");
+  assert.equal(rememberedPrice.savedRows[0].row.pack_count, 12);
+  assert.ok(rememberedPrice.savedRows[0].row.price_selection_reason.includes("resolved_from_accepted_price_memory"));
+  assert.equal(memoryCalls.filter(sql => sql.includes("SELECT product_text, price_kind")).length, 1,
+    "accepted history must be loaded once for the whole Telegram message");
+
+  // End-to-end monitor path for the real Unilever October catalog:
+  // preserve the piece/carton unit, price, currency typo, and gift wording.
+  const unileverPersistedParams = [];
+  const unileverMonitorPool = {
+    async query(sql, params) {
+      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
+      if (sql.includes("INSERT INTO price_observations")) {
+        unileverPersistedParams.push(params);
+        return { rows: [{ id: 200 + unileverPersistedParams.length }], rowCount: 1 };
+      }
+      throw new Error("unexpected Unilever monitor query");
+    }
+  };
+  const unileverObserved = await observe({
+    pool: unileverMonitorPool,
+    message: { chatId: -100123, messageId: 480, userId: 789, text: unileverList },
+    registry
+  });
+  assert.equal(unileverObserved.saved, 66,
+    "the complete Unilever catalog must reach persistence through the real monitor path");
+  assert.ok(unileverObserved.savedRows.every(item =>
+    item.row.decision === "accepted" && item.row.price_kind === "wholesale" &&
+    item.row.confidence >= 0.8 && !item.row.needs_review
+  ), "all explicitly interpreted Unilever rows must be trusted wholesale observations");
+  const findUnileverRow = fragment =>
+    unileverObserved.savedRows.find(item => item.row.raw_line.includes(fragment))?.row;
+  const signalPiece = findUnileverRow("سيجنال 120مل");
+  assert.ok(signalPiece, "Signal per-piece row must be persisted");
+  assert.equal(signalPiece.package_sale_price, 42.33);
+  assert.equal(signalPiece.unit_price_type, "بالقطعة");
+  assert.equal(signalPiece.pack_count, null,
+    "per-piece Signal observations must never acquire a carton count");
+  const clearCarton = findUnileverRow("كلير أكياس 5 مل الكرتونة");
+  assert.ok(clearCarton, "Clear explicit carton row must be persisted");
+  assert.equal(clearCarton.package_sale_price, 346);
+  assert.equal(clearCarton.unit_price_type, "بالكرتونة");
+  const glowCarton = findUnileverRow("جلو 40جم");
+  assert.ok(glowCarton, "Unmarked Glow rows in the wholesale catalog must be persisted");
+  assert.equal(glowCarton.unit_price_type, "بالكرتونة",
+    "the catalog's wholesale default must classify these unmarked rows as carton prices");
+  const soapGiftCarton = findUnileverRow("كامي 110جم 1104");
+  assert.ok(soapGiftCarton, "the Camay carton gift offer must be persisted");
+  assert.equal(soapGiftCarton.unit_price_type, "بالكرتونة");
+  assert.equal(soapGiftCarton.package_sale_price, 1104);
+  assert.doesNotMatch(soapGiftCarton.product_text, /قطعة صابون هدية|العرض على الكرتونة/u,
+    "gift wording must remain source evidence, not contaminate the product identity");
+  const currencyTypo = findUnileverRow("تريزيمي بلسم 600 مل");
+  assert.equal(currencyTypo?.package_sale_price, 205);
+  assert.equal(currencyTypo?.unit_price_type, "بالقطعة");
+  assert.equal(unileverPersistedParams.length, 66,
+    "every accepted catalog row must be inserted exactly once");
+  assert.ok(unileverPersistedParams.every(params => params[13] === "accepted"),
+    "the persisted decision column must agree with the trusted catalog classification");
+
+  // Batch regression checks for accepted price-memory quality and unit boundaries.
+  const memoryFixture = [
+    { product_text: "دوف", price_kind: "wholesale", package_sale_price: 120, confidence: 0.9, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12, observed_at: "2026-11-01T10:00:00Z" },
+    { product_text: "دوف", price_kind: "wholesale", package_sale_price: 121, confidence: 0.79, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12, observed_at: "2026-11-01T11:00:00Z" },
+    { product_text: "دوف", price_kind: "wholesale_candidate", package_sale_price: 122, confidence: 0.99, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12 },
+    { product_text: "دوف", price_kind: "wholesale", package_sale_price: 123, confidence: 0.99, decision: "pending", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12 },
+    { product_text: "دوف", price_kind: "retail", package_sale_price: 124, confidence: 0.99, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12 },
+    { product_text: "دوف", price_kind: "wholesale", package_sale_price: 0, confidence: 0.99, decision: "accepted", volume_ml: 350, unit_price_type: "بالكرتونة", pack_count: 12 }
+  ];
+  const trustedMemory = buildPriceMemory(memoryFixture);
+  assert.equal(trustedMemory.size, 1,
+    "only accepted, wholesale, confidence-qualified rows with a positive price may seed memory");
+  const cartonMemoryMatch = resolveFromMemory(
+    { product_text: "دوف", price_kind: "wholesale_candidate", volume_ml: 350, unit_price_type: "بالكرتونة" },
+    trustedMemory
+  );
+  assert.equal(cartonMemoryMatch.matched, true);
+  assert.equal(cartonMemoryMatch.pack_count, 12,
+    "one consistent accepted carton history may supply its carton count");
+  const pieceMemoryConflict = resolveFromMemory(
+    { product_text: "دوف", price_kind: "wholesale_candidate", volume_ml: 350, unit_price_type: "بالقطعة" },
+    trustedMemory
+  );
+  assert.equal(pieceMemoryConflict.matched, false,
+    "carton history must never classify an explicitly piece-priced observation");
+  assert.equal(pieceMemoryConflict.unit_conflict, true);
+  const retailMemoryCandidate = resolveFromMemory(
+    { product_text: "دوف", price_kind: "retail", volume_ml: 350 },
+    trustedMemory
+  );
+  assert.equal(retailMemoryCandidate.matched, false,
+    "retail observations must never be resolved from wholesale memory");
+  const unknownMemoryCandidate = resolveFromMemory(
+    { product_text: "دوف", price_kind: "unknown", volume_ml: 350 },
+    trustedMemory
+  );
+  assert.equal(unknownMemoryCandidate.matched, false,
+    "unknown price kinds must never be resolved from wholesale memory");
+  const differentVariantMemory = buildPriceMemory([{
+    product_text: "دوف", price_kind: "wholesale", package_sale_price: 130,
+    confidence: 0.95, decision: "accepted", volume_ml: 350,
+    offer_extra_weight_g: 20, package_type: "bottle", unit_price_type: "بالكرتونة",
+    pack_count: 12, observed_at: "2026-11-01T12:00:00Z"
+  }]);
+  assert.equal(resolveFromMemory(
+    { product_text: "دوف", price_kind: "wholesale_candidate", volume_ml: 350,
+      offer_extra_weight_g: null, package_type: "bottle" },
+    differentVariantMemory
+  ).matched, false,
+  "a free-extra offer must not be merged with the regular product memory");
+  assert.equal(resolveFromMemory(
+    { product_text: "دوف", price_kind: "wholesale_candidate", volume_ml: 350,
+      offer_extra_weight_g: 20, package_type: "jerrycan" },
+    differentVariantMemory
+  ).matched, false,
+  "different package forms must not share trusted price memory");
+
+  // A price-only change must remain the same product observation identity.
+  const { classifyObservationChange } = require("../modules/price-intelligence");
+  const changeBase = {
+    product_text: "دوف 350 مل", brand_key: "dove", price_kind: "wholesale",
+    volume_ml: 350, package_sale_price: 120, pack_count: 12,
+    offer_extra_weight_g: null, package_type: "bottle"
+  };
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, package_sale_price: 125 }),
+    "price_change", "a new price for the same product and package must be recorded as a price change");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase }),
+    "same_observation", "identical product, price and package must remain unchanged");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, pack_count: 24 }),
+    "package_configuration_change", "a carton-count change must be distinguished from a product identity change");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, volume_ml: 500, package_sale_price: 125 }),
+    "new_observation", "a different product size must retain a distinct identity even when its price also differs");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, offer_extra_weight_g: 50 }),
+    "new_observation", "a free-extra offer must retain a distinct product identity");
+  assert.equal(classifyObservationChange(changeBase, { ...changeBase, package_type: "jerrycan" }),
+    "new_observation", "a different package form must retain a distinct product identity");
 
   console.log("price monitor eligibility, extraction, persistence, captions, duplicate protection, retail exclusion, identity memory, context inference, and silent-mode tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

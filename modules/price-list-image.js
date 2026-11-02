@@ -7,7 +7,10 @@ function escapeXml(value) {
   return String(value ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\"/g, "&quot;").replace(/'/g, "&apos;");
 }
 function svgText(value) {
-  return escapeXml(shapeArabicForSvg(String(value ?? ""), { direction: "auto", paragraphs: "split" }));
+  // bidi-shaper returns Arabic in final visual order. Force SVG to draw that
+  // prepared sequence left-to-right so its own bidi pass cannot reverse it twice.
+  const visual = escapeXml(shapeArabicForSvg(String(value ?? ""), { direction: "auto", paragraphs: "split" }));
+  return `<tspan direction="ltr" unicode-bidi="bidi-override">${visual}</tspan>`;
 }
 function priceText(value) {
   const n = Number(value);

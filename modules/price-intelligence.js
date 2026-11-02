@@ -106,7 +106,6 @@ function extractProductText(line) {
     .replace(/^(?:[-•.*]+)\s*/, "")
     .trim();
 }
-
 function extractInvoiceProductText(line) {
   // Invoice exports may bold a variant number without including its unit,
   // e.g. "**دوش** **60**. Preserve that number in the product identity rather
@@ -165,6 +164,14 @@ function parseStructuredPriceTable(text) {
     const casePrice = Number(match[3].replace(/,/g, ""));
     const piecePrice = Number(match[4].replace(/,/g, ""));
     if (!productText || !Number.isFinite(casePrice) || !Number.isFinite(piecePrice)) continue;
+    // The source table prints piece prices to two decimal places, but its
+    // commercial precision is one decimal (e.g. 6.50). Compare the carton
+    // total per piece at that displayed precision, not as raw multiplication.
+    // This preserves legitimate totals whose unit value was rounded for display.
+    const impliedPiecePrice = packCount > 0 ? casePrice / packCount : null;
+    const unitPriceConsistent = impliedPiecePrice != null &&
+      Math.round((impliedPiecePrice + Number.EPSILON) * 10) ===
+      Math.round((piecePrice + Number.EPSILON) * 10);
     const quantityMatch = productText.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
     const extraWeight = parseExtraWeight(productText);
@@ -177,10 +184,14 @@ function parseStructuredPriceTable(text) {
       unit_price_type: "بالكرتونة",
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
       offer_extra_weight_g: extraWeight, pack_count: packCount,
-      package_type: parsePackageType(productText), confidence: 0.99,
-      trusted_catalog_row: true,
-      needs_review: false,
-      price_selection_reason: "trusted_structured_catalog_case_total_and_piece_price_preserved"
+      package_type: parsePackageType(productText),
+      confidence: unitPriceConsistent ? 0.99 : 0.72,
+      trusted_catalog_row: unitPriceConsistent,
+      needs_review: !unitPriceConsistent,
+      unit_price_consistency: unitPriceConsistent ? "matched_at_one_decimal_precision" : "carton_piece_price_mismatch",
+      price_selection_reason: unitPriceConsistent
+        ? "trusted_structured_catalog_case_total_and_piece_price_consistent"
+        : "structured_catalog_carton_piece_price_mismatch_requires_review"
     });
   }
   return rows;
@@ -370,6 +381,8 @@ function extractPriceCandidates(text) {
       ? extractInvoiceProductText(parsedLine)
       : extractProductText(parsedLine))
       .replace(/(?:جمله|جملة|مستهلك|قطاعي|تجزئه|تجزئة|سعر الاساس|السعر الاساسى|قيمه العرض|قيمة العرض|سعر الفاتوره|سعر الفاتورة|بعد)/giu, " ")
+      // A standalone ق is a commercial per-piece marker, never part of the item name.
+      .replace(/(?:^|\s)ق(?=\s|$)/giu, " ")
       .replace(/\s+/g, " ").trim();
     const weightLabel = quantity?.[0]?.trim() || (decimalAutomaticWeight ? decimalAutomaticWeight[1] : null);
     // Generic package words describe packaging, not the product identity.
@@ -380,6 +393,10 @@ function extractPriceCandidates(text) {
     let productText = meaningfulCandidateName.length >= 2 && !genericPackageOnly
       ? candidateName
       : [company, section, weightLabel].filter(Boolean).join(" ").trim();
+    // Official company lists must retain explicit size in display identity (e.g. Signal 120ml).
+    if (company && weightLabel && !productText.includes(weightLabel)) {
+      productText = [productText, weightLabel].filter(Boolean).join(" ").trim();
+    }
     let inferredWeightG = q?.grams ?? decimalAutomaticGrams;
     // User-confirmed product-specific convention: in invoice rows, a bare
     // number after "دوش" is the soap weight in grams (e.g. "دوش 60" => "دوش 60 جرام").

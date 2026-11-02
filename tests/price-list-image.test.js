@@ -8,6 +8,8 @@ const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
 assert.match(imageSource, /require\("bidi-shaper"\)/, "SVG renderer must apply Arabic shaping and Unicode bidi before rasterization");
+assert.match(imageSource, /unicode-bidi="bidi-override"/, "SVG must not apply a second bidi pass to already visually ordered Arabic text");
+assert.match(imageSource, /direction="ltr"/, "pre-shaped Arabic glyphs must be drawn in their prepared visual order");
 const { render: shapeArabicForSvg } = require("bidi-shaper");
 assert.ok(Array.from(shapeArabicForSvg("مرحبا بالعالم")).some(ch => { const cp = ch.codePointAt(0); return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF); }), "Arabic words must be contextually shaped");
 const mixedVisual = shapeArabicForSvg("دوف 350 مل — 121.00 ج.م");
@@ -42,6 +44,8 @@ assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt
     assert.equal(png.toString(), "mock-png");
     assert.ok(Array.from(capturedSvg).some(ch => { const cp = ch.codePointAt(0); return (cp >= 0xFB50 && cp <= 0xFDFF) || (cp >= 0xFE70 && cp <= 0xFEFF); }), "Arabic company heading must be shaped before SVG rendering");
     assert.ok(capturedSvg.includes(shapeArabicForSvg("بورصة المنظفات")), "watermark must use shaped Arabic text");
+    assert.match(capturedSvg, /<tspan direction="ltr" unicode-bidi="bidi-override">/,
+      "shaped Arabic must be isolated from SVG's second bidirectional reordering pass");
     assert.match(capturedSvg, /data:image\/(?:jpeg|png);base64,/, "default output must embed the group logo");
     assert.match(capturedSvg, /url\(#securityTexture\)/, "default output must include the subtle security background");
     assert.match(capturedSvg, /url\(#rowWatermark\)/, "default output must repeat the watermark across price rows");

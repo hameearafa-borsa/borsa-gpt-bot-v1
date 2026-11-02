@@ -15,6 +15,7 @@ const { persistPriceList } = require("../modules/price-list-persistence");
   assert.equal(metadata.priceType, "أسعار جملة");
   assert.equal(rows.length, 66);
   assert.equal(rows.filter(row => row.decision === "accepted").length, 66);
+  rows[0].package_type = "sachet"; // Exercise persistence of a parser-classified package form.
 
   const queries = [];
   const client = {

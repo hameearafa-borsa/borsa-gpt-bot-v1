@@ -40,4 +40,16 @@ assert.equal(resolveFromMemory({
   offer_extra_weight_g: null, package_type: null
 }, pendingOnly).matched, false, "pending rows must never teach price memory");
 
+
+const normalizedAliasMemory = buildPriceMemory([
+  { ...accepted[0], product_text: "أريال", volume_ml: 500, weight_g: null }
+]);
+const normalizedAlias = resolveFromMemory({
+  product_text: "اريال", price_kind: "wholesale_candidate", weight_g: null,
+  volume_ml: 500, offer_extra_weight_g: null, package_type: null,
+  pack_count: null, unit_price_type: null
+}, normalizedAliasMemory);
+assert.equal(normalizedAlias.matched, true, "Arabic spelling variants should use normalized product memory");
+assert.equal(normalizedAlias.resolved, true);
+
 console.log("price-memory.test.js: OK");

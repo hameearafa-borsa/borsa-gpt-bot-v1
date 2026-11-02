@@ -301,16 +301,16 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   } };
   const unileverObserved = await observe({ pool: unileverMonitorPool, message: { chatId: -100123, messageId: 470, text: unileverList }, registry });
   assert.equal(unileverObserved.saved, 66, "all 66 deterministic Unilever rows must reach live price observation persistence");
-  assert.equal(unileverObserved.savedRows.filter(item => item.row.decision === "accepted").length, 62,
-    "the 62 unambiguous catalog rows, including the harmless ح currency typo, should be accepted");
-  assert.equal(unileverObserved.savedRows.filter(item => item.row.decision === "pending").length, 4,
-    "only the four ambiguous bundle and gift offers should remain pending review");
+  assert.equal(unileverObserved.savedRows.filter(item => item.row.decision === "accepted").length, 66,
+    "all 66 clear catalog rows, including offers and the harmless ح currency typo, should be accepted");
+  assert.equal(unileverObserved.savedRows.filter(item => item.row.decision === "pending").length, 0,
+    "clear bundle and gift offers should not remain pending review");
   assert.ok(unileverObserved.savedRows.some(item => item.row.unit_price_type === "بالقطعة"), "per-piece rows must remain distinguishable");
   assert.ok(unileverObserved.savedRows.some(item => item.row.unit_price_type === "بالكرتونة"), "carton rows must remain distinguishable");
-  assert.equal(unileverMonitorParams.filter(params => params[13] === "accepted").length, 62,
-    "only trusted catalog observations should be persisted as accepted");
-  assert.equal(unileverMonitorParams.filter(params => params[13] === "pending").length, 4,
-    "only the four ambiguous offer observations must be persisted as pending");
+  assert.equal(unileverMonitorParams.filter(params => params[13] === "accepted").length, 66,
+    "all clearly interpreted catalog observations should be persisted as accepted");
+  assert.equal(unileverMonitorParams.filter(params => params[13] === "pending").length, 0,
+    "no clear offer observation should be persisted as pending");
 
   // Pearl multi-column catalog: select the wholesale column, preserve base/consumer columns,
   // and keep rows reviewable when piece/carton semantics are not explicit.

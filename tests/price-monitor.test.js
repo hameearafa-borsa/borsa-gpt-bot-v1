@@ -326,8 +326,10 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
 
   // Historical accepted observations are compared before insertion, without posting a chat message.
   let historyInsertParams = null;
+  const historySqlCalls = [];
   const historyPool = {
     async query(sql, params) {
+      historySqlCalls.push(sql);
       if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -353,6 +355,17 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   assert.equal(historical.saved, 1);
   assert.equal(historical.savedRows[0].row.change_type, "price_change");
   assert.equal(historyInsertParams[17], "price_change");
+  const historyLookupSql = historySqlCalls.find(sql => sql.includes("SELECT product_identity_key"));
+  assert.match(historyLookupSql, /decision\s*=\s*'accepted'/i,
+    "only accepted observations may be treated as prior price history");
+  assert.match(historyLookupSql, /price_kind\s*=\s*\$2/i,
+    "price history must be compared within the same price kind");
+  assert.match(historyLookupSql, /weight_g\s+IS\s+NOT\s+DISTINCT\s+FROM/i);
+  assert.match(historyLookupSql, /volume_ml\s+IS\s+NOT\s+DISTINCT\s+FROM/i);
+  assert.match(historyLookupSql, /offer_extra_weight_g\s+IS\s+NOT\s+DISTINCT\s+FROM/i);
+  assert.match(historyLookupSql, /package_type\s+IS\s+NOT\s+DISTINCT\s+FROM/i);
+  assert.ok(!historySqlCalls.some(sql => /^\s*UPDATE\s+price_observations/i.test(sql)),
+    "a new price observation must append a history row, never overwrite the prior observation");
 
   // A known carton count can enrich a later observation that omits it, without being invented from the current message.
   let inheritedInsertParams = null;

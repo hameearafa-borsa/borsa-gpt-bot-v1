@@ -21,10 +21,10 @@ const {
   assert.equal(currentPriceDigestSlot(new Date("2026-11-02T17:59:00.000Z")), null);
   assert.equal(currentPriceDigestSlot(now).date, "2026-11-02");
   assert.equal(currentPriceDigestSlot(new Date("2026-11-02T18:05:00.000Z")).date, "2026-11-02");
-  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T21:50:00.000Z")).date, "2026-11-02",
+  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T19:50:00.000Z")).date, "2026-11-02",
     "a restart after the five-minute opening window must still publish that day’s digest");
-  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T23:59:00.000Z")).date, "2026-11-02");
-  assert.equal(currentPriceDigestSlot(new Date("2026-11-03T00:00:00.000Z")), null);
+  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T21:59:00.000Z")).date, "2026-11-02");
+  assert.equal(currentPriceDigestSlot(new Date("2026-11-02T22:00:00.000Z")), null);
 
   const sampleRows = [
     { product_text: "دوف 350 مل", package_sale_price: 125, volume_ml: 350, pack_count: 12, unit_price_type: "بالكرتونة", change_type: "price_change" },

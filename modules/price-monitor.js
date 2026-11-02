@@ -11,6 +11,8 @@ function isBulkPriceList(text) {
   const source = String(text || "").trim();
   if (!source) return false;
   const lines = source.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+  // Recognize the dedicated ASC2 table even when rows omit currency markers.
+  if ((parseStructuredPriceTable(source) || []).length >= 3) return true;
   // Small one-line posts stay on the ordinary message path. Very long posts
   // with many explicit prices are still recognized as catalogs below so they
   // cannot be mistaken for one product observation.

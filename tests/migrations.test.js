@@ -13,7 +13,7 @@ async function successCase() {
     }
   };
   const result = await runMigrations({ db, rootDir: "/project", readFile: (file, encoding) => { assert.equal(encoding, "utf8"); calls.push({ read: file }); return `-- ${path.basename(file)}`; } });
-  assert.equal(result.applied, 31);
+  assert.equal(result.applied, 32);
   assert.ok(MIGRATION_FILES.includes("016_price_observation_history.sql"), "price-observation history migration must run");
   assert.ok(MIGRATION_FILES.includes("017_price_observation_price_columns.sql"), "price-column audit migration must run");
   assert.ok(MIGRATION_FILES.includes("018_price_observation_consumer_price.sql"), "consumer-price persistence migration must run");
@@ -24,11 +24,12 @@ async function successCase() {
   assert.ok(MIGRATION_FILES.includes("023_merchant_source_idempotency.sql"), "merchant source-message idempotency migration must run");
   assert.ok(MIGRATION_FILES.includes("024_reviewed_product_unit_type.sql"), "reviewed product unit-type migration must run");
   assert.ok(MIGRATION_FILES.includes("029_price_observation_catalog_link.sql"), "official catalog observation link and package description migration must run");
+  assert.ok(MIGRATION_FILES.includes("030_price_reference_package_type.sql"), "official catalog package type must be persisted for exact identity matching");
   assert.ok(MIGRATION_FILES.includes("026_service_settings.sql"), "persistent service settings migration must run");
   assert.deepEqual(result.files, [...MIGRATION_FILES]);
   assert.equal(calls[0], "BEGIN");
   assert.deepEqual(calls[1], { sql: "SELECT pg_advisory_xact_lock($1)", params: [MIGRATION_LOCK_KEY] });
-  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 32, "lock plus 31 migration statements should run in one transaction");
+  assert.equal(calls.filter(x => x && typeof x === "object" && "sql" in x).length, 33, "lock plus 32 migration statements should run in one transaction");
   assert.equal(calls.at(-1), "COMMIT");
   assert.ok(calls.indexOf("COMMIT") > calls.findIndex(x => x?.read?.endsWith(MIGRATION_FILES.at(-1))));
 }

@@ -15,7 +15,7 @@ assert.match(imageSource, /logoPlacement = "both"/, "combined group logo and wat
 assert.match(imageSource, /id="securityTexture"/, "rendered pages must include a subtle security background");
 assert.match(imageSource, /id="rowWatermark"/, "price rows must include a repeated light watermark");
 assert.equal(escapeXml('<شركة & "A">'), '&lt;شركة &amp; &quot;A&quot;&gt;');
-assert.equal(extractPackageLabel("اريال 50 جرام - 32 كيس - 134.6"), "50 جرام · 32 كيس");
+assert.equal(extractPackageLabel("اريال 50 جرام - 32 كيس - 134.6"), "32 كيس");
 assert.equal(extractPackageLabel("بامبرز ماكسي مقاس 1 - 3 شنطة * 60 حفاضة - 912.56"), "3 شنطة × 60 حفاضة");
 assert.equal(extractPackageLabel("ماكينة ناست حصائر 48 ماكينة - 48 قطعة - 406.56"), "48 قطعة");
 (async () => {

@@ -2,7 +2,7 @@
 const { normalizeArabic, toAsciiDigits, parseNumber, parseQuantity } = require("../core/normalization");
 const { extractPriceCandidates, commercialMetrics } = require("./price-intelligence");
 
-const PRICE_TOKEN = /(?:^|[\s|:])([0-9٠-٩۰-۹]+(?:[.,٫][0-9٠-٩۰-۹]+)?)\s*(?:جنيه|ج|EGP)?(?=\s|\||$)/giu;
+const PRICE_TOKEN = /(?:^|[\s|:])([0-9٠-٩۰-۹]+(?:[.,٫][0-9٠-٩۰-۹]+)?)\s*(?:جنيه|ج|ح|EGP)?(?=\s|\||$)/giu;
 const WEIGHT_TOKEN = /([0-9٠-٩۰-۹]+(?:[.,][0-9٠-٩۰-۹]+)?)\s*(كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/iu;
 const RETAIL_LABEL = /(?:مستهلك|قطاعي|تجزئ|بيع للمستهلك|بيع قطاعي)/iu;
 const WHOLESALE_LABEL = /(?:جمله|جملة|سعر الجمله|سعر الجملة)/iu;
@@ -58,7 +58,7 @@ function cleanProductName(line) {
   return toAsciiDigits(source)
     .replace(/^[\s•*._-]+/, "")
     .replace(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)/giu, " ")
-    .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|EGP)/giu, " ")
+    .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|ح|EGP)/giu, " ")
     .replace(/(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$)/giu, " ")
     // The last bare numeric token in a price row is the listed price, not part of the product name.
     .replace(/\s+\d+(?:[.,]\d{1,2})?\s*$/u, " ")
@@ -100,7 +100,7 @@ function cleanExplicitProductLine(line) {
     const tail = ascii.slice(end);
     return !/^\s*(?:كيلو|كجم|ك(?=\s|:)|kg|جرام|جم|g|لتر|ل(?=\s|:)|ml|مل)/i.test(tail);
   });
-  const token = tokens.filter(m => /(?:جنيه|ج|EGP)$/iu.test(m[0].trim())).at(-1) || tokens[0];
+  const token = tokens.filter(m => /(?:جنيه|ج|ح|EGP)$/iu.test(m[0].trim())).at(-1) || tokens[0];
   const withoutPrice = token
     ? ascii.slice(0, token.index) + " " + ascii.slice(token.index + token[0].length)
     : ascii;
@@ -175,7 +175,16 @@ function deterministicList(text) {
     const priceTokens = getPriceTokens(line);
     if (!priceTokens.length) continue;
     const weightMatch = toAsciiDigits(line).match(WEIGHT_TOKEN);
-    const quantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
+    const explicitQuantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
+    // In shampoo bundle rows such as "350 + بلسم", the section and bundle
+    // structure identify the first size as the shampoo base volume. Never infer
+    // a size for the gifted conditioner/balm.
+    const bundleBaseVolumeMatch = !explicitQuantity && /شامبو/u.test(normalizeArabic(section || ""))
+      ? toAsciiDigits(line).match(/(?:^|\\s)(\\d{2,4})\\s*\\+\\s*(?:بلسم|بلسم)/iu)
+      : null;
+    const quantity = explicitQuantity || (bundleBaseVolumeMatch
+      ? { grams: null, milliliters: Number(bundleBaseVolumeMatch[1]) }
+      : null);
     const countMatch = toAsciiDigits(line).match(/(?:[*×x]\s*(\d+)|(?:^|\s)(\d+)\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu);
     const packCount = countMatch ? Number(countMatch[1] || countMatch[2]) : null;
     const packageLabel = extractPackageLabel(line);
@@ -186,7 +195,7 @@ function deterministicList(text) {
     const eligiblePriceTokens = priceTokens.filter(p => (wholesaleIndex < 0 || p.index < wholesaleIndex) && (consumerIndex < 0 || p.index < consumerIndex));
     // OCR/catalog rows may contain a bundle size before the actual currency amount.
     // Prefer the last explicit currency-marked token (e.g. "350 + بلسم 159 ج").
-    const currencyPriceTokens = eligiblePriceTokens.filter(p => /(?:جنيه|ج|EGP)$/iu.test(p.token));
+    const currencyPriceTokens = eligiblePriceTokens.filter(p => /(?:جنيه|ج|ح|EGP)$/iu.test(p.token));
     const beforeLabel = currencyPriceTokens.at(-1) || eligiblePriceTokens[0];
     const packagePrice = beforeLabel?.value ?? null;
     const rowUnitPriceType = detectUnitPriceType(line);

@@ -29,6 +29,12 @@ const registry = require("../data/product-registry.json");
   assert.equal(row("تريزيمي بلسم 600 مل ق 205 ح")?.decision, "accepted",
     "a trailing ح is a harmless Egyptian-pound keyboard typo");
   assert.equal(row("تريزيمي بلسم 600 مل ق 205 ح")?.package_sale_price, 205);
+  assert.equal(row("تريزيمي بلسم 600 مل ق 205 ح")?.product, "تريزيمي بلسم 600 مل",
+    "the trailing currency typo must not leak into product identity");
+  assert.equal(row("صانسيلك 350 + بلسم  ق 159 ج")?.volume_ml, 350,
+    "the shampoo bundle base size is 350 ml; the gifted balm size must remain unknown");
+  assert.equal(row("تريزيمي 400 + بلسم ق 276 ج")?.volume_ml, 400,
+    "the Tresemme bundle base size is 400 ml without inventing a balm size");
   const inserts = [];
   const pool = { async query(sql, params) {
     if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };

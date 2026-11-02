@@ -24,7 +24,7 @@
     {"brand_key":"oxy","key":"oxy-dish-capsules","name_ar":"أوكسي كبسولات أطباق","aliases":["كبسولات أطباق أوكسي"]},
     {"brand_key":"oxy","key":"oxy-gel","name_ar":"أوكسي جيل","aliases":["جيل أوكسي"]},
     {"brand_key":"bricks","key":"bricks-surfaces","name_ar":"بريكس متعدد الأسطح","aliases":["بريكس منظف أسطح"]},
-    {"brand_key":"bricks","key":"bricks-floors","name_ar":"بريكس أرضيات","aliases":["بريكس ارضيات"]},
+    {"brand_key":"bricks","key":"bricks-floors","name_ar":"بريكس أرضيات","aliases":["بريكس ارضيات","بريكس منظف ارضيات"]},
     {"brand_key":"bricks","key":"bricks-bathrooms","name_ar":"بريكس حمامات","aliases":["بريكس منظف حمامات"]},
     {"brand_key":"bricks","key":"bricks-stain-remover","name_ar":"بريكس مزيل بقع","aliases":["مزيل بقع بريكس"]},
     {"brand_key":"bricks","key":"bricks-chlorine","name_ar":"بريكس كلور","aliases":["بريكس كلور أبيض","بريكس كلور ألوان"]},

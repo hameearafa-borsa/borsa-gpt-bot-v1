@@ -18,8 +18,8 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.equal(metadata.priceType, "أسعار جملة");
   assert.equal(new Set(accepted.map(row => row.company)).size, 1, "sections must not be mistaken for different companies");
   assert.equal(parsed.length, 66, "every readable row in the current Unilever fixture must be retained");
-  assert.equal(accepted.length, 61, "only unambiguous rows should be auto-accepted");
-  assert.equal(review.length, 5, "bundle offers and suspicious currency suffixes must be held for review");
+  assert.equal(accepted.length, 62, "unambiguous rows including the ح currency typo should be accepted");
+  assert.equal(review.length, 4, "only ambiguous bundle and gift offers should be held for review");
   assert.equal(parsed.filter(row => row.decision === "skipped").length, 0, "no priced row should be silently skipped");
   assert.ok(accepted.every(row => row.unit_price_type === "بالقطعة" || row.unit_price_type === "بالكرتونة"),
     "accepted rows must have a verified per-piece or carton sale unit");
@@ -31,7 +31,9 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     "unmarked rows in a named wholesale catalog must be recorded as carton prices");
   assert.ok(accepted.some(row => /لوكس 115جم/.test(row.raw_line) && row.unit_price_type === "بالكرتونة"),
     "the carton offer note in the soap section should establish carton pricing for following soap rows");
-  assert.ok(review.some(row => /205 ح/.test(row.raw_line) && row.package_sale_price === 205), "the suspicious currency suffix should retain its source text and numeric price for review");
+  const typoCurrencyRow = parsed.find(row => /205 ح/.test(row.raw_line));
+  assert.equal(typoCurrencyRow?.decision, "accepted", "a trailing ح should be accepted as Egyptian-pound currency");
+  assert.equal(typoCurrencyRow?.package_sale_price, 205);
   assert.equal(parsed.find(row => row.raw_line === "صانسيلك 350 + بلسم  ق 159 ج")?.package_sale_price, 159);
   assert.equal(parsed.find(row => row.raw_line === "تريزيمي 400 + بلسم ق 276 ج")?.package_sale_price, 276);
 

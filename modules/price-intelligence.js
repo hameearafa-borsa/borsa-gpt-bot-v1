@@ -393,9 +393,6 @@ function extractPriceCandidates(text) {
     if (company && weightLabel && !productText.includes(weightLabel)) {
       productText = [productText, weightLabel].filter(Boolean).join(" ").trim();
     }
-    let inferredWeightG = q?.grams ?? decimalAutomaticGrams;"), "iu").test(productText)) {
-      productText = [productText, weightLabel].filter(Boolean).join(" ").trim();
-    }
     let inferredWeightG = q?.grams ?? decimalAutomaticGrams;
     // User-confirmed product-specific convention: in invoice rows, a bare
     // number after "دوش" is the soap weight in grams (e.g. "دوش 60" => "دوش 60 جرام").

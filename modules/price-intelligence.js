@@ -389,6 +389,14 @@ function extractPriceCandidates(text) {
     let productText = meaningfulCandidateName.length >= 2 && !genericPackageOnly
       ? candidateName
       : [company, section, weightLabel].filter(Boolean).join(" ").trim();
+    // Official company lists must retain the explicit size in the display identity
+    // (e.g. Signal 120 ml), even though the normalized quantity is also stored separately.
+    if (company && weightLabel && !new RegExp(weightLabel.replace(/[.*+?^${}()|[\]\\]/g, "\\    let productText = meaningfulCandidateName.length >= 2 && !genericPackageOnly
+      ? candidateName
+      : [company, section, weightLabel].filter(Boolean).join(" ").trim();
+    let inferredWeightG = q?.grams ?? decimalAutomaticGrams;"), "iu").test(productText)) {
+      productText = [productText, weightLabel].filter(Boolean).join(" ").trim();
+    }
     let inferredWeightG = q?.grams ?? decimalAutomaticGrams;
     // User-confirmed product-specific convention: in invoice rows, a bare
     // number after "دوش" is the soap weight in grams (e.g. "دوش 60" => "دوش 60 جرام").

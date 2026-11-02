@@ -72,7 +72,10 @@ const {
   assert.match(observationQuery.sql, /confidence >= 0\.8/);
   assert.match(observationQuery.sql, /needs_review=FALSE/);
   assert.match(observationQuery.sql, /AT TIME ZONE 'Africa\/Cairo'/);
-  assert.match(observationQuery.sql, /unit_price_type, pack_count, package_sale_price/);
+  assert.match(observationQuery.sql, /DISTINCT ON/);
+  assert.match(observationQuery.sql, /unit_price_type/);
+  assert.match(observationQuery.sql, /pack_count/);
+  assert.match(observationQuery.sql, /package_sale_price/);
   assert.match(observationQuery.sql, /LIMIT 100/);
   assert.equal(observationQuery.params[0], "2026-11-02");
 

@@ -95,14 +95,21 @@ async function findOfficialCatalogMatch(pool, candidate) {
     if (unit && reference.unit_price_type !== unit) return false;
     if (reference.price_kind === "retail" && candidate.price_kind !== "retail") return false;
     if (reference.price_kind === "wholesale" && candidate.price_kind === "retail") return false;
+    // Carton identity is unsafe when either side lacks its pack count.
+    // Never attach a live observation to a guessed carton configuration.
     if (reference.unit_price_type === "بالكرتونة" &&
-        candidate.pack_count != null && reference.pack_count != null &&
-        Number(candidate.pack_count) !== Number(reference.pack_count)) return false;
+        (candidate.pack_count == null || reference.pack_count == null ||
+         Number(candidate.pack_count) !== Number(reference.pack_count))) return false;
     if (/[+]\s*\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|ml|مل)|هدية|هديه|بونص|مجانا/iu.test(reference.raw_line || "")) return false;
     return true;
   });
   if (!matches.length) return null;
-  const distinct = new Set(matches.map(row => [row.price_kind, row.unit_price_type].join("|")));
+  // If the same product/size has multiple official carton configurations,
+  // an observation must identify the exact count above; otherwise it is not a safe match.
+  const distinct = new Set(matches.map(row => [
+    row.price_kind, row.unit_price_type,
+    row.unit_price_type === "بالكرتونة" ? Number(row.pack_count) : "",
+  ].join("|")));
   if (distinct.size !== 1) return null;
   return matches[0];
 }

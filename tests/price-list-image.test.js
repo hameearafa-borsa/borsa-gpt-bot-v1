@@ -80,10 +80,10 @@ assert.equal(extractPackageLabel("ماكينة ناست حصائر 48 ماكين
         unit_price_type: i % 3 === 0 ? "بالقطعة" : "بالكرتونة"
       }))
     });
-    assert.equal(unileverLikeImages.length, 5,
-      "66 products should render as five images at the default 16 products per image");
-    assert.ok(capturedSvg.includes("صفحة 5 من 5"),
-      "the final image should identify itself as page 5 of 5");
+    assert.equal(unileverLikeImages.length, 3,
+      "66 products should render as three long-form images at the default 25 products per image");
+    assert.ok(capturedSvg.includes("صفحة 3 من 3"),
+      "the final image should identify itself as page 3 of 3");
     await assert.doesNotReject(() => renderPriceListImages({
       company: "شركة اختبار",
       items: Array.from({ length: 100 }, (_, i) => ({ product: `منتج ${i + 1}`, package_sale_price: 20 }))

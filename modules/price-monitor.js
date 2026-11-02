@@ -78,7 +78,7 @@ async function findOfficialCatalogMatch(pool, candidate) {
   if (candidate.offer_extra_weight_g != null) return null;
   const result = await pool.query(
     `SELECT id, price_kind, product_label, weight_g, volume_ml, pack_count,
-            unit_price_type, raw_line
+            unit_price_type, package_type, raw_line
      FROM price_reference_observations
      WHERE decision='accepted'
        AND price_kind IN ('wholesale','retail')
@@ -93,6 +93,7 @@ async function findOfficialCatalogMatch(pool, candidate) {
   const matches = (result.rows || []).filter(reference => {
     if (comparableName(reference.product_label) !== name) return false;
     if (unit && reference.unit_price_type !== unit) return false;
+    if ((candidate.package_type || null) !== (reference.package_type || null)) return false;
     if (reference.price_kind === "retail" && candidate.price_kind !== "retail") return false;
     if (reference.price_kind === "wholesale" && candidate.price_kind === "retail") return false;
     // Carton identity is unsafe when either side lacks its pack count.

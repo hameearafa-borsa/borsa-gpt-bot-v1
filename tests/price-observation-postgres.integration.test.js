@@ -116,6 +116,7 @@ if (!connectionString) {
       registry: []
     });
     assert.equal(legacyPriceChange.saved, 1, "a later observation must be appended beside its legacy history row");
+    console.log("LEGACY_HISTORY_DEBUG", JSON.stringify({ old: firstSeen.savedRows[0].row, current: legacyPriceChange.savedRows[0].row }));
     assert.equal(legacyPriceChange.savedRows[0].row.change_type, "price_change",
       "a legacy row with the same product dimensions and unit must compare as a price change");
     const legacyHistory = await pool.query(

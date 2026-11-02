@@ -76,10 +76,13 @@ const {
   assert.match(observationQuery.sql, /DISTINCT ON/);
   assert.match(observationQuery.sql, /unit_price_type/);
   assert.match(observationQuery.sql, /pack_count/);
-  assert.match(observationQuery.sql, /package_type, unit_price_type, pack_count, package_sale_price/,
+  assert.match(observationQuery.sql, /package_type, unit_price_type, pack_count\s*\)/,
     "piece and carton observations with different carton counts must remain separate digest rows");
-  assert.match(observationQuery.sql, /package_type, unit_price_type, pack_count, package_sale_price, observed_at DESC/,
-    "DISTINCT ON ordering must use the complete commercial-unit identity");
+  assert.match(observationQuery.sql, /package_type, unit_price_type, pack_count, observed_at DESC, id DESC/,
+    "the latest accepted observation must win for each commercial-unit identity");
+  assert.doesNotMatch(observationQuery.sql.match(/SELECT DISTINCT ON \([\s\S]*?\) product_text/)?.[0] || "",
+    /package_sale_price/,
+    "price changes must not create duplicate digest rows for the same product and commercial unit");
   assert.match(observationQuery.sql, /package_sale_price/);
   assert.match(observationQuery.sql, /LIMIT 100/);
   assert.equal(observationQuery.params[0], "2026-11-02");

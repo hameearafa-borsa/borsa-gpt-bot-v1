@@ -77,8 +77,22 @@ function geminiProvider(key, model) {
     const selectedModel = model || "gemini-3.8-flash";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`;
     // Gemini 3.8 Flash request intentionally omits sampling configuration.
+    const parts = [{ text: String(prompt || "") }];
+    // Vision input is opt-in and accepts only caller-supplied base64 image bytes.
+    // Text-only requests retain the exact existing Gemini request shape.
+    if (options.imageBase64) {
+      const mimeType = String(options.imageMimeType || "image/jpeg").toLowerCase();
+      if (!/^image\/(?:jpeg|png|webp)$/i.test(mimeType)) {
+        throw new Error("Gemini image input supports JPEG, PNG, or WebP only");
+      }
+      const imageBase64 = String(options.imageBase64).replace(/^data:image\/[a-z0-9.+-]+;base64,/i, "");
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(imageBase64) || imageBase64.length > 12000000) {
+        throw new Error("Invalid or oversized Gemini image payload");
+      }
+      parts.push({ inline_data: { mime_type: mimeType, data: imageBase64 } });
+    }
     const data = await requestJson(endpoint, {
-      contents: [{ role: "user", parts: [{ text: String(prompt || "") }] }]
+      contents: [{ role: "user", parts }]
     }, { "x-goog-api-key": key }, Number(process.env.GEMINI_TIMEOUT_MS || 45000));
     return { text: data.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("") || "", provider: "gemini", model: selectedModel };
   };

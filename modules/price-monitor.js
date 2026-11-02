@@ -5,6 +5,7 @@ const { resolve } = require("../core/product-registry");
 const { identityKey } = require("./price-review");
 const { buildPriceMemory, resolveFromMemory } = require("./price-memory");
 const { deterministicList, parseListMetadata } = require("./price-list");
+const { comparableName } = require("./price-reference-comparison");
 
 function isOwnMessage({ botUserId, fromId }) { return botUserId != null && String(botUserId) === String(fromId); }
 function isBulkPriceList(text) {
@@ -71,7 +72,42 @@ function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage
     return (hasProductSize && numericCount >= 2) || (hasProductName && hasCurrency);
   });
 }
-async function observe({ pool, message, merchantId = null, registry }) {
+async function findOfficialCatalogMatch(pool, candidate) {
+  if (!pool || typeof pool.query !== "function") return null;
+  const unit = candidate.unit_price_type || null;
+  if (candidate.offer_extra_weight_g != null) return null;
+  const result = await pool.query(
+    `SELECT id, price_kind, product_label, weight_g, volume_ml, pack_count,
+            unit_price_type, raw_line
+     FROM price_reference_observations
+     WHERE decision='accepted'
+       AND price_kind IN ('wholesale','retail')
+       AND weight_g IS NOT DISTINCT FROM $1
+       AND volume_ml IS NOT DISTINCT FROM $2
+     ORDER BY created_at DESC, id DESC
+     LIMIT 500`,
+    [candidate.weight_g ?? null, candidate.volume_ml ?? null]
+  );
+  const name = comparableName(candidate.product_text);
+  if (!name) return null;
+  const matches = (result.rows || []).filter(reference => {
+    if (comparableName(reference.product_label) !== name) return false;
+    if (unit && reference.unit_price_type !== unit) return false;
+    if (reference.price_kind === "retail" && candidate.price_kind !== "retail") return false;
+    if (reference.price_kind === "wholesale" && candidate.price_kind === "retail") return false;
+    if (reference.unit_price_type === "بالكرتونة" &&
+        (candidate.pack_count == null || reference.pack_count == null ||
+         Number(candidate.pack_count) !== Number(reference.pack_count))) return false;
+    if (/[+]\\s*\\d+(?:[.,]\\d+)?\\s*(?:كيلو|كجم|ك|جرام|جم|g|kg|لتر|ل|ml|مل)|هدية|هديه|بونص|مجانا/iu.test(reference.raw_line || "")) return false;
+    return true;
+  });
+  if (!matches.length) return null;
+  const distinct = new Set(matches.map(row => [row.price_kind, row.unit_price_type].join("|")));
+  if (distinct.size !== 1) return null;
+  return matches[0];
+}
+
+async function observe({ pool, message, merchantId = null, registry, requireCatalogMatch = false }) {
   const text = message.text || message.caption || "";
   const bulkCatalog = isBulkPriceList(text);
   let candidates;
@@ -290,4 +326,4 @@ async function observe({ pool, message, merchantId = null, registry }) {
   return { accepted, saved: savedRows.length, savedRows, silent: true };
 }
 
-module.exports = { isOwnMessage, isBulkPriceList, isEligibleMessage, observe };
+module.exports = { isOwnMessage, isBulkPriceList, isEligibleMessage, findOfficialCatalogMatch, observe };

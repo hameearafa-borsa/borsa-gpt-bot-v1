@@ -42,7 +42,7 @@ const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory
   assert.equal(calls[2].params[0], "accepted");
   assert.match(calls[0].sql, /price_kind=CASE WHEN \$1='accepted' THEN 'wholesale'/,
     "a human-approved price must become a wholesale observation eligible for trusted memory");
-  assert.match(calls[0].sql, /confidence=CASE WHEN \$1='accepted' THEN GREATEST\(confidence, 0\.9\)/,
+  assert.match(calls[0].sql, /confidence=CASE WHEN \$1='accepted' THEN GREATEST\(COALESCE\(confidence, 0\), 0\.9\)/,
     "human approval must meet the trusted-memory confidence threshold");
   assert.match(calls[0].sql, /explicit_wholesale_label_price=CASE WHEN \$1='accepted' THEN package_sale_price/,
     "the explicitly approved wholesale amount must be retained");

@@ -34,6 +34,29 @@ assert.equal(resolveFromMemory({
   offer_extra_weight_g: null, package_type: null, pack_count: null, unit_price_type: null
 }, conflicting).resolved, false, "conflicting piece/carton history must stay unresolved");
 
+const retailAcceptedOnly = buildPriceMemory([
+  { ...accepted[0], price_kind: "retail", unit_price_type: "بالقطعة", pack_count: 1 }
+]);
+assert.equal(resolveFromMemory({
+  product_text: "دوف", price_kind: "wholesale_candidate", weight_g: null, volume_ml: 350,
+  offer_extra_weight_g: null, package_type: null, pack_count: null, unit_price_type: null
+}, retailAcceptedOnly).matched, false,
+"accepted retail observations must never teach wholesale units or carton counts");
+assert.equal(resolveFromMemory({
+  product_text: "دوف", price_kind: "retail", weight_g: null, volume_ml: 350,
+  offer_extra_weight_g: null, package_type: null, pack_count: null, unit_price_type: null
+}, memory).matched, false,
+"wholesale memory must never resolve a retail candidate");
+
+const unknownKindOnly = buildPriceMemory([
+  { ...accepted[0], price_kind: "unknown" }
+]);
+assert.equal(resolveFromMemory({
+  product_text: "دوف", price_kind: "wholesale_candidate", weight_g: null, volume_ml: 350,
+  offer_extra_weight_g: null, package_type: null, pack_count: null, unit_price_type: null
+}, unknownKindOnly).matched, false,
+"unknown commercial context must never teach price memory");
+
 const pendingOnly = buildPriceMemory([{ ...accepted[2], decision: "pending" }]);
 assert.equal(resolveFromMemory({
   product_text: "دوف", weight_g: null, volume_ml: 350,

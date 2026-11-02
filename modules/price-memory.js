@@ -21,9 +21,11 @@ function dimensionKey(row) {
 function buildPriceMemory(rows = []) {
   const groups = new Map();
   for (const row of rows) {
-    if (row.decision && row.decision !== "accepted") continue;
+    // Only accepted wholesale observations may teach the wholesale price resolver.
+    // Retail and unknown-kind observations must never transfer unit or pack semantics.
+    if (row.decision !== "accepted" || row.price_kind !== "wholesale") continue;
     if (Number(row.confidence) < 0.8) continue;
-    if (!row.product_text || !Number.isFinite(Number(row.package_sale_price))) continue;
+    if (!row.product_text || !Number.isFinite(Number(row.package_sale_price)) || Number(row.package_sale_price) <= 0) continue;
     const key = dimensionKey(row);
     const group = groups.get(key) || { count: 0, kinds: new Set(), units: new Set(), packCounts: new Set(), latest: null };
     group.count += 1;
@@ -37,6 +39,9 @@ function buildPriceMemory(rows = []) {
 }
 
 function resolveFromMemory(candidate, memory) {
+  if (candidate?.price_kind === "retail" || candidate?.price_kind === "unknown") {
+    return { matched: false, confidence: 0 };
+  }
   const group = memory?.get(dimensionKey(candidate));
   if (!group || group.count < 1) return { matched: false, confidence: 0 };
   const kinds = [...group.kinds];

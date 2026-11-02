@@ -187,8 +187,13 @@ assert.equal(unileverCurrencyTypo?.decision, "accepted",
   "the trailing ح is a harmless Egyptian-pound currency typo");
 assert.equal(unileverCurrencyTypo?.package_sale_price, 205, "the numeric price must remain unchanged");
 assert.equal(unileverCurrencyTypo?.raw_line, "تريزيمي بلسم 600 مل ق 205 ح", "retain the original source text for audit");
-assert.equal(deterministicList("أسعار شركة يونيليفر:\nمنتج تجريبي 205 ح").find(row => row.raw_line.includes("205 ح"))?.decision, "accepted",
-  "a trailing ح is accepted as Egyptian pounds without needing adjacent currency evidence");
+const unlabelledCurrencyTypo = deterministicList("أسعار شركة يونيليفر:\nمنتج تجريبي 205 ح").find(row => row.raw_line.includes("205 ح"));
+assert.equal(unlabelledCurrencyTypo?.package_sale_price, 205,
+  "a trailing ح must still preserve the numeric Egyptian-pound amount");
+assert.equal(unlabelledCurrencyTypo?.decision, "review",
+  "a currency marker alone must not invent whether an unlabelled price is per piece or per carton");
+assert.equal(unlabelledCurrencyTypo?.unit_price_type, null,
+  "the unit must remain unknown when neither the row nor the list heading declares it");
 const unileverUnclearUnitRows = unileverRows.filter(row => row.category === "منتجات جلو و فازلين");
 assert.equal(unileverUnclearUnitRows.length, 8);
 assert.ok(unileverUnclearUnitRows.every(row => row.decision === "accepted" && row.unit_price_type === "بالكرتونة"),
@@ -215,7 +220,7 @@ assert.equal(unileverSoapOffer.unit_price_type, "بالكرتونة",
   "the carton offer context must be carried to the soap price");
 assert.ok(unileverSoapOffer.raw_line.includes("قطعة صابون هدية"),
   "the original source row must preserve the promotional gift wording");
-assert.equal(unileverSoapOffer.decision, "review", "carton gift offers must not be auto-approved");
+assert.equal(unileverSoapOffer.decision, "accepted", "a clearly priced carton remains a valid observation when its gift wording is preserved separately");
 assert.doesNotMatch(unileverSoapOffer.product, /العرض على الكرتونة|قطعة صابون هدية/u,
   "a carton promotion note should not contaminate the product identity");
 // Historical comparison preserves product identity when only weight/offer changes.

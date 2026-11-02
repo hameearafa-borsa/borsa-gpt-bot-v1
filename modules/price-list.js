@@ -140,6 +140,18 @@ function hasContextualCurrencyTypo(lines, index) {
     currencyPrice.test(toAsciiDigits(lines[neighborIndex]))
   );
 }
+function extractPackageSizes(line) {
+  const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
+  return [...ascii.matchAll(/\\d+(?:[.,]\\d+)?(?:\\s*\\/\\s*\\d+(?:[.,]\\d+)?)*(?:\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))/giu)]
+    .map(match => match[0].replace(/\\s+/g, " ").trim());
+}
+function extractPackageLabel(line) {
+  const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
+  const sizes = extractPackageSizes(line);
+  const count = ascii.match(/(?:[*×x]\\s*(\\d+)|(?:^|\\s)(\\d+)\\s*(?:قطعة|قطعه|قط|ق)(?=\\s|$))/iu);
+  const countValue = count ? Number(count[1] || count[2]) : null;
+  return [...sizes, ...(countValue > 0 ? [String(countValue) + " قطعة"] : [])].join(" · ");
+}
 function deterministicList(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const metadata = parseListMetadata(text);
@@ -177,7 +189,7 @@ function deterministicList(text) {
     const weightMatch = toAsciiDigits(line).match(WEIGHT_TOKEN);
     const quantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
     const countMatch = toAsciiDigits(line).match(/(?:^|[+*x×\s])(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)(?=\s|$)/iu);
-    const packCount = countMatch ? Number(countMatch[1]) : null;
+    const packCount = countMatch ? Number(countMatch[1] || countMatch[2]) : null;
     const wholesaleIndex = line.search(WHOLESALE_LABEL);
     const consumerIndex = line.search(RETAIL_LABEL);
     const afterWholesale = wholesaleIndex >= 0 ? getPriceTokens(line.slice(wholesaleIndex + line.slice(wholesaleIndex).match(WHOLESALE_LABEL)[0].length))[0]?.value ?? null : null;
@@ -201,8 +213,11 @@ function deterministicList(text) {
       // Explicit per-piece markers and section headings take precedence above.
       (metadata.company && (metadata.isCompanyCatalog || metadata.priceType === "أسعار جملة") ? "بالكرتونة" : null);
     const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
+    const identitySizes = metadata.company && /(?:[*×x]\\s*\\d+|(?:^|\\s)\\d+\\s*(?:قطعة|قطعه|قط|ق)(?=\\s|$))/iu.test(toAsciiDigits(line))
+      ? extractPackageSizes(line) : [];
+    const displayProductPrefix = [productPrefix, identitySizes.join(" + ")].filter(Boolean).join(" ").replace(/\\s+/g, " ").trim();
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
-    const identityText = normalizeArabic(productPrefix);
+    const identityText = normalizeArabic(displayProductPrefix);
     const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));
     const product = metadata.company
       ? productPrefix
@@ -214,7 +229,7 @@ function deterministicList(text) {
     const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
     const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";
     out.push({
-      raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company,
+      raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company, package_label: extractPackageLabel(line),
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
       pack_count: packCount, package_sale_price: packagePrice, unit_price_type: unitPriceType,
       wholesale_carton_price: afterWholesale, consumer_price: afterConsumer,
@@ -279,4 +294,4 @@ async function extractList(ai, text) {
     return { ...metadata, ...parsed, company: parsed.company || metadata.company || null, method: result.provider || "ai" };
   } catch (error) { return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: error.message }; }
 }
-module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType, detectUnitPriceHeading };
+module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType, detectUnitPriceHeading, extractPackageSizes, extractPackageLabel };

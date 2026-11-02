@@ -101,6 +101,31 @@ if (!connectionString) {
     assert.equal(firstSeenStored.rows[0].decision, "accepted");
     assert.ok(Number(firstSeenStored.rows[0].confidence) >= 0.8);
 
+    // Legacy accepted observations without product_identity_key must still
+    // participate in history comparison when their stored dimensions and
+    // commercial unit match exactly.
+    await pool.query("UPDATE price_observations SET product_identity_key=NULL WHERE id=$1", [firstSeen.savedRows[0].id]);
+    const legacyPriceChange = await observe({
+      pool,
+      message: {
+        chatId: -1007654321,
+        messageId: 9005,
+        userId: 9002,
+        text: "صابون جديد 500 جم جملة 45 ج"
+      },
+      registry: []
+    });
+    assert.equal(legacyPriceChange.saved, 1, "a later observation must be appended beside its legacy history row");
+    assert.equal(legacyPriceChange.savedRows[0].row.change_type, "price_change",
+      "a legacy row with the same product dimensions and unit must compare as a price change");
+    const legacyHistory = await pool.query(
+      "SELECT product_identity_key, package_sale_price, change_type FROM price_observations WHERE source_chat_id=$1 AND source_message_id IN ($2,$3) ORDER BY id",
+      [-1007654321, 9002, 9005]
+    );
+    assert.equal(legacyHistory.rowCount, 2, "legacy history must remain intact while the new observation is appended");
+    assert.equal(legacyHistory.rows[0].product_identity_key, null, "the legacy identity must not be rewritten or discarded");
+    assert.equal(legacyHistory.rows[1].change_type, "price_change");
+
     // A name and amount are still persisted when the trade type is unclear,
     // but are not promoted into accepted wholesale history.
     const unclearKind = await observe({

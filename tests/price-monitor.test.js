@@ -5,6 +5,7 @@ const path = require("node:path");
 const { isOwnMessage, isEligibleMessage, isBulkPriceList, observe } = require("../modules/price-monitor");
 const registry = require("../data/product-registry.json");
 const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, productIdentityKey } = require("../modules/price-intelligence");
+const { buildPriceMemory, resolveFromMemory } = require("../modules/price-memory");
 
 (async () => {
   const runtimeSource = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
@@ -668,8 +669,17 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     message: { chatId: -100123, messageId: 475, userId: 789, text: "بيرل 9 ك 503.31" },
     registry
   });
-  assert.deepEqual(pearl503FollowupMemoryRows, [],
-    "the earlier pending 503.31 observation must not be loaded as trusted memory for a later message");
+  assert.equal(pearl503FollowupMemoryRows.length, 1,
+    "the defensive test adapter deliberately returns the pending row despite the SQL filter");
+  const pearl503DefensiveMemory = buildPriceMemory(pearl503FollowupMemoryRows);
+  const pearl503DefensiveResolution = resolveFromMemory(
+    pearl503Followup.savedRows[0].row,
+    pearl503DefensiveMemory
+  );
+  assert.equal(pearl503DefensiveMemory.size, 0,
+    "buildPriceMemory itself must reject pending rows even if a data adapter returns one");
+  assert.equal(pearl503DefensiveResolution.matched, false,
+    "a pending 503.31 row must not resolve a repeated observation even if returned unexpectedly");
   assert.match(pearl503MemorySql, /decision\s*=\s*'accepted'/i,
     "the real price-memory query must exclude pending decisions in SQL");
   assert.match(pearl503MemorySql, /price_kind\s*=\s*'wholesale'/i,

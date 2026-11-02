@@ -97,7 +97,15 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
   const structuredInserts = [];
   const structuredPool = {
     async query(sql, params) {
-      if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT product_text, price_kind")) return {
+        rows: [{
+          product_text: "منظف تجريبي 4", price_kind: "wholesale",
+          package_sale_price: 100, confidence: 0.99, decision: "accepted",
+          weight_g: null, volume_ml: null, offer_extra_weight_g: null,
+          package_type: null, pack_count: 10, unit_price_type: "بالكرتونة",
+          observed_at: "2026-10-01T00:00:00Z"
+        }], rowCount: 1
+      };
       if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -121,6 +129,13 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
     "the arithmetic mismatch must be retained as pending, not trusted");
   assert.equal(structuredInserts.filter(params => params[13] === "pending").length, 1,
     "the database decision must persist the arithmetic mismatch as pending");
+  const mismatchedMemoryRow = structuredMonitorResult.savedRows.find(item =>
+    item.row.product_text === "منظف تجريبي 4"
+  );
+  assert.equal(mismatchedMemoryRow.row.decision, "pending",
+    "even an exact accepted wholesale-memory match must not override the parser's arithmetic review flag");
+  assert.ok(mismatchedMemoryRow.row.price_selection_reason.includes("resolved_from_accepted_price_memory"),
+    "the fixture must prove that accepted memory actually matched before checking the review guard");
 
   const oxyInvoice = parseInvoiceTable(`الصنف
 سعر الفاتورة بعد 14% والعرض الترويجي

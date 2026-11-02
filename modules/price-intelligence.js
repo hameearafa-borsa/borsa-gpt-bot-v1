@@ -510,7 +510,7 @@ function extractPriceCandidates(text) {
 function parsePackageType(text) {
   const s = normalizeArabic(text);
   if (/(?:شكاره|شوال)/u.test(s)) return "sack";
-  if (/(?:كيس|ساشيه)/u.test(s)) return "sachet";
+  if (/(?:كيس|اكياس|ساشيه|ساشيهات)/u.test(s)) return "sachet";
   return null;
 }
 

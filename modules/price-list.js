@@ -220,11 +220,11 @@ function deterministicList(text) {
     const identityText = normalizeArabic(displayProductPrefix);
     const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));
     const product = metadata.company
-      ? productPrefix
+      ? displayProductPrefix
       : [company, section, productPrefix, weightLabel].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const normalizedLine = normalizeArabic(line);
     const hasKnownLabel = Boolean(company || section || /اريال|اريل|بونكس|تايد|بيرل|برسيل|بركس|بريكس/.test(normalizedLine));
-    const hasIdentity = metadata.company ? Boolean(productPrefix && /[\u0600-\u06ff]/u.test(productPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
+    const hasIdentity = metadata.company ? Boolean(displayProductPrefix && /[\u0600-\u06ff]/u.test(displayProductPrefix)) : (Boolean(company && section && weightMatch) || (!isNumericOnly && hasKnownLabel));
     const suspiciousCurrency = metadata.company && /\b\d+(?:[.,]\d+)?\s+ح(?:\s|$)/u.test(toAsciiDigits(line));
     const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
     const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";

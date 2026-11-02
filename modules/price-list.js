@@ -207,7 +207,10 @@ function deterministicList(text) {
       // In a named company wholesale catalog, an unmarked price is a carton price.
       // Explicit per-piece markers and section headings take precedence above.
       (metadata.company && metadata.priceType === "أسعار جملة" ? "بالكرتونة" : null);
-    const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
+    let productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
+    if (bundleBaseVolumeMatch) {
+      productPrefix = productPrefix.replace(`${bundleBaseVolumeMatch[1]} +`, `${bundleBaseVolumeMatch[1]} مل +`);
+    }
     const identitySizes = metadata.company && /(?:[*×x]\s*\d+|(?:^|\s)\d+\s*(?:قطعة|قطعه|قط|ق)(?=\s|$))/iu.test(toAsciiDigits(line))
       ? extractPackageSizes(line) : [];
     const displayProductPrefix = [productPrefix, identitySizes.join(" + ")].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();

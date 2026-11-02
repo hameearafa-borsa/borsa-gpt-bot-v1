@@ -128,7 +128,6 @@ async function observe({ pool, message, merchantId = null, registry }) {
          WHERE decision = 'accepted' AND confidence >= 0.8
            AND package_sale_price IS NOT NULL
          ORDER BY observed_at DESC, id DESC LIMIT 2000`,
-        []
       );
       priceMemory = buildPriceMemory(learned.rows || []);
     }

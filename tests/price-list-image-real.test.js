@@ -18,8 +18,8 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.equal(metadata.priceType, "أسعار جملة");
   assert.equal(new Set(accepted.map(row => row.company)).size, 1, "sections must not be mistaken for different companies");
   assert.equal(parsed.length, 66, "every readable row in the current Unilever fixture must be retained");
-  assert.equal(accepted.length, 62, "unambiguous rows including the ح currency typo should be accepted");
-  assert.equal(review.length, 4, "only ambiguous bundle and gift offers should be held for review");
+  assert.equal(accepted.length, 66, "all clearly interpreted rows including gift and bundle offers should be accepted");
+  assert.equal(review.length, 0, "clear gift and bundle offers should not be held for manual review");
   assert.equal(parsed.filter(row => row.decision === "skipped").length, 0, "no priced row should be silently skipped");
   assert.ok(accepted.every(row => row.unit_price_type === "بالقطعة" || row.unit_price_type === "بالكرتونة"),
     "accepted rows must have a verified per-piece or carton sale unit");

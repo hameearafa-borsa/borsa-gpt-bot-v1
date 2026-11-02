@@ -97,21 +97,15 @@ function extractExplicitWholesalePrice(text) {
 }
 
 function extractProductText(line) {
-  const source = String(line || "");
-  // Preserve package size in the product identity (e.g. Signal 120 ml vs. another size).
-  // Pack count and promotional extras remain separate structured attributes.
-  const sizes = [...toAsciiDigits(source).matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/giu)]
-    .map(match => match[0].replace(/\s+/g, " ").trim());
-  const name = stripQuantityTokens(source)
+  return stripQuantityTokens(line)
+    // ح is a common adjacent-key typo for ج in Egyptian price lists; consume it only after a numeric token.
     .replace(/\d+(?:[.,]\d+)?\s*(?:جنيه|ج|ح|EGP)?/gi, " ")
     .replace(/\|/g, " ")
     .replace(/[+]/g, " ")
     .replace(/\s+/g, " ")
     .replace(/^(?:[-•.*]+)\s*/, "")
     .trim();
-  return [name, ...sizes].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
 }
-
 function extractInvoiceProductText(line) {
   // Invoice exports may bold a variant number without including its unit,
   // e.g. "**دوش** **60**. Preserve that number in the product identity rather

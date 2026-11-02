@@ -50,17 +50,16 @@ function isEligibleMessage({ chatType, text, isLogChannel, isCommand, ownMessage
   if (isBulkPriceList(source)) return true;
   const rows = extractPriceCandidates(source);
   if (!rows.length) return false;
-  const lines = source.split(/\\r?\\n/).map(line => line.trim()).filter(Boolean);
   return rows.some(row => {
     const line = String(row.raw_line || "");
-    const hasCurrency = /(?:جنيه|ج|ح|EGP)\\s*(?:$|[|،,؛;\\s])/iu.test(line) || /(?:^|\\s)(?:جنيه|ج|ح|EGP)(?=\\s|$)/iu.test(line);
+    const hasCurrency = /(?:جنيه|ج|ح|EGP)\s*(?:$|[|،,؛;\s])/iu.test(line) ||
+      /(?:^|\s)(?:جنيه|ج|ح|EGP)(?=\s|$)/iu.test(line);
     const hasPriceLabel = /(?:سعر|السعر|جمله|جملة|قطاعي|مستهلك|للبيع|عرض)/iu.test(line);
-    const hasProductSize = /\\d+(?:[.,]\\d+)?\\s*(?:كجم|كيلو|ك|جم|جرام|مل|ملى|لتر|ل|kg|g|ml|l)(?=$|[^\\p{L}\\p{N}])/iu.test(line);
-    const numericCount = (line.match(/\\d+(?:[.,]\\d+)?/gu) || []).length;
+    const hasProductSize = /\d+(?:[.,]\d+)?\s*(?:كجم|كيلو|ك|جم|جرام|مل|ملى|لتر|ل|kg|g|ml|l)(?=$|[^\p{L}\p{N}])/iu.test(line);
+    const numericCount = (line.match(/\d+(?:[.,]\d+)?/gu) || []).length;
     return hasCurrency || hasPriceLabel || (hasProductSize && numericCount >= 2);
   });
 }
-
 async function observe({ pool, message, merchantId = null, registry }) {
   const text = message.text || message.caption || "";
   const bulkCatalog = isBulkPriceList(text);

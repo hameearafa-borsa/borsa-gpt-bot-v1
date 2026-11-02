@@ -65,5 +65,28 @@ const { renderPriceListImages } = require("../modules/price-list-image");
       console.log(`Rendered ${placement} logo variant: ${variantImages.length} pages`);
     }
   }
+  // Real-renderer regression: feed Arabic Presentation Forms through the full SVG -> librsvg/Pango -> sharp PNG path.
+  // The output is uploaded as a visual QA artifact so shaping can be inspected, not inferred from a mocked SVG test.
+  const presentationProbe = await renderPriceListImages({
+    company: "ﻗﺎﺋﻤﺔ اختبار — شركة يونيليفر",
+    watermark: "ﺑﻮﺭﺻﺔ المنظفات لأصحاب المحلات",
+    month: "أكتوبر 2026",
+    priceType: "أسعار جملة",
+    items: [
+      { product: "ﺩﻭﺷ ٦٠ ﺟﻢ", package_sale_price: 125 },
+      { product: "ﺑﺎﻧﺘﻴﻦ ٢٠٠ ﻣﻞ", package_sale_price: 210 },
+      { product: "ﺍﺭﻳﺎﻝ ﺟﻞ ١٫٨ ﻟﺘﺮ", package_sale_price: 340 }
+    ]
+  });
+  assert.equal(presentationProbe.length, 1, "presentation-form regression probe must fit on one PNG page");
+  const probePng = presentationProbe[0];
+  assert.deepEqual([...probePng.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10],
+    "presentation-form regression output must be a real PNG");
+  const probeMeta = await sharp(probePng).metadata();
+  assert.equal(probeMeta.format, "png");
+  assert.equal(probeMeta.width, 1200);
+  assert.ok(probePng.length > 1000, "presentation-form regression image must be fully rasterized");
+  if (outputDir) fs.writeFileSync(path.join(outputDir, "arabic-presentation-forms-real-render.png"), probePng);
+  console.log(`Arabic Presentation Forms real PNG regression: OK (sharp ${sharp.versions.sharp}, ${probeMeta.width}x${probeMeta.height}, ${probePng.length} bytes)`);
   console.log(`price list real sharp rasterization test: OK (sharp ${sharp.versions.sharp}, ${accepted.length} accepted rows, ${review.length} review rows, ${images.length} real PNG pages)`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

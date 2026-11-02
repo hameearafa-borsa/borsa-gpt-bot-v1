@@ -227,7 +227,7 @@ function deterministicList(text) {
         .map(match => match[0].replace(/\s+/g, " ").trim())
       : [];
     // Weight/volume belongs in the package column; keep it out of product identity.
-    const displayProductPrefix = productPrefix.replace(/[+*×/]+\s*$/u, "").replace(/\s+/g, " ").trim();
+    const hasExplicitPackageSeparators = /\s[-–—]\s/u.test(line);\n    const displayProductPrefix = [productPrefix.replace(/[+*×/]+\s*$/u, "").replace(/\s+/g, " ").trim(), ...(!hasExplicitPackageSeparators ? identitySizes : [])].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(displayProductPrefix);
     const isNumericOnly = Boolean(identityText) && !/[a-z\u0600-\u06ff]/i.test(identityText.replace(/\s/g, ""));

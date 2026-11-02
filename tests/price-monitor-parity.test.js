@@ -31,6 +31,7 @@ const pearl = `أسعار بيرل – أكتوبر
   const expected = deterministicList(pearl);
   const inserts = [];
   const pool = { async query(sql, params) {
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
     if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -82,6 +83,7 @@ const pearl = `أسعار بيرل – أكتوبر
   // A replay with the same Telegram chat/message/raw row must be idempotent.
   let duplicateInserts = 0;
   const duplicatePool = { async query(sql) {
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
     if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [{ "?column?": 1 }], rowCount: 1 };
@@ -99,6 +101,7 @@ const pearl = `أسعار بيرل – أكتوبر
   // Identical text sent as a new Telegram message is a new observation, not a replay.
   const newMessageInserts = [];
   const newMessagePool = { async query(sql, params) {
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
     if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };
@@ -119,6 +122,7 @@ const pearl = `أسعار بيرل – أكتوبر
   // The database unique index + ON CONFLICT DO NOTHING must allow only one insert per source row.
   const insertedSourceRows = new Set();
   const concurrentPool = { async query(sql, params) {
+    if (sql.includes("SELECT product_text, price_kind")) return { rows: [], rowCount: 0 };
     if (sql.includes("reviewed_price_products")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT product_identity_key")) return { rows: [], rowCount: 0 };
     if (sql.includes("SELECT 1 FROM price_observations")) return { rows: [], rowCount: 0 };

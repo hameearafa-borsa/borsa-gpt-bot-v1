@@ -221,7 +221,7 @@ function parseInvoiceTable(text) {
     const price = Number(amountMatch[1].replace(/,/g, ""));
     if (!Number.isFinite(price) || price <= 0 || price >= 100000) return;
 
-    const packCount = parsePackCount(rawProduct.replace(/\\*\\*/g, ""));
+    const packCount = parsePackCount(rawProduct.replace(/\*\*/g, ""));
     const quantityMatch = toAsciiDigits(rawProduct).match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|غرام|g|لتر|ل|liter|l|مل|ملل|ml)/iu);
     const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
     const productText = rawProduct

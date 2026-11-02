@@ -7,6 +7,13 @@ const registry = require("../data/product-registry.json");
 const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, productIdentityKey } = require("../modules/price-intelligence");
 
 (async () => {
+  const runtimeSource = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
+  assert.doesNotMatch(runtimeSource, /bot\.telegram\.sendMessage\(LOG_CHAT_ID,\s*priceReview\.formatReviewMessage/,
+    "pending price observations must never trigger manual review messages");
+  assert.doesNotMatch(runtimeSource, /priceReviewRecovery\.recoverPendingNotifications/,
+    "startup must not replay legacy pending-review notifications");
+  assert.match(runtimeSource, /Ambiguous observations are retained silently as pending data/,
+    "ambiguous observations must remain stored silently instead of being discarded");
   const base = { chatType: "supergroup", text: "بريكس ارضيات ٢٥ جم جملة ١٨.٧٥ ج" };
   assert.equal(isEligibleMessage({ ...base, isLogChannel: false, isCommand: false, ownMessage: false }), true);
   assert.equal(isEligibleMessage({ ...base, chatType: "private", isLogChannel: false, isCommand: false, ownMessage: false }), false);

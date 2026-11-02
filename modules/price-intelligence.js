@@ -307,14 +307,14 @@ function isConversationalNumericNoise(line) {
 function parseExplicitDelimitedPriceRow(line) {
   // Explicit three-field seller format: product name - package description - price.
   // The separators are authoritative: preserve the product and package fields as written.
-  const fields = String(line || "").trim().split(/\\s+-\\s+/u);
+  const fields = String(line || "").trim().split(/\s+-\s+/u);
   if (fields.length !== 3) return null;
   const [productText, packageText, priceText] = fields.map(value => value.trim());
   if (!productText || !packageText || !priceText) return null;
   const priceNumbers = numericPriceTokens(priceText);
   if (priceNumbers.length !== 1) return null;
   const explicitWholesalePrice = extractExplicitWholesalePrice(priceText);
-  const quantityMatch = toAsciiDigits(productText).match(/\\d+(?:[.,]\\d+)?\\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ملل|ml)/iu);
+  const quantityMatch = toAsciiDigits(productText).match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ملل|ml)/iu);
   const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
   const packCount = parsePackCount(packageText);
   const unitPriceType = detectUnitPriceType(packageText, packCount);

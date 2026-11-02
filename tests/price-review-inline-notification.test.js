@@ -2,13 +2,22 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
+
 const source = fs.readFileSync(path.join(__dirname, "..", "index.js"), "utf8");
-const start = source.indexOf("let sentReviewMessage = null;");
-assert.notEqual(start, -1, "inline price review must retain the sent message for failure cleanup");
-const end = source.indexOf('stage: "review_notification"', start);
-assert.notEqual(end, -1, "inline price review error handler must be present");
-const block = source.slice(start, end);
-assert.match(block, /UPDATE price_review_queue SET log_message_id=\$1[\s\S]*status='pending' AND log_message_id IS NULL[\s\S]*RETURNING observation_id/);
-assert.match(block, /if \(!saved\.rowCount\) throw new Error\("price_review_notification_save_conflict"\)/);
-assert.match(block, /deleteMessage\(LOG_CHAT_ID, sentReviewMessage\.message_id\)/);
-console.log("inline price-review notification persistence and duplicate-cleanup regression tests: OK");
+
+// Pending observations are intentionally stored silently. Legacy inline review
+// notification delivery and startup replay must stay disabled; reviewer actions
+// remain available only for legacy queue entries that already exist.
+assert.doesNotMatch(source, /priceReview\.formatReviewMessage\s*\(/,
+  "new pending observations must not create inline/manual review notifications");
+assert.doesNotMatch(source, /priceReviewRecovery\.recoverPendingNotifications\s*\(/,
+  "startup must not replay legacy pending-review notifications");
+assert.match(source, /Ambiguous observations are retained silently as pending data/,
+  "ambiguous observations must remain stored as pending data");
+assert.match(source, /const pendingRows = result\.savedRows\.filter\(item => item\.row\.decision === "pending"\)/,
+  "pending rows must remain visible to operational diagnostics without reviewer messages");
+assert.match(source, /pending: pendingRows\.length/,
+  "the saved diagnostic must report pending counts without exposing review actions");
+assert.match(source, /bot\.action\(\/\^prv:\(approve\|new\|ignore\):\(\\d\+\)\$/,
+  "legacy review actions must remain available for existing log messages");
+console.log("silent pending price behavior and legacy review-action compatibility tests: OK");

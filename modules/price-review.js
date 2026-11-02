@@ -39,9 +39,12 @@ async function resolveReview({ db, id, action, reviewerId }) {
   return db.withTransaction(async client => {
     const result = await client.query(
       `UPDATE price_observations SET decision=$1, reviewed_by=$2, reviewed_at=NOW(), needs_review=FALSE,
+       price_kind=CASE WHEN $1='accepted' THEN 'wholesale' ELSE price_kind END,
+       confidence=CASE WHEN $1='accepted' THEN GREATEST(COALESCE(confidence, 0), 0.9) ELSE confidence END,
+       explicit_wholesale_label_price=CASE WHEN $1='accepted' THEN package_sale_price ELSE explicit_wholesale_label_price END,
        review_reason=CASE WHEN $3='new' THEN 'new_product_approved' ELSE review_reason END
        WHERE id=$4 AND decision='pending'
-       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, offer_extra_weight_g, package_type, package_sale_price, price_kind, unit_price_type`,
+       RETURNING id, product_text, weight_g, volume_ml, pack_count, brand_key, offer_extra_weight_g, package_type, package_sale_price, price_kind, decision, confidence, unit_price_type, observed_at, needs_review`,
       [decision, reviewerId, action, id]
     );
     if (!result.rowCount) return { ok: false, reason: "already_resolved" };

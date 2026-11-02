@@ -165,6 +165,14 @@ function parseStructuredPriceTable(text) {
     const casePrice = Number(match[3].replace(/,/g, ""));
     const piecePrice = Number(match[4].replace(/,/g, ""));
     if (!productText || !Number.isFinite(casePrice) || !Number.isFinite(piecePrice)) continue;
+    // The source table prints piece prices to two decimal places, but its
+    // commercial precision is one decimal (e.g. 6.50). Compare the carton
+    // total per piece at that displayed precision, not as raw multiplication.
+    // This preserves legitimate totals whose unit value was rounded for display.
+    const impliedPiecePrice = packCount > 0 ? casePrice / packCount : null;
+    const unitPriceConsistent = impliedPiecePrice != null &&
+      Math.round((impliedPiecePrice + Number.EPSILON) * 10) ===
+      Math.round((piecePrice + Number.EPSILON) * 10);
     const quantityMatch = productText.match(/\d+(?:[.,]\d+)?\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|l|مل|ml)/i);
     const quantity = quantityMatch ? parseQuantity(quantityMatch[0]) : null;
     const extraWeight = parseExtraWeight(productText);

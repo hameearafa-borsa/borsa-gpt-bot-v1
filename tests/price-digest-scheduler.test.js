@@ -97,7 +97,7 @@ const {
   const outside = await publishDailyPriceDigest({
     pool: { async query() { outOfWindowQueries++; } },
     telegram: { async sendMessage() {} },
-    now: new Date("2026-11-02T19:00:00.000Z")
+    now: new Date("2026-11-02T17:00:00.000Z")
   });
   assert.equal(outside.reason, "outside_price_digest_window");
   assert.equal(outOfWindowQueries, 0);

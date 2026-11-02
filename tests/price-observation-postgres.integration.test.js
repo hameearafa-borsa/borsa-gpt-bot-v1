@@ -105,11 +105,6 @@ if (!connectionString) {
     // participate in history comparison when their stored dimensions and
     // commercial unit match exactly.
     await pool.query("UPDATE price_observations SET product_identity_key=NULL WHERE id=$1", [firstSeen.savedRows[0].id]);
-    const legacyProbe = await pool.query(
-      "SELECT id, product_text, product_identity_key, price_kind, decision, weight_g, volume_ml, offer_extra_weight_g, package_type, unit_price_type, package_sale_price FROM price_observations WHERE id=$1",
-      [firstSeen.savedRows[0].id]
-    );
-    console.log("LEGACY_DB_PROBE", JSON.stringify(legacyProbe.rows));
     const legacyPriceChange = await observe({
       pool,
       message: {
@@ -121,7 +116,6 @@ if (!connectionString) {
       registry: []
     });
     assert.equal(legacyPriceChange.saved, 1, "a later observation must be appended beside its legacy history row");
-    console.log("LEGACY_HISTORY_DEBUG", JSON.stringify({ old: firstSeen.savedRows[0].row, current: legacyPriceChange.savedRows[0].row }));
     assert.equal(legacyPriceChange.savedRows[0].row.change_type, "price_change",
       "a legacy row with the same product dimensions and unit must compare as a price change");
     const legacyHistory = await pool.query(

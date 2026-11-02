@@ -147,7 +147,19 @@ function extractPackageSizes(line) {
   return [...ascii.matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك(?=\s|$)|kg|جرام|جم|g|لتر|ل(?=\s|$)|liter|ml|مل))/giu)]
     .map(match => match[0].replace(/\s+/g, " ").trim());
 }
+function splitExplicitListRow(line) {
+  const parts = String(line || "").split(/\s[-–—]\s/u).map(part => part.trim());
+  return parts.length === 3 ? { product: parts[0], package: parts[1], price: parts[2] } : null;
+}
+function extractPackageLabelFromPackagePart(value) {
+  const ascii = toAsciiDigits(String(value || "")).replace(/٫/g, ".");
+  const diaper = ascii.match(/(\d+)\s*(شنطة|شنط)?\s*[*×x]\s*(\d+)\s*(حفاضة|حفاضه)/iu);
+  if (diaper) return (diaper[2] ? diaper[1] + " " + diaper[2] + " × " : diaper[1] + " × ") + diaper[3] + " " + diaper[4];
+  return ascii.replace(/\s+/g, " ").trim();
+}
 function extractPackageLabel(line) {
+  const explicit = splitExplicitListRow(line);
+  if (explicit) return extractPackageLabelFromPackagePart(explicit.package);
   const ascii = toAsciiDigits(String(line || "")).replace(/٫/g, ".");
   const sizes = extractPackageSizes(line);
   // Preserve commercial pack composition instead of flattening bags/cartons into generic pieces.
@@ -196,7 +208,10 @@ function deterministicList(text) {
     }
     const priceTokens = getPriceTokens(line);
     if (!priceTokens.length) continue;
-    const weightMatch = toAsciiDigits(line).match(WEIGHT_TOKEN);
+    const explicitRow = splitExplicitListRow(line);
+    const productSource = explicitRow ? explicitRow.product : line;
+    const packageSource = explicitRow ? explicitRow.package : line;
+    const weightMatch = toAsciiDigits(productSource).match(WEIGHT_TOKEN);
     const quantity = weightMatch ? parseQuantity(weightMatch[0]) : null;
     const countMatch = toAsciiDigits(line).match(/(?:[*×x]\s*(\d+)|(?:^|[+*x×\s])(\d+)\s*(?:ق|قط|قطعه|قطعة|كيس|اكياس|أكياس|زجاجة|زجاجه|زجاجات|جركن|عبوة|عبوات|علبة|علب)(?=\s|$))/iu);
     const packCount = countMatch ? Number(countMatch[1] || countMatch[2]) : null;
@@ -222,13 +237,13 @@ function deterministicList(text) {
       // In a named company wholesale catalog, an unmarked price is a carton price.
       // Explicit per-piece markers and section headings take precedence above.
       (metadata.company && (metadata.isCompanyCatalog || metadata.priceType === "أسعار جملة") ? "بالكرتونة" : null);
-    const productPrefix = metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line);
+    const productPrefix = explicitRow ? toAsciiDigits(explicitRow.product).replace(/\s+/g, " ").trim() : (metadata.company ? cleanExplicitProductLine(line) : cleanProductName(line));
     const identitySizes = metadata.company
       ? [...toAsciiDigits(line).matchAll(/\d+(?:[.,]\d+)?(?:\s*\/\s*\d+(?:[.,]\d+)?)*(?:\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل))(?:\s*\+\s*\d+(?:[.,]\d+)?(?:\s*(?:كيلو|كجم|ك|kg|جرام|جم|g|لتر|ل|liter|ml|مل)))*/giu)]
         .map(match => match[0].replace(/\s+/g, " ").trim())
       : [];
     // Weight/volume belongs in the package column; keep it out of product identity.
-    const hasExplicitPackageSeparators = /\s[-–—]\s/u.test(line);
+    const hasExplicitPackageSeparators = Boolean(explicitRow);
     const displayProductPrefix = [productPrefix.replace(/[+*×/]+\s*$/u, "").replace(/\s+/g, " ").trim(), ...(!hasExplicitPackageSeparators ? identitySizes : [])].filter(Boolean).join(" ").replace(/\s+/g, " ").trim();
     const weightLabel = weightMatch ? weightMatch[0].trim() : "وزن غير محدد";
     const identityText = normalizeArabic(displayProductPrefix);
@@ -243,7 +258,7 @@ function deterministicList(text) {
     const contextualCurrencyTypo = suspiciousCurrency && hasContextualCurrencyTypo(lines, lineIndex);
     const decision = !packagePrice || !hasIdentity || isNumericOnly ? (packagePrice && !isNumericOnly ? "review" : "skipped") : ((suspiciousCurrency && !contextualCurrencyTypo) || !unitPriceType) ? "review" : "accepted";
     out.push({
-      raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company, package_label: extractPackageLabel(line),
+      raw_line: line, product, category: section || "منتجات متنوعة", variant: section || null, company, package_label: explicitRow ? extractPackageLabelFromPackagePart(packageSource) : extractPackageLabel(line),
       weight_g: quantity?.grams ?? null, volume_ml: quantity?.milliliters ?? null,
       pack_count: packCount, package_sale_price: packagePrice, unit_price_type: unitPriceType,
       wholesale_carton_price: afterWholesale, consumer_price: afterConsumer,
@@ -308,4 +323,4 @@ async function extractList(ai, text) {
     return { ...metadata, ...parsed, company: parsed.company || metadata.company || null, method: result.provider || "ai" };
   } catch (error) { return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: error.message }; }
 }
-module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType, detectUnitPriceHeading, extractPackageSizes, extractPackageLabel };
+module.exports = { isListLike, buildListPrompt, deterministicList, extractList, parseAIJson, getPriceTokens, cleanProductName, parseListMetadata, detectUnitPriceType, detectUnitPriceHeading, extractPackageSizes, extractPackageLabel, splitExplicitListRow };

@@ -5,6 +5,7 @@ const path = require("node:path");
 const sharp = require("sharp");
 const { deterministicList, parseListMetadata } = require("../modules/price-list");
 const { renderPriceListImages } = require("../modules/price-list-image");
+const ARIEL_PAGE_SIZE = 25;
 
 (async () => {
   const fixture = fs.readFileSync(path.join(__dirname, "fixtures-ariel-nov-2026.txt"), "utf8");
@@ -37,8 +38,8 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   const automatic = accepted.find(row => /اريال اتوماتيك 2.5 كيلو/.test(row.raw_line));
   assert.equal(automatic.product, "اريال اتوماتيك 2.5 كيلو", "automatic product name and capacity must remain complete");
   assert.equal(automatic.package_label, "4 كيس", "automatic bag count belongs only in package description");
-  const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType || "قائمة أسعار" });
-  assert.equal(images.length, Math.ceil(accepted.length / 16), "long Ariel list should split into readable pages");
+  const images = await renderPriceListImages({ company: metadata.company, items: accepted, watermark: "بورصة المنظفات لأصحاب المحلات", month: metadata.month, priceType: metadata.priceType || "قائمة أسعار", pageSize: ARIEL_PAGE_SIZE });
+  assert.equal(images.length, Math.ceil(accepted.length / ARIEL_PAGE_SIZE), "long Ariel list should split into readable pages");
   const outputDir = process.env.PRICE_LIST_TEST_OUTPUT_DIR;
   if (outputDir) fs.mkdirSync(outputDir, { recursive: true });
   for (const [index, png] of images.entries()) {
@@ -48,7 +49,8 @@ const { renderPriceListImages } = require("../modules/price-list-image");
     assert.equal(meta.format, "png");
     assert.equal(meta.width, 1200);
     assert.equal(meta.channels, 4);
-    assert.ok(meta.height >= 250 && meta.height <= 1200);
+    assert.ok(meta.height >= 250 && meta.height <= 1700, "long-form Telegram page must retain readable row height");
+    if (index < images.length - 1) assert.equal(meta.height, 164 + 42 + ARIEL_PAGE_SIZE * 52 + 85, "full pages must use the expanded long-form canvas");
     assert.ok(png.length > 1000);
   }
   console.log(`Ariel November 2026 visual QA: OK (${parsed.length} source rows, ${accepted.length} accepted, ${review.length} review, ${skipped.length} skipped, ${images.length} pages)`);

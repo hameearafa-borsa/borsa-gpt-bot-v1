@@ -291,7 +291,8 @@ const { extractPriceCandidates, parseStructuredPriceTable, parseInvoiceTable, pr
       if (sql.includes("SELECT product_identity_key")) return { rows: [{
         product_identity_key: "prior-product", price_kind: "wholesale", product_text: "بريكس ارضيات",
         package_sale_price: 216, weight_g: 25, volume_ml: null, pack_count: 12,
-        offer_extra_weight_g: null, package_type: null, brand_key: null
+        offer_extra_weight_g: null, package_type: null, brand_key: null,
+        unit_price_type: "بالكرتونة"
       }], rowCount: 1 };
       if (sql.includes("INSERT INTO price_observations")) return { rows: [{ id: 99 }], rowCount: 1 };
       throw new Error("unexpected inherited-count query");

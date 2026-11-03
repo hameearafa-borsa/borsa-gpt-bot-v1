@@ -136,7 +136,7 @@ async function resolveDealChatIds({ pool, chatId, chatIds }) {
   return [...new Set((r.rows || []).map(row => Number(row.chat_id)).filter(Number.isSafeInteger))];
 }
 
-async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
+async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {}, onDiagnostics = async () => {} }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
   if (!(await isServiceEnabled(pool, "deals"))) return { skipped: true, reason: "service_disabled" };
   const requestedChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
@@ -195,7 +195,7 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     sources: safeSourceStats
   };
   const emitDiagnostics = async details => {
-    try { await options.onDiagnostics?.(details); } catch { /* Diagnostics must never block publication. */ }
+    try { await onDiagnostics(details); } catch { /* Diagnostics must never block publication. */ }
   };
   await emitDiagnostics({ ...diagnosticsBase, stage: "collected", elapsedMs: Date.now() - collectionStartedAt });
   if (!gathered.deals?.length) {

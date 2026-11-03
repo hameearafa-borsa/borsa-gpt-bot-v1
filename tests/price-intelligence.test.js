@@ -93,7 +93,7 @@ assert.equal(fieldRows[5].confidence, 0.72);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
 assert.equal(fieldRows[6].product_text, "سيجنال", "standalone ق is a per-piece marker, not part of the product name");
 assert.deepEqual(extractPriceCandidates("شهر أكتوبر 2026"), [], "catalog month headers must not become price candidates");
-const { deterministicList, buildListPrompt, parseListMetadata, extractList, detectUnitPriceType: detectListUnitPriceType } = require("../modules/price-list");
+const { isListLike, deterministicList, buildListPrompt, parseListMetadata, extractList, detectUnitPriceType: detectListUnitPriceType } = require("../modules/price-list");
 assert.equal(detectListUnitPriceType("سيجنال 120مل ق 42,33 ج"), "بالقطعة");
 assert.equal(detectListUnitPriceType("قطعة صابون هدية 1104 ج"), null,
   "gift wording alone must not override the wholesale-catalog default carton unit");
@@ -170,6 +170,8 @@ assert.equal(baheyMetadata.month, "نوفمبر",
 assert.equal(baheyMetadata.priceType, "أسعار جملة",
   "a /قائمة company catalog should retain the existing wholesale default");
 assert.equal(baheyMetadata.isCompanyCatalog, true);
+assert.equal(isListLike(baheyCompanyOnlyHeader), true,
+  "the silent monitor must recognize the same company-only Bahey list structure as /قائمة");
 const baheyRows = deterministicList(baheyCompanyOnlyHeader);
 assert.equal(baheyRows.length, 2, "both Bahey soap rows must be extracted");
 assert.ok(baheyRows.every(row => row.decision === "accepted"),

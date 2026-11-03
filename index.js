@@ -948,10 +948,15 @@ installFatalProcessHandlers({
   console.log(`AI providers configured: ${ai.providers.join(", ") || "none"}`);
   // Scheduled newsletters are enabled by default; set DEALS_SCHEDULER_ENABLED=false to pause them.
   if (String(process.env.DEALS_SCHEDULER_ENABLED ?? "true").toLowerCase() !== "false") {
-    stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram, onError: async (error, details) => {
-      const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
-      await emitReport({ bot, db, report });
-    } });
+    stopDeals = startDealScheduler({ pool: db.pool, telegram: bot.telegram,
+      onDiagnostics: async details => {
+        console.info("[DEALS_SOURCE_DIAGNOSTICS] " + JSON.stringify(details));
+      },
+      onError: async (error, details) => {
+        const report = makeReport({ module: "deals", stage: details?.stage || "daily_cycle", severity: "ERROR", action: "deal_newsletter", error, details });
+        await emitReport({ bot, db, report });
+      }
+    });
     console.log("[DEALS_SCHEDULER] Enabled by default unless DEALS_SCHEDULER_ENABLED=false. Scheduled scraping may consume paid credits.");
   } else {
     console.log("[DEALS_SCHEDULER] Disabled explicitly by DEALS_SCHEDULER_ENABLED=false.");

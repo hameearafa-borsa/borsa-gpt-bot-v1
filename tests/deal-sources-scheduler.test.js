@@ -185,16 +185,19 @@ assert.equal(batchKey(sampleDate),"2026-10-12");
 assert.equal(isNewsletterWindow(new Date("2026-10-12T13:59:00.000Z")),false);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T14:00:00.000Z")),true);
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:00:00.000Z")),"amazon"); // 5 PM Cairo
-assert.equal(newsletterKindAt(new Date("2026-10-12T15:00:00.000Z")),"other_sites"); // 6 PM Cairo
-assert.equal(newsletterKindAt(new Date("2026-10-12T15:04:00.000Z")),"other_sites", "allow brief startup/timer jitter after 6 PM");
-assert.equal(newsletterKindAt(new Date("2026-10-12T15:05:00.000Z")),null, "close the scheduled window after five minutes");
-assert.equal(newsletterKindAt(new Date("2026-10-12T15:45:00.000Z")),null, "a late boot must not publish the 6 PM newsletter at 6:45 PM");
+assert.equal(newsletterKindAt(new Date("2026-10-12T15:00:00.000Z")),null, "other-store edition must wait for the longer recovery window");
+assert.equal(newsletterKindAt(new Date("2026-10-12T15:29:00.000Z")),null, "do not start other-store scraping before 6:30 PM Cairo");
+assert.equal(newsletterKindAt(new Date("2026-10-12T15:30:00.000Z")),"other_sites", "start other-store recovery at 6:30 PM Cairo");
+assert.equal(newsletterKindAt(new Date("2026-10-12T15:34:00.000Z")),"other_sites", "allow timer jitter after the 6:30 PM start");
+assert.equal(newsletterKindAt(new Date("2026-10-12T16:29:00.000Z")),"other_sites", "keep the other-store edition eligible through 7:29 PM Cairo");
+assert.equal(newsletterKindAt(new Date("2026-10-12T16:30:00.000Z")),null, "close the recovery window at 7:30 PM Cairo");
+assert.equal(newsletterKindAt(new Date("2026-10-12T16:45:00.000Z")),null, "do not overlap the 8 PM price digest");
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:05:00.000Z")),"amazon", "Amazon remains eligible after the original five-minute window");
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:44:00.000Z")),"amazon", "Amazon recovery remains available through 5:44 PM Cairo");
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:45:00.000Z")),null, "stop starting Amazon retries 15 minutes before the other-store edition");
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:59:00.000Z")),null);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T14:44:00.000Z")),true);
-assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),null); // no third newsletter
+assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),"other_sites", "keep the recovery window open at 7 PM Cairo");
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
   Array.from({length: 6}, (_,i) => ({
     merchant: prefix, title: `${prefix} ${category} product ${i}`,
@@ -490,6 +493,7 @@ const amazonOnly = await collectDealCandidates({
  const publicationQueries = [];
  const publicationMessages = [];
  const publicationErrors = [];
+ const publicationDiagnostics = [];
  const publicationPool = {
    query: async (sql, values = []) => {
      const normalized = String(sql).replace(/\s+/g, " ").trim();
@@ -528,13 +532,14 @@ const amazonOnly = await collectDealCandidates({
      return { message_id: 9901 };
    } },
    chatIds: [-1001234567890],
-   now: new Date("2026-10-12T15:00:00.000Z"), // 6 PM Cairo
+   now: new Date("2026-10-12T15:30:00.000Z"), // 6:30 PM Cairo
    fetcher: async ({ edition }) => {
      publicationEdition = edition;
      return { deals: publicationDeals, errors: [], sourceStats: [], sourceCount: 13 };
    },
    verify: async deals => deals.map(deal => ({ ...deal, verified_url: true })),
-   onError: async error => publicationErrors.push(String(error?.message || error))
+   onError: async error => publicationErrors.push(String(error?.message || error)),
+   onDiagnostics: async details => publicationDiagnostics.push(details)
  });
  assert.equal(publicationEdition, "other_sites", "6 PM publication must collect only the other-store edition");
  assert.equal(publicationResult.kind, "other_sites");
@@ -558,6 +563,12 @@ const amazonOnly = await collectDealCandidates({
  assert.equal(persistedOffers.length, 4,
    "only the four selected non-Amazon offers should be persisted after successful delivery");
  assert.deepEqual(publicationErrors, []);
+ assert.deepEqual(publicationDiagnostics.map(item => item.stage), ["collected", "filtered"],
+   "publication must emit collection and post-filter diagnostics");
+ assert.equal(publicationDiagnostics[0].kind, "other_sites");
+ assert.equal(publicationDiagnostics[0].gatheredCount, 5);
+ assert.equal(publicationDiagnostics[1].selectedCount, 4);
+ assert.equal(publicationDiagnostics[1].duplicateCooldownDays, 7);
 
  if (oldKey1 === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = oldKey1;
  if (oldKey2 === undefined) delete process.env.SCRAPER_API_KEY_2; else process.env.SCRAPER_API_KEY_2 = oldKey2;

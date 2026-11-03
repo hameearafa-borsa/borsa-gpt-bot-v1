@@ -14,7 +14,8 @@ assert.equal(currentWeatherSlot(new Date("2026-10-25T07:10:00.000Z")), null); //
 assert.equal(currentWeatherSlot(new Date("2026-10-25T08:00:00.000Z"))?.hour, 11); // 11:00 Cairo
 assert.equal(newsletterKindAt(new Date("2026-10-25T07:10:00.000Z")), null); // 10:10 Cairo
 assert.equal(newsletterKindAt(new Date("2026-10-25T14:00:00.000Z")), "amazon"); // 17:00 Cairo
-assert.equal(newsletterKindAt(new Date("2026-10-25T15:00:00.000Z")), "other_sites"); // 18:00 Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-25T15:00:00.000Z")), null); // 18:00 Cairo, before the new window
+assert.equal(newsletterKindAt(new Date("2026-10-25T15:30:00.000Z")), "other_sites"); // 18:30 Cairo
 
 const before = new Date("2026-10-25T07:09:00.000Z"); // 10:09 Cairo
 assert.equal(msUntilNextCheck(before), 60 * 1000);

@@ -43,6 +43,39 @@ function buildConversationInput(message, currentText = null) {
   if (!hasChemicalAssistantReply) return current.slice(0, 7000);
   return [...previousUserMessages, current].filter(Boolean).join("\n\n").slice(0, 7000);
 }
+async function ensureConversationContextSchema(pool) {
+  if (!pool) throw new Error("chemical conversation context requires PostgreSQL");
+  await pool.query(`CREATE TABLE IF NOT EXISTS chemical_conversation_contexts (
+    chat_id BIGINT NOT NULL,
+    assistant_message_id BIGINT NOT NULL,
+    context_text TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY(chat_id, assistant_message_id)
+  )`);
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_chemical_conversation_contexts_created ON chemical_conversation_contexts(created_at)");
+}
+async function resolveConversationInput(pool, message, currentText = null) {
+  const current = String(currentText ?? message?.text ?? message?.caption ?? "").trim();
+  const reply = message?.reply_to_message;
+  if (pool && reply?.from?.is_bot && /🧪\\s*المساعد الكيميائي/.test(String(reply.text || reply.caption || ""))) {
+    const result = await pool.query(`SELECT context_text FROM chemical_conversation_contexts
+      WHERE chat_id=$1 AND assistant_message_id=$2
+        AND created_at >= NOW() - INTERVAL '30 days'`,
+      [message?.chat?.id, reply.message_id]);
+    const previous = String(result.rows?.[0]?.context_text || "").trim();
+    if (previous) return [previous, current].filter(Boolean).join("\\n\\n").slice(0, 7000);
+  }
+  return buildConversationInput(message, current);
+}
+async function saveConversationContext(pool, { chatId, assistantMessageId, contextText }) {
+  if (!pool || !chatId || !assistantMessageId || !String(contextText || "").trim()) return false;
+  await pool.query(`INSERT INTO chemical_conversation_contexts(chat_id,assistant_message_id,context_text)
+    VALUES($1,$2,$3) ON CONFLICT(chat_id,assistant_message_id)
+    DO UPDATE SET context_text=EXCLUDED.context_text, created_at=NOW()`,
+    [chatId, assistantMessageId, String(contextText).slice(0, 7000)]);
+  await pool.query("DELETE FROM chemical_conversation_contexts WHERE created_at < NOW() - INTERVAL '30 days'");
+  return true;
+}
 function buildPrompt(question) {
   const safetyRules = RULES.map(rule => "- " + rule.key + ": " + rule.trigger + " — " + rule.action).join("\n");
   const marketNames = [
@@ -94,4 +127,4 @@ async function answer(ai, question, onError = null) {
     return SAFE_FALLBACK;
   }
 }
-module.exports = { answer, buildPrompt, buildConversationInput, safetyGate, isChemicalQuestion, SAFE_FALLBACK, RULES };
+module.exports = { answer, buildPrompt, buildConversationInput, ensureConversationContextSchema, resolveConversationInput, saveConversationContext, safetyGate, isChemicalQuestion, SAFE_FALLBACK, RULES };

@@ -9,7 +9,8 @@ function svgText(value) {
   // Keep Arabic as logical Unicode. librsvg/Pango (used by sharp) performs
   // contextual shaping and bidirectional layout with the installed Noto fonts.
   // Pre-shaping into Arabic Presentation Forms can render as missing-glyph boxes.
-  const logicalText = escapeXml(String(value ?? ""));
+  // Normalize compatibility Arabic Presentation Forms back to logical Unicode before shaping.
+  const logicalText = escapeXml(String(value ?? "").normalize("NFKC"));
   return '<tspan direction="auto" unicode-bidi="plaintext">' + logicalText + '</tspan>';
 }
 function priceText(value) {

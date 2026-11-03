@@ -31,14 +31,15 @@ assert.equal(extractPackageLabel("ماكينة ناست حصائر 48 ماكين
       };
       return originalLoad.call(this, request, parent, isMain);
     };
-    const png = await renderPriceListImage({ company: "شركة اختبار", watermark: "بورصة المنظفات", items: [
+    const png = await renderPriceListImage({ company: "ﻗﺎﺋﻤﺔ اختبار", watermark: "بورصة المنظفات", items: [
       { product: "منتج أول", package_sale_price: 10 },
       { product: "منتج ثان", package_sale_price: 20 },
       { product: "منتج ثالث", package_sale_price: 30 },
       { product: "A".repeat(149) + "&end", package_sale_price: 40, volume_ml: 350, unit_price_type: "بالكرتونة", package_label: "350 مل · 32 كيس" }
     ] });
     assert.equal(png.toString(), "mock-png");
-    assert.ok(capturedSvg.includes("شركة اختبار"), "Arabic company heading must remain logical Unicode in SVG");
+    assert.ok(capturedSvg.includes("قائمة اختبار"), "Arabic Presentation Forms in input must normalize to logical Unicode before SVG shaping");
+    assert.ok(!capturedSvg.includes("ﻗﺎﺋﻤﺔ"), "Arabic Presentation Forms must not reach the SVG renderer");
     assert.ok(capturedSvg.includes("بورصة المنظفات"), "watermark must retain readable Arabic Unicode");
     assert.doesNotMatch(capturedSvg, /منتجات متنوعة/, "generic category labels must not be repeated above each product");
     assert.match(capturedSvg, /<tspan direction="auto" unicode-bidi="plaintext">/,

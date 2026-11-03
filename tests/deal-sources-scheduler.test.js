@@ -197,7 +197,7 @@ assert.equal(newsletterKindAt(new Date("2026-10-12T14:44:00.000Z")),"amazon", "A
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:45:00.000Z")),null, "stop starting Amazon retries 15 minutes before the other-store edition");
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:59:00.000Z")),null);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T14:44:00.000Z")),true);
-assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),null); // no third newsletter
+assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),"other_sites", "keep the recovery window open at 7 PM Cairo");
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
   Array.from({length: 6}, (_,i) => ({
     merchant: prefix, title: `${prefix} ${category} product ${i}`,

@@ -9,7 +9,9 @@ const imageSource = fs.readFileSync(path.join(__dirname, "../modules/price-list-
 assert.match(imageSource, /require\("sharp"\)/, "image renderer must load sharp explicitly");
 assert.match(imageSource, /Noto Sans Arabic,Noto Naskh Arabic,sans-serif/, "SVG must request installed Arabic-capable fonts before generic fallback");
 const dockerSource = fs.readFileSync(path.join(__dirname, "..", "Dockerfile"), "utf8");
-assert.match(dockerSource, /apk add --no-cache font-noto fontconfig/, "production image must install Arabic-capable fonts for SVG rasterization");
+assert.match(dockerSource, /apk add --no-cache[^\\n]*font-noto-arabic[^\\n]*font-noto-naskh-arabic/, "production image must install dedicated Noto Arabic and Naskh Arabic font packages");
+assert.match(dockerSource, /fc-match[^\\n]*Noto Sans Arabic/, "production image build must verify the requested Noto Sans Arabic family is available");
+assert.match(dockerSource, /fc-match[^\\n]*Noto Naskh Arabic/, "production image build must verify the requested Noto Naskh Arabic family is available");
 assert.match(imageSource, /\.png\(/, "image renderer must produce PNG output for Telegram");
 assert.match(imageSource, /logoPlacement = "both"/, "combined group logo and watermark must be the default");
 assert.match(imageSource, /id="securityTexture"/, "rendered pages must include a subtle security background");

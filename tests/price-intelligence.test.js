@@ -93,7 +93,7 @@ assert.equal(fieldRows[5].confidence, 0.72);
 assert.equal(fieldRows[6].package_sale_price, 42.33);
 assert.equal(fieldRows[6].product_text, "سيجنال", "standalone ق is a per-piece marker, not part of the product name");
 assert.deepEqual(extractPriceCandidates("شهر أكتوبر 2026"), [], "catalog month headers must not become price candidates");
-const { deterministicList, buildListPrompt, parseListMetadata, extractList, detectUnitPriceType: detectListUnitPriceType } = require("../modules/price-list");
+const { isListLike, deterministicList, buildListPrompt, parseListMetadata, extractList, detectUnitPriceType: detectListUnitPriceType } = require("../modules/price-list");
 assert.equal(detectListUnitPriceType("سيجنال 120مل ق 42,33 ج"), "بالقطعة");
 assert.equal(detectListUnitPriceType("قطعة صابون هدية 1104 ج"), null,
   "gift wording alone must not override the wholesale-catalog default carton unit");
@@ -157,6 +157,38 @@ const pearlOctober = `أسعار بيرل – أكتوبر
 • 50 جم: 3.96 | جملة 47.52 | مستهلك 5
 • 30 جم: 3.79 | جملة 75.95 | مستهلك 5`;
 assert.equal(parseListMetadata(pearlOctober).month, "أكتوبر", "month in a company-list title should be retained even without an explicit year");
+const baheyCompanyOnlyHeader = `/قائمة
+شركة باهي
+شهر نوفمبر
+صابون دوش 60 جم - 48 قطعة - 329.28
+صابون دوش 110 جم - 48 قطعة - 612.50`;
+const baheyMetadata = parseListMetadata(baheyCompanyOnlyHeader);
+assert.equal(baheyMetadata.company, "شركة باهي",
+  "a company-only heading after /قائمة must identify the company");
+assert.equal(baheyMetadata.month, "نوفمبر",
+  "a month heading without a year must still be retained");
+assert.equal(baheyMetadata.priceType, "أسعار جملة",
+  "a /قائمة company catalog should retain the existing wholesale default");
+assert.equal(baheyMetadata.isCompanyCatalog, true);
+assert.equal(isListLike(baheyCompanyOnlyHeader), true,
+  "the silent monitor must recognize the same company-only Bahey list structure as /قائمة");
+const baheyRows = deterministicList(baheyCompanyOnlyHeader);
+assert.equal(baheyRows.length, 2, "both Bahey soap rows must be extracted");
+assert.ok(baheyRows.every(row => row.decision === "accepted"),
+  "counted 48-piece packs in a company catalog must use the carton default");
+assert.ok(baheyRows.every(row => row.unit_price_type === "بالكرتونة"),
+  "48 قطعة describes carton contents, not a per-piece price marker");
+assert.ok(baheyRows.every(row => row.pack_count === 48),
+  "the explicitly stated 48-piece pack count must be preserved");
+assert.deepEqual(baheyRows.map(row => row.package_sale_price), [329.28, 612.50]);
+assert.ok(baheyRows.every(row => row.company === "شركة باهي"));
+assert.equal(detectListUnitPriceType("صابون دوش 60 جم - 48 قطعة - 329.28"), null,
+  "a numeric piece count must not be mistaken for a per-piece price declaration");
+assert.equal(detectListUnitPriceType("صابون دوش 60 جم بالقطعة 12.50"), "بالقطعة",
+  "explicit per-piece wording must continue to identify piece pricing");
+assert.equal(detectListUnitPriceType("شامبو بانتين 200 مل - قطعة - 77.61"), "بالقطعة",
+  "a standalone piece label must remain a per-piece marker when it is not a numeric pack count");
+
 const pearlRows = extractPriceCandidates(pearlOctober);
 assert.equal(pearlRows.length, 13, "Pearl October list should yield 13 sale-price observations");
 assert.deepEqual(pearlRows.map(row => row.package_sale_price), [487.40, 915.87, 716.63, 618.35, 432.84, 516.90, 395.85, 265.15, 176.29, 144.06, 135.49, 47.52, 75.95], "the monitor must select explicit wholesale prices while preserving unlabeled rows for review");

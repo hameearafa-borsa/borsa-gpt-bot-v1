@@ -23,7 +23,7 @@ function isListLike(text) {
   // explicit catalog heading/table structure. Ordinary price chatter stays excluded.
   const singleLineCatalog = lines === 1 && numericHits >= 12 &&
     (priceHits >= 8 || pipeCount >= 8 || quantityHits >= 8);
-  const hasListHeader = /(?:أسعار\s+شركة|الأسعار?\s*(?:بالقطعة|بالكرتونة|جملة|قطاعي)|قائمة\s+أسعار)/iu.test(s);
+  const hasListHeader = /(?:أسعار\s+شركة|شركة\s+\S+|الأسعار?\s*(?:بالقطعة|بالكرتونة|جملة|قطاعي)|قائمة\s+أسعار)/iu.test(s);
   const multiLineCatalog = (lines >= 3 && pricedRows >= 3) ||
     (lines >= 3 && pricedRows >= 2 && (hasListHeader || pipeCount >= 2));
   return singleLineCatalog || multiLineCatalog;
@@ -76,15 +76,20 @@ function parseListMetadata(text) {
   const lines = String(text || "").split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   let company = null, month = null, priceType = null, isCompanyCatalog = false;
   for (const line of lines) {
-    const companyMatch = line.match(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+(شركة\s+.+)$/iu);
-    if (companyMatch) { company = companyMatch[1].trim().replace(/[:：]+$/, ""); isCompanyCatalog = /^قائمة\s+/iu.test(line); }
-    const monthMatch = line.match(/^(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)\s+(20\d{2})$/iu);
-    if (monthMatch) month = `${monthMatch[1]} ${monthMatch[2]}`;
+    const companyMatch = line.match(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+(شركة\s+.+?)\s*$/iu);
+    const directCompanyMatch = line.match(/^(شركة\s+.+?)[:：]?\s*$/iu);
+    if (companyMatch || directCompanyMatch) {
+      company = (companyMatch || directCompanyMatch)[1].trim().replace(/[:：]+$/, "");
+      isCompanyCatalog = true;
+    }
+    const monthMatch = line.match(/^(?:شهر\s+)?(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)(?:\s+(20\d{2}))?$/iu);
+    if (monthMatch) month = monthMatch[2] ? monthMatch[1] + " " + monthMatch[2] : monthMatch[1];
     const titleMonthMatch = line.match(/^(?:أسعار|اسعار)\s+.+?[–—-]\s*(يناير|فبراير|مارس|أبريل|ابريل|مايو|يونيو|يوليو|أغسطس|اغسطس|سبتمبر|أكتوبر|اكتوبر|نوفمبر|ديسمبر)(?:\s+(20\d{2}))?$/iu);
-    if (titleMonthMatch) month = titleMonthMatch[2] ? `${titleMonthMatch[1]} ${titleMonthMatch[2]}` : titleMonthMatch[1];
+    if (titleMonthMatch) month = titleMonthMatch[2] ? titleMonthMatch[1] + " " + titleMonthMatch[2] : titleMonthMatch[1];
     if (/الأسعار?\s*(?:هي\s*)?جملة|اسعار\s*جمله/iu.test(line)) priceType = "أسعار جملة";
     else if (/(?:قطاعي|مستهلك|تجزئة)/iu.test(line)) priceType = "أسعار قطاعي";
   }
+  if (isCompanyCatalog && !priceType) priceType = "أسعار جملة";
   return { company, month, priceType, isCompanyCatalog };
 }
 function cleanExplicitProductLine(line) {
@@ -118,7 +123,12 @@ function detectUnitPriceType(line) {
   // Explicit row-level carton wording takes precedence over a section heading.
   if (/(?:بالكرتونة|بالكرتونه|للكرتونة|للكرتونه|سعر\s*الكرتونة|سعر\s*الكرتونه|الكرتونة|الكرتونه)/iu.test(s)) return "بالكرتونة";
   // Explicit wording or standalone Arabic ق identifies per-piece pricing.
-  if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|بالقطعه|سعر\s*القطعه|للقطعه)/iu.test(s) || /(?:^|[\s-])(?:قطعة|قطعه)(?=\s*[-–—]|\s*$)/iu.test(s) || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
+  // A counted pack such as "48 قطعة" describes package quantity, not a
+  // per-piece price. Only explicit price wording or the standalone "ق" marker
+  // establishes piece pricing.
+  const countedPieces = /(?:^|[\s+])\d+\s*(?:قطعة|قطعه)(?=\s|$)/iu.test(s);
+  const standalonePiece = /(?:^|[\s-])(?:قطعة|قطعه)(?=\s*[-–—]|\s*$)/iu.test(s) && !countedPieces;
+  if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|بالقطعه|سعر\s*القطعه|للقطعه)/iu.test(s) || standalonePiece || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
   return null;
 }
 function isNonPriceCommentLine(line) {
@@ -183,7 +193,7 @@ function deterministicList(text) {
     const line = lines[lineIndex];
     if (isNonPriceCommentLine(line)) continue;
     if (/^[-_=.*.]{3,}$/.test(line) || /^\/(?:قائمة|pricelist)(?:\s|$)/iu.test(line)) continue;
-    if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)\s+20\d{2}$/iu.test(line)) continue;
+    if (/^(?:شهر\s+)?(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)(?:\s+20\d{2})?$/iu.test(line)) continue;
     const normalized = normalizeArabic(line);
     const unitHeading = detectUnitPriceHeading(line);
     if (unitHeading && !getPriceTokens(line).length) { sectionUnitPriceType = unitHeading; continue; }
@@ -191,6 +201,7 @@ function deterministicList(text) {
       if (/^(?:الأسعار?|اسعار)\s*(?:هي\s*)?(?:جملة|جمله|قطاعي|مستهلك)$/iu.test(line)) continue;
       if (/[:：]$/.test(line) && line.length <= 70) { section = line.replace(/[:：]+$/, "").trim(); continue; }
       if (/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+شركة\s+/iu.test(line)) { company = line.replace(/^(?:(?:قائمة)\s+)?(?:أسعار|اسعار)\s+/iu, "").replace(/[:：]+$/, "").trim(); continue; }
+      if (/^شركة\s+.+?[:：]?$/iu.test(line)) { company = line.replace(/[:：]+$/, "").trim(); continue; }
       const legacyCompanyTitle = line.match(/^(?:أسعار|اسعار)\s+(.+?)\s+[–—-]\s*(?:يناير|فبراير|مارس|ابريل|أبريل|مايو|يونيو|يوليو|اغسطس|أغسطس|سبتمبر|اكتوبر|أكتوبر|نوفمبر|ديسمبر)(?:\s+20\d{2})?$/iu);
       if (legacyCompanyTitle) { company = legacyCompanyTitle[1].trim(); section = null; continue; }
       if (/اوتوماتيك|automatic/i.test(normalized)) { section = "مسحوق أوتوماتيك"; continue; }

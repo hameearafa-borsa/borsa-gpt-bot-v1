@@ -186,6 +186,8 @@ assert.equal(detectListUnitPriceType("صابون دوش 60 جم - 48 قطعة - 
   "a numeric piece count must not be mistaken for a per-piece price declaration");
 assert.equal(detectListUnitPriceType("صابون دوش 60 جم بالقطعة 12.50"), "بالقطعة",
   "explicit per-piece wording must continue to identify piece pricing");
+assert.equal(detectListUnitPriceType("شامبو بانتين 200 مل - قطعة - 77.61"), "بالقطعة",
+  "a standalone piece label must remain a per-piece marker when it is not a numeric pack count");
 
 const pearlRows = extractPriceCandidates(pearlOctober);
 assert.equal(pearlRows.length, 13, "Pearl October list should yield 13 sale-price observations");

@@ -126,7 +126,9 @@ function detectUnitPriceType(line) {
   // A counted pack such as "48 قطعة" describes package quantity, not a
   // per-piece price. Only explicit price wording or the standalone "ق" marker
   // establishes piece pricing.
-  if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|بالقطعه|سعر\s*القطعه|للقطعه)/iu.test(s) || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
+  const countedPieces = /(?:^|[\s+])\d+\s*(?:قطعة|قطعه)(?=\s|$)/iu.test(s);
+  const standalonePiece = /(?:^|[\s-])(?:قطعة|قطعه)(?=\s*[-–—]|\s*$)/iu.test(s) && !countedPieces;
+  if (/(?:بالقطعة|سعر\s*القطعة|للقطعة|بالقطعه|سعر\s*القطعه|للقطعه)/iu.test(s) || standalonePiece || /(?:^|\s)ق(?=\s|[:：]|$)/iu.test(s)) return "بالقطعة";
   return null;
 }
 function isNonPriceCommentLine(line) {

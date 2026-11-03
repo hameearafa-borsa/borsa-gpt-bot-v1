@@ -23,7 +23,7 @@ function isListLike(text) {
   // explicit catalog heading/table structure. Ordinary price chatter stays excluded.
   const singleLineCatalog = lines === 1 && numericHits >= 12 &&
     (priceHits >= 8 || pipeCount >= 8 || quantityHits >= 8);
-  const hasListHeader = /(?:أسعار\s+شركة|الأسعار?\s*(?:بالقطعة|بالكرتونة|جملة|قطاعي)|قائمة\s+أسعار)/iu.test(s);
+  const hasListHeader = /(?:أسعار\s+شركة|شركة\s+\S+|الأسعار?\s*(?:بالقطعة|بالكرتونة|جملة|قطاعي)|قائمة\s+أسعار)/iu.test(s);
   const multiLineCatalog = (lines >= 3 && pricedRows >= 3) ||
     (lines >= 3 && pricedRows >= 2 && (hasListHeader || pipeCount >= 2));
   return singleLineCatalog || multiLineCatalog;

@@ -12,13 +12,15 @@ function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.y
 function newsletterKindAt(date = new Date()) {
   const p = cairoParts(date);
   const hour = Number(p.hour), minute = Number(p.minute);
-  // Amazon collection uses three paid searches with bounded concurrency and
-  // can take several minutes. Keep its edition eligible from 5:00 through
-  // 5:44 PM so restarts and failed attempts can recover, while leaving a
-  // 15-minute buffer before the 6 PM other-store edition. The daily DB
-  // reservation prevents duplicate publication.
+  // Amazon collection uses three paid searches. Keep its edition eligible
+  // from 5:00 through 5:44 PM for restart recovery.
+  // Other stores need seven ScraperAPI searches plus up to six sequential
+  // SnapFlyer page fetches. Start at 6:30 PM, leaving 45 minutes after the
+  // Amazon retry window, and keep a 60-minute recovery window. This ends
+  // 30 minutes before the 8 PM price digest.
   if (hour === 17 && minute < 45) return "amazon";
-  if (minute >= 0 && minute < 5 && hour === 18) return "other_sites";
+  if (hour === 18 && minute >= 30) return "other_sites";
+  if (hour === 19 && minute < 30) return "other_sites";
   return null;
 }
 function isNewsletterWindow(date = new Date()) { return newsletterKindAt(date) !== null; }
@@ -160,7 +162,42 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   }
 
   // Collect and verify once per edition, regardless of the number of target groups.
+  const collectionStartedAt = Date.now();
   const gathered = await fetcher({ edition: kind });
+  const safeSourceStats = (gathered.sourceStats || []).map(stat => {
+    const extraction = stat.extractionDiagnostics || {};
+    const stages = extraction.stages || {};
+    const summarizeCounters = counters => counters ? Object.fromEntries(
+      ["candidates","accepted","rejectedName","rejectedUrl","rejectedPrice","rejectedCurrency","rejectedValidation"].map(key => [key, Number(counters[key] || 0)])
+    ) : undefined;
+    return {
+      source: stat.source || "unknown",
+      ...(Number.isInteger(stat.queryIndex) ? { queryIndex: stat.queryIndex } : {}),
+      ok: Boolean(stat.ok), stage: stat.stage || "unknown",
+      extractedCount: Number(stat.extractedCount || 0),
+      ...(stat.reason ? { reason: String(stat.reason).slice(0, 80) } : {}),
+      ...(stat.pageSignal ? { pageSignal: stat.pageSignal } : {}),
+      ...(stages.json || stages.html ? { parser: {
+        json: summarizeCounters(stages.json), html: summarizeCounters(stages.html),
+        structuredProductObjects: Number(extraction.structuredProductObjects || 0),
+        htmlCardChunks: Number(extraction.htmlCardChunks || 0)
+      } } : {})
+    };
+  });
+  const diagnosticsBase = {
+    kind, batchKey: key, sourceCount: gathered.sourceCount ?? null,
+    gatheredCount: (gathered.deals || []).length,
+    errors: (gathered.errors || []).map(item => ({
+      source: String(item.source || "unknown"),
+      reason: String(item.reason || "unknown").slice(0, 80),
+      ...(item.pageSignal ? { pageSignal: item.pageSignal } : {})
+    })),
+    sources: safeSourceStats
+  };
+  const emitDiagnostics = async details => {
+    try { await options.onDiagnostics?.(details); } catch { /* Diagnostics must never block publication. */ }
+  };
+  await emitDiagnostics({ ...diagnosticsBase, stage: "collected", elapsedMs: Date.now() - collectionStartedAt });
   if (!gathered.deals?.length) {
     await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null };
@@ -171,8 +208,17 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   // rotate useful deals more often; keep the longer protection for other stores.
   const duplicateCooldownDays = kind === "amazon" ? 2 : 7;
   const recent = await filterRecentDeals(pool, verified, duplicateCooldownDays);
-  if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
+  if (!recent.length) {
+    await emitDiagnostics({ ...diagnosticsBase, stage: "filtered", verifiedCount: verified.length, recentCount: 0, selectedCount: 0, duplicateCooldownDays, elapsedMs: Date.now() - collectionStartedAt });
+    return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
+  }
   const items = selectNewsletterDeals(recent, kind);
+  await emitDiagnostics({
+    ...diagnosticsBase, stage: "filtered", verifiedCount: verified.length,
+    recentCount: recent.length, selectedCount: items.length,
+    selectedByMerchant: Object.fromEntries([...new Set(items.map(item => String(item.merchant || "unknown")))].map(merchant => [merchant, items.filter(item => String(item.merchant || "unknown") === merchant).length])),
+    duplicateCooldownDays, elapsedMs: Date.now() - collectionStartedAt
+  });
   if (!items.length) {
     await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };

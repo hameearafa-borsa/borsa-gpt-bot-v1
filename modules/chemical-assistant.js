@@ -57,13 +57,13 @@ async function ensureConversationContextSchema(pool) {
 async function resolveConversationInput(pool, message, currentText = null) {
   const current = String(currentText ?? message?.text ?? message?.caption ?? "").trim();
   const reply = message?.reply_to_message;
-  if (pool && reply?.from?.is_bot && /🧪\\s*المساعد الكيميائي/.test(String(reply.text || reply.caption || ""))) {
+  if (pool && reply?.from?.is_bot && /🧪\s*المساعد الكيميائي/.test(String(reply.text || reply.caption || ""))) {
     const result = await pool.query(`SELECT context_text FROM chemical_conversation_contexts
       WHERE chat_id=$1 AND assistant_message_id=$2
         AND created_at >= NOW() - INTERVAL '30 days'`,
       [message?.chat?.id, reply.message_id]);
     const previous = String(result.rows?.[0]?.context_text || "").trim();
-    if (previous) return [previous, current].filter(Boolean).join("\\n\\n").slice(0, 7000);
+    if (previous) return [previous, current].filter(Boolean).join("\n\n").slice(0, 7000);
   }
   return buildConversationInput(message, current);
 }

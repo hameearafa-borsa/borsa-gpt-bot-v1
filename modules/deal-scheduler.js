@@ -12,10 +12,12 @@ function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.y
 function newsletterKindAt(date = new Date()) {
   const p = cairoParts(date);
   const hour = Number(p.hour), minute = Number(p.minute);
-  // Run only in the first five minutes after the scheduled hour. This tolerates
-  // startup/timer jitter but prevents a late boot (e.g. 18:45) from launching
-  // a newsletter at an arbitrary time. The database reservation still prevents duplicates.
-  if (minute >= 0 && minute < 5 && hour === 17) return "amazon";
+  // Amazon collection uses three paid searches with bounded concurrency and
+  // can take several minutes. Keep its edition eligible for the full 5 PM hour
+  // so restarts and slow/failed attempts can recover; the daily DB reservation
+  // prevents duplicate publication. Keep the other-store edition at its
+  // original short 6 PM startup window.
+  if (hour === 17) return "amazon";
   if (minute >= 0 && minute < 5 && hour === 18) return "other_sites";
   return null;
 }

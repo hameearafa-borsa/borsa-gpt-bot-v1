@@ -24,7 +24,8 @@ assert.ok(aiSource.includes("isProviderWideFailure(e) || (!retryable && !credent
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
-assert.ok(index.includes('createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] })'));
+assert.ok(index.includes('createAI({ provider: "gemini" })'), "chemical assistant must be pinned to Google only");
+assert.ok(index.includes("never silently answer via OpenAI or Groq"));
 
 function provider(name, providerName, run) {
   return { name, provider: providerName, run };
@@ -52,6 +53,15 @@ try {
 }
 
 (async () => {
+  const googleOnlyCalls = [];
+  const googleOnly = createAI({ provider: "gemini", providers: [
+    provider("GEMINI_API_KEY_1", "gemini", async () => { googleOnlyCalls.push("gemini"); throw httpError(503, "Google unavailable"); }),
+    provider("OPENAI_API_KEY", "openai", async () => { googleOnlyCalls.push("openai"); return { text: "must not run", provider: "openai" }; }),
+    provider("GROQ_API_KEY", "groq", async () => { googleOnlyCalls.push("groq"); return { text: "must not run", provider: "groq" }; })
+  ] });
+  await assert.rejects(googleOnly.generate("chemical test"));
+  assert.deepEqual(googleOnlyCalls, ["gemini"], "chemical AI must never fall back to OpenAI or Groq");
+
   const calls = [];
   const providers = [
     provider("GEMINI_API_KEY_1", "gemini", async () => { calls.push("gemini-1"); throw httpError(503); }),

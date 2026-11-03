@@ -12,7 +12,14 @@ assert.notEqual(dealProductFingerprint(base), dealProductFingerprint({ ...base, 
   let args;
   const pool = { query: async (_sql, values) => { args = values; return { rowCount: 1, rows: [{}] }; } };
   assert.equal(await isRecentDuplicate(pool, "deal-fp", 7, "product-fp"), true);
-  assert.deepEqual(args, ["deal-fp", 7], "weekly suppression checks the exact offer fingerprint only");
+  assert.deepEqual(args, ["deal-fp", 7], "the generic duplicate helper retains its seven-day default");
+
+  const amazonCooldownPool = {
+    query: async (_sql, values) => { args = values; return { rowCount: 0, rows: [] }; }
+  };
+  const amazonCandidates = await filterRecentDeals(amazonCooldownPool, [base], 2);
+  assert.equal(amazonCandidates.length, 1);
+  assert.deepEqual(args, [dealFingerprint(base), 2], "Amazon can republish an unchanged exact offer after a two-day cooldown");
 
   const changedPrice = { ...base, price: 90, old_price: 120, discount_pct: 25 };
   const giftBundle = { ...base, title: "مسحوق بيرل 2 كجم مع هدية", price: 100 };

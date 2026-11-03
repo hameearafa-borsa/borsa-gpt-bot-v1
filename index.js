@@ -42,6 +42,7 @@ const { startDealScheduler } = require("./modules/deal-scheduler");
 const { startCatalogNewsletterScheduler } = require("./modules/catalog-newsletter-scheduler");
 const { ensureEconomicNewsletterSchema, startEconomicNewsletterScheduler } = require("./modules/economic-newsletter");
 const { ensurePriceDigestSchema, startPriceDigestScheduler } = require("./modules/price-digest-scheduler");
+const { ensurePrayerAlertsSchema, startPrayerAlertScheduler } = require("./modules/prayer-alert-scheduler");
 
 const APP_VERSION = require("./package.json").version;
 const BOT_CREDIT = "مدعوم بتقنيات ChatGPT";
@@ -74,6 +75,7 @@ let stopCatalogs = () => {};
 let stopWeather = () => {};
 let stopEconomicNewsletter = () => {};
 let stopPriceDigest = () => {};
+let stopPrayerAlerts = () => {};
 let shutdownPromise = null;
 let shutdownRequested = false;
 let startupPhase = true;
@@ -986,6 +988,21 @@ installFatalProcessHandlers({
     }
   });
   console.log("[PRICE_DIGEST_SCHEDULER] Daily confirmed-price digest scheduled for 20:00 Africa/Cairo; targets active approved groups.");
+  if (String(process.env.PRAYER_ALERTS_ENABLED ?? "true").toLowerCase() !== "false") {
+    await ensurePrayerAlertsSchema(db.pool);
+    if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
+    stopPrayerAlerts = startPrayerAlertScheduler({
+      pool: db.pool,
+      telegram: bot.telegram,
+      onError: async (error, details) => {
+        const report = makeReport({ module: "prayer_alerts", stage: details?.stage || "daily_prayer_check", severity: "ERROR", action: "official_cairo_prayer_alert", error, details });
+        await emitReport({ bot, db, report });
+      }
+    });
+    console.log("[PRAYER_ALERT_SCHEDULER] Five daily Cairo prayer alerts use official Egyptian Survey Authority times; targets active approved groups.");
+  } else {
+    console.log("[PRAYER_ALERT_SCHEDULER_DISABLED] PRAYER_ALERTS_ENABLED=false; prayer alerts are disabled.");
+  }
   if (String(process.env.WEATHER_SCHEDULER_ENABLED || "").toLowerCase() !== "false") {
     await ensureWeatherSchedulerSchema(db.pool);
     if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
@@ -1040,6 +1057,7 @@ async function shutdown(signal) {
     try { stopWeather(); } catch (error) { console.error("[SHUTDOWN_WEATHER_ERROR]", error?.message || error); }
     try { stopEconomicNewsletter(); } catch (error) { console.error("[SHUTDOWN_ECONOMIC_NEWSLETTER_ERROR]", error?.message || error); }
     try { stopPriceDigest(); } catch (error) { console.error("[SHUTDOWN_PRICE_DIGEST_ERROR]", error?.message || error); }
+    try { stopPrayerAlerts(); } catch (error) { console.error("[SHUTDOWN_PRAYER_ALERTS_ERROR]", error?.message || error); }
     if (webhookServer?.listening) {
       try { await new Promise((resolve, reject) => webhookServer.close(error => error ? reject(error) : resolve())); }
       catch (error) { console.error("[SHUTDOWN_WEBHOOK_SERVER_ERROR]", error?.message || error); process.exitCode = 1; }

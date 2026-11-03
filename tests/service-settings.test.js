@@ -14,12 +14,12 @@ const pool = { query: async (sql, params=[]) => {
   return { rows: [] };
 }};
 (async () => {
-  assert.equal(SERVICES.length,8);
+  assert.equal(SERVICES.length,9);
   const group = await getSettings(pool,"group",-100123);
   assert.equal(group.find(x=>x.key==="chemical").enabled,false);
   assert.equal(group.find(x=>x.key==="deals").enabled,true);
   const global = await getSettings(pool,"global",0);
-  assert.equal(global.length,8);
+  assert.equal(global.length,9);
   const saved = await setServiceSetting(pool,{scope:"group",chatId:-100123,serviceKey:"prices",enabled:false,actorId:77});
   assert.equal(saved.enabled,false);
   assert.equal(await isServiceEnabled(pool,"prices",-100123),false);

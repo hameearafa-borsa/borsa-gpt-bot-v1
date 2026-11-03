@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const root = require("node:path").join(__dirname, "..");
 const source = fs.readFileSync(require("node:path").join(root, "index.js"), "utf8");
-const schedulerSource = ["deal-scheduler.js", "catalog-newsletter-scheduler.js", "weather-scheduler.js", "economic-newsletter.js"]
+const schedulerSource = ["deal-scheduler.js", "catalog-newsletter-scheduler.js", "weather-scheduler.js", "economic-newsletter.js", "prayer-alert-scheduler.js"]
   .map(file => fs.readFileSync(require("node:path").join(root, "modules", file), "utf8")).join("\n");
 
 assert.match(source, /cmd === "panel" && m\.chatType === "private"/);
@@ -22,4 +22,5 @@ assert.match(schedulerSource, /isServiceEnabled\(pool, "deals"/);
 assert.match(schedulerSource, /isServiceEnabled\(pool, "catalogs"/);
 assert.match(schedulerSource, /isServiceEnabled\(pool, "weather"/);
 assert.match(schedulerSource, /isServiceEnabled\(pool, "economic"/);
+assert.match(schedulerSource, /isServiceEnabled\(client, "prayers"/);
 console.log("persistent service settings and role-scoped panel tests: OK");

@@ -22,5 +22,5 @@ assert.match(schedulerSource, /isServiceEnabled\(pool, "deals"/);
 assert.match(schedulerSource, /isServiceEnabled\(pool, "catalogs"/);
 assert.match(schedulerSource, /isServiceEnabled\(pool, "weather"/);
 assert.match(schedulerSource, /isServiceEnabled\(pool, "economic"/);
-assert.match(schedulerSource, /isServiceEnabled\\(client, "prayers"/);
+assert.match(schedulerSource, /isServiceEnabled\(client, "prayers"/);
 console.log("persistent service settings and role-scoped panel tests: OK");

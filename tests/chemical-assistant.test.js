@@ -23,6 +23,20 @@ assert.equal(chemistry.isChemicalQuestion("/chemical"), false);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة شعبية اقتصادية/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة أعلى جودة/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /unknown-mixture/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /لا تطلب من المستخدم تحويلها إلى أسماء علمية/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تكسابون أو N70 غالبًا SLES/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /لا تطلب إعادة كتابة الخامات/);
+const followUp = chemistry.buildConversationInput({
+  text: "عندي تكسابون وسلفونيك وملح وكمبرلان",
+  reply_to_message: {
+    from: { is_bot: true },
+    text: "🧪 المساعد الكيميائي\\nاذكر الخامات المتوفرة",
+    reply_to_message: { from: { is_bot: false }, text: "عايز تركيبة صابون سائل بجودة عالية" }
+  }
+});
+assert.match(followUp, /تركيبة صابون سائل/);
+assert.match(followUp, /تكسابون وسلفونيك وملح وكمبرلان/);
+assert.equal(chemistry.isChemicalQuestion(followUp), true);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /bleach-acid-warning/);
 assert.ok(chemistry.safetyGate("هل أخلط الكلور مع حمض الفلاش؟"));
 assert.ok(chemistry.safetyGate("خلط الكلور مع الأمونيا"));

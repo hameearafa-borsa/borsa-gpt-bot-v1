@@ -66,7 +66,8 @@ try {
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
-const chemicalAI = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] });
+// Chemical guidance is intentionally Google-only: never silently answer via OpenAI or Groq.
+const chemicalAI = createAI({ provider: "gemini" });
 let botUserId = null;
 let stopDeals = () => {};
 let stopCatalogs = () => {};
@@ -552,7 +553,7 @@ bot.on(["text", "photo"], async ctx => {
   if (isChemicalCommand) {
     if (!(await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) { await ctx.reply("المساعد الكيميائي متوقف لهذه المجموعة حاليًا."); return; }
     if (!["group", "supergroup"].includes(m.chatType)) return;
-    const question = args || "اكتب سؤالك الكيميائي بوضوح.";
+    const question = chemical.buildConversationInput(ctx.message, args || "اكتب سؤالك الكيميائي بوضوح.");
     const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(question);
     const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";
@@ -694,9 +695,10 @@ bot.on(["text", "photo"], async ctx => {
   }
 
   // In approved groups, automatically answer likely chemistry questions once per incoming message.
-  if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(text) && (await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) {
-    const answer = await chemical.answer(chemicalAI, text, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: text, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
-    const links = buildChemicalLinks(text);
+  const chemicalInput = chemical.buildConversationInput(ctx.message, text);
+  if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(chemicalInput) && (await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) {
+    const answer = await chemical.answer(chemicalAI, chemicalInput, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: chemicalInput, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
+    const links = buildChemicalLinks(chemicalInput);
     const body = `🧪 المساعد الكيميائي\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;

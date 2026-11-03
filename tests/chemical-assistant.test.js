@@ -51,3 +51,37 @@ assert.match(links.renderChemicalLinks(built), /<a href=/);
 assert.match(links.renderChemicalLinks(built), /قناة التركيبات المحفوظة/);
 assert.equal(links.escapeHtml("<b>نص & تجربة</b>"), "&lt;b&gt;نص &amp; تجربة&lt;/b&gt;");
 console.log("chemical assistant routing, safety, and links tests: OK");
+
+(async () => {
+  const sqlCalls = [];
+  const pool = { async query(sql, params) {
+    sqlCalls.push({ sql, params });
+    if (sql.includes("SELECT context_text")) {
+      return { rows: [{ context_text: "عايز تركيبة صابون سائل بجودة عالية" }] };
+    }
+    return { rows: [], rowCount: 1 };
+  } };
+  const realTelegramReply = {
+    chat: { id: -100123 },
+    text: "عندي تكسابون وسلفونيك وملح وكمبرلان",
+    reply_to_message: {
+      message_id: 456,
+      from: { is_bot: true },
+      text: "🧪 المساعد الكيميائي\\nاذكر الخامات المتوفرة"
+      // Telegram does not reliably include a nested reply_to_message here.
+    }
+  };
+  const resolved = await chemistry.resolveConversationInput(pool, realTelegramReply);
+  assert.match(resolved, /تركيبة صابون سائل بجودة عالية/);
+  assert.match(resolved, /تكسابون وسلفونيك وملح وكمبرلان/);
+  assert.equal(chemistry.isChemicalQuestion(resolved), true);
+  await chemistry.ensureConversationContextSchema(pool);
+  await chemistry.saveConversationContext(pool, {
+    chatId: -100123, assistantMessageId: 789,
+    contextText: resolved
+  });
+  assert.ok(sqlCalls.some(call => call.sql.includes("CREATE TABLE IF NOT EXISTS chemical_conversation_contexts")));
+  assert.ok(sqlCalls.some(call => call.sql.includes("INSERT INTO chemical_conversation_contexts")));
+  assert.ok(sqlCalls.some(call => call.sql.includes("DELETE FROM chemical_conversation_contexts")));
+  console.log("chemical assistant durable Telegram reply-context tests: OK");
+})().catch(error => { console.error(error); process.exitCode = 1; });

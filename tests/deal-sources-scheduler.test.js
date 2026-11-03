@@ -189,7 +189,10 @@ assert.equal(newsletterKindAt(new Date("2026-10-12T15:00:00.000Z")),"other_sites
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:04:00.000Z")),"other_sites", "allow brief startup/timer jitter after 6 PM");
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:05:00.000Z")),null, "close the scheduled window after five minutes");
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:45:00.000Z")),null, "a late boot must not publish the 6 PM newsletter at 6:45 PM");
-assert.equal(newsletterKindAt(new Date("2026-10-12T14:05:00.000Z")),null, "close the Amazon window after five minutes");
+assert.equal(newsletterKindAt(new Date("2026-10-12T14:05:00.000Z")),"amazon", "Amazon remains eligible after the original five-minute window");
+assert.equal(newsletterKindAt(new Date("2026-10-12T14:45:00.000Z")),"amazon", "a restart at 5:45 PM Cairo can recover the daily Amazon edition");
+assert.equal(newsletterKindAt(new Date("2026-10-12T14:59:00.000Z")),"amazon", "Amazon recovery remains available through the final minute of its hour");
+assert.equal(isNewsletterWindow(new Date("2026-10-12T14:45:00.000Z")),true);
 assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),null); // no third newsletter
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
   Array.from({length: 6}, (_,i) => ({

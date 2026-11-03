@@ -164,7 +164,11 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null };
   }
   const verified = await verify(gathered.deals);
-  const recent = await filterRecentDeals(pool, verified, 7);
+  // Amazon search pages repeatedly surface the same unchanged listings.
+  // Use a shorter exact-offer cooldown for Amazon so its daily edition can
+  // rotate useful deals more often; keep the longer protection for other stores.
+  const duplicateCooldownDays = kind === "amazon" ? 2 : 7;
+  const recent = await filterRecentDeals(pool, verified, duplicateCooldownDays);
   if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
   const items = selectNewsletterDeals(recent, kind);
   if (!items.length) {

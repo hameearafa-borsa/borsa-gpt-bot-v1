@@ -64,7 +64,7 @@ function getText(url = SOURCE_URL, timeoutMs = FETCH_TIMEOUT_MS) {
       return;
     }
     const req = https.get(target, {
-      headers: { "user-agent": "Borsa-GPT-Bot/1.0", accept: "text/html" },
+      headers: { "user-agent": "Borsa-GPT-Bot/1.0", accept: "text/html", "cache-control": "no-cache" },
       timeout: timeoutMs
     }, response => {
       let body = "";
@@ -111,7 +111,7 @@ function currentPrayerSlot(schedule, now = new Date()) {
     if (!target) continue;
     const targetMinute = target.hour * 60 + target.minute;
     const currentMinute = current.hour * 60 + current.minute;
-    if (currentMinute >= targetMinute && currentMinute < targetMinute + GRACE_MINUTES && current.second < 60) {
+    if (currentMinute >= targetMinute && currentMinute < targetMinute + GRACE_MINUTES) {
       return { date, prayer: prayer.key, label: prayer.label, time: target.text };
     }
   }

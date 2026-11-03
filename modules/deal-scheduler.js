@@ -13,11 +13,11 @@ function newsletterKindAt(date = new Date()) {
   const p = cairoParts(date);
   const hour = Number(p.hour), minute = Number(p.minute);
   // Amazon collection uses three paid searches with bounded concurrency and
-  // can take several minutes. Keep its edition eligible for the full 5 PM hour
-  // so restarts and slow/failed attempts can recover; the daily DB reservation
-  // prevents duplicate publication. Keep the other-store edition at its
-  // original short 6 PM startup window.
-  if (hour === 17) return "amazon";
+  // can take several minutes. Keep its edition eligible from 5:00 through
+  // 5:44 PM so restarts and failed attempts can recover, while leaving a
+  // 15-minute buffer before the 6 PM other-store edition. The daily DB
+  // reservation prevents duplicate publication.
+  if (hour === 17 && minute < 45) return "amazon";
   if (minute >= 0 && minute < 5 && hour === 18) return "other_sites";
   return null;
 }

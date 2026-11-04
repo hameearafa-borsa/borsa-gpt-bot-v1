@@ -29,9 +29,10 @@ const {
   assert.deepEqual(slot, { date: "2026-11-03", prayer: "maghrib", label: "المغرب", time: "17:06" });
   assert.equal(currentPrayerSlot(schedule, new Date("2026-11-03T15:08:00.000Z")), null);
   assert.equal(currentPrayerSlot(schedule, new Date("2026-11-03T15:05:00.000Z")), null);
-  assert.match(formatPrayerAlert(slot), /حان الآن موعد أذان المغرب/);
-  assert.match(formatPrayerAlert(slot), /17:06 بتوقيت القاهرة/);
-  assert.match(formatPrayerAlert(slot), /الهيئة المصرية العامة للمساحة/);
+  const alertText = formatPrayerAlert(slot);
+  assert.equal(alertText, "🕌 حان الآن موعد أذان المغرب\\n\\n🕰️ 17:06 بتوقيت القاهرة\\n\\nنسأل الله أن يتقبل منكم صالح الأعمال.\\n\\nقوموا إلى صلاتكم يرحمنا ويرحمكم الله");
+  assert.ok(!alertText.includes("المصدر"));
+  assert.ok(!alertText.includes("الهيئة المصرية العامة للمساحة"));
 
   const sent = [];
   const queries = [];

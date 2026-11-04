@@ -9,7 +9,7 @@ const {
 (async () => {
   const result = await collectSnapFlyerFilteredOffers({
     filters: FILTERS,
-    concurrency: 2
+    concurrency: 1
   });
 
   const categoryCounts = result.deals.reduce((counts, deal) => {

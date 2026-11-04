@@ -5,12 +5,29 @@ const {
   FILTERS,
   collectSnapFlyerFilteredOffers
 } = require("../modules/snapflyer-filtered-offers");
+const { distributeDeals, formatNewsletterMessage } = require("../modules/deal-publication");
 
 (async () => {
   const result = await collectSnapFlyerFilteredOffers({
     filters: FILTERS,
     concurrency: 1
   });
+
+  const newsletterSelection = distributeDeals(result.deals);
+  const selectedDeals = [
+    ...newsletterSelection.detergent,
+    ...newsletterSelection.paper,
+    ...newsletterSelection.personal_care
+  ];
+  const newsletterPreview = formatNewsletterMessage(
+    selectedDeals,
+    "عروض المتاجر الأخرى المختارة"
+  );
+  const selectedCategoryCounts = {
+    detergent: newsletterSelection.detergent.length,
+    paper: newsletterSelection.paper.length,
+    personal_care: newsletterSelection.personal_care.length
+  };
 
   const categoryCounts = result.deals.reduce((counts, deal) => {
     counts[deal.category] = (counts[deal.category] || 0) + 1;
@@ -24,6 +41,9 @@ const {
     errors: result.errors,
     extractedCount: result.deals.length,
     categoryCounts,
+    newsletterSelectedCount: newsletterPreview.items.length,
+    selectedCategoryCounts,
+    newsletterPreview: newsletterPreview.text,
     merchants: [...new Set(result.deals.map(deal => deal.merchant).filter(Boolean))].sort(),
     sample: result.deals.slice(0, 20).map(deal => ({
       merchant: deal.merchant,
@@ -39,6 +59,9 @@ const {
   assert.equal(result.sourceCount, FILTERS.length, "all nine SnapFlyer filters must be attempted");
   assert.equal(result.errors.length, 0, "all live SnapFlyer filter requests must complete without transport errors");
   assert.ok(result.deals.length > 0, "live SnapFlyer filters must yield at least one validated priced product");
+  assert.ok(newsletterPreview.items.length > 0, "live SnapFlyer offers must produce a non-empty newsletter preview");
+  assert.equal(newsletterPreview.items.length, selectedDeals.length,
+    "newsletter preview must retain every selected deal that fits the Telegram message limit");
 
   const allowedCategories = new Set(["detergent", "paper", "personal_care"]);
   for (const deal of result.deals) {

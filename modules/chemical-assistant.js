@@ -8,7 +8,7 @@ const SERVICE_CONFIG_FALLBACK = "يوجد عطل مؤقت في إعداد الا
 
 function getProviderFallback(error) {
   const message = String(error?.message || error || "");
-  const status = Number(message.match(/AI HTTP (\\d+)/)?.[1] || 0);
+  const status = Number(message.match(/AI HTTP (\d+)/)?.[1] || 0);
   if ([408, 429, 500, 502, 503, 504].includes(status) ||
       /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|overloaded|temporarily unavailable/i.test(message)) {
     return SERVICE_UNAVAILABLE_FALLBACK;

@@ -12,7 +12,7 @@ const FILTERS = Object.freeze([
   { key: "fabric-softener", category: "cleaning", type: "fabric-softener" },
   { key: "bleach", category: "cleaning", type: "bleach" },
   { key: "air-fresheners", category: "cleaning", type: "air-fresheners" },
-  { key: "tissues-paper", category: "cleaning", type: "tissues-paper" },
+  { key: "tissues-paper", category: "cleaning", type: "tissues-paper" },\n  { key: "insecticides", category: "cleaning", type: "insecticides" },
   { key: "personal-care", category: "personal-care", type: null }
 ]);
 
@@ -26,7 +26,7 @@ const MERCHANT_NAMES = Object.freeze([
 const PRICE_RE = /(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:EGP\b|جنيه|ج\s*\.?\s*م\.?)/i;
 const DISCOUNT_RE = /-\s*(\d{1,2}(?:\.\d+)?)\s*%/;
 const EXCLUDE_RE = /\b(?:tv|laptop|mobile|phone|appliance|coffee maker|furniture|fashion|shoes|toys|electronics)\b|تلفزيون|موبايل|لابتوب|أجهزة كهربائية|أثاث|ملابس|أحذية|ألعاب/i;
-const RELEVANT_PRODUCT_RE = /detergent|powder|laundry|washing|dishwash|cleaner|cleaning|disinfectant|bleach|softener|tissue|paper towel|toilet paper|wipes|shampoo|soap|hand wash|body wash|deodorant|toothpaste|منظف|تنظيف|مسحوق|بودر|غسيل|غسالات|أطباق|اطباق|صحون|منعم|كلور|مطهر|مبيض|مناديل|ورق تواليت|شامبو|صابون|عناية|مزيل عرق|معجون أسنان/i;
+const RELEVANT_PRODUCT_RE = /detergent|powder|laundry|washing|dishwash|cleaner|cleaning|disinfectant|bleach|softener|air freshener|insecticide|tissue|paper towel|toilet paper|wipes|shampoo|soap|hand wash|body wash|deodorant|toothpaste|shaving|sanitary pad|منظف|تنظيف|مسحوق|بودر|غسيل|غسالات|أطباق|اطباق|صحون|منعم|كلور|مطهر|مبيض|مناديل|ورق تواليت|شامبو|صابون|عناية|مزيل عرق|معطر جو|مبيد حشري|فوط صحية|معجون أسنان/i;
 
 function productUrl(raw, baseUrl) {
   try {
@@ -44,7 +44,7 @@ function productUrl(raw, baseUrl) {
 function categoryOf(title) {
   const text = String(title || "").toLowerCase();
   if (/مناديل|ورق تواليت|فاين|كلينكس|tissue|toilet paper|paper towel|wipes/.test(text)) return "paper";
-  if (/شامبو|صابون|شاور|غسول|كريم|مزيل عرق|معجون أسنان|شفرات|shampoo|soap|body wash|deodorant|toothpaste|razor/.test(text)) return "personal_care";
+  if (/شامبو|صابون|شاور|غسول|كريم|مزيل عرق|معجون أسنان|شفرات|فوط صحية|shampoo|soap|hand wash|hand soap|body wash|deodorant|toothpaste|razor|shaving|sanitary pad/.test(text)) return "personal_care";
   return "detergent";
 }
 

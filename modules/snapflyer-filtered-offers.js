@@ -21,8 +21,19 @@ const MERCHANT_NAMES = Object.freeze([
   "Abdullah Al Othaim Markets Egypt", "El Fergany Hyper Market", "Metro Market",
   "Panda Market Egypt", "LuLu Hypermarket Egypt", "Beit El Gomla",
   "Awlad Ragab", "Kheir Zaman", "Hyper One", "Fathallah", "Spinneys",
-  "Carrefour", "Kazyon", "BIM", "Seoudi Market", "Raneen", "El Hawary"
+  "Carrefour", "Kazyon", "BIM", "Seoudi Market", "Raneen", "El Hawary",
+  "أسواق عبدالله العثيم", "عبدالله العثيم", "العثيم", "الفرجاني",
+  "مترو ماركت", "مترو", "باندا", "اللولو", "بيت الجملة", "أولاد رجب",
+  "خير زمان", "هايبر وان", "فتح الله", "سبينيس", "كارفور", "كازيون",
+  "بيم", "سعودي ماركت", "سعودي", "رنين", "الهواري"
 ].sort((a, b) => b.length - a.length));
+
+function normalizeDisplayedDigits(value) {
+  return String(value || "")
+    .replace(/[٠-٩۰-۹]/g, digit => String("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹".indexOf(digit) % 10))
+    .replace(/٫/g, ".")
+    .replace(/٬/g, ",");
+}
 
 const PRICE_RE = /(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:EGP\b|جنيه|ج\s*\.?\s*م\.?)/i;
 const DISCOUNT_RE = /-\s*(\d{1,2}(?:\.\d+)?)\s*%/;
@@ -163,6 +174,6 @@ async function collectSnapFlyerFilteredOffers({ fetchPage = fetchStorePage, filt
 }
 
 module.exports = {
-  FILTERS, filterUrl, productUrl, categoryOf, parseMerchantAndTitle, normalizeDisplayedDigits,
+  FILTERS, filterUrl, productUrl, categoryOf, parseMerchantAndTitle, normalizeDisplayedDigits, normalizeDisplayedDigits,
   extractOfferFromAnchor, extractSnapFlyerFilteredOffers, collectSnapFlyerFilteredOffers
 };

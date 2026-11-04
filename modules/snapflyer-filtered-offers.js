@@ -22,7 +22,7 @@ const MERCHANT_NAMES = Object.freeze([
   "Panda Market Egypt", "LuLu Hypermarket Egypt", "Beit El Gomla",
   "Awlad Ragab", "Kheir Zaman", "Hyper One", "Fathallah", "Spinneys",
   "Carrefour", "Kazyon", "BIM", "Seoudi Market", "Raneen", "El Hawary",
-  "أسواق عبدالله العثيم", "عبدالله العثيم", "العثيم", "الفرجاني",
+  "أسواق عبدالله العثيم", "عبدالله العثيم", "العثيم", "الفرجاني ماركت", "الفرجاني",
   "مترو ماركت", "مترو", "باندا", "اللولو", "بيت الجملة", "أولاد رجب",
   "خير زمان", "هايبر وان", "فتح الله", "سبينيس", "كارفور", "كازيون",
   "بيم", "سعودي ماركت", "سعودي", "رنين", "الهواري"

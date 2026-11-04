@@ -120,7 +120,7 @@ function currentPrayerSlot(schedule, now = new Date()) {
 function formatPrayerAlert(slot) {
   const prayer = PRAYERS.find(item => item.key === slot?.prayer);
   if (!prayer || !/^\d{2}:\d{2}$/.test(slot.time || "")) throw new Error("prayer_alert_slot_invalid");
-  return `🕌 حان الآن موعد أذان ${prayer.label}\n🕰️ ${slot.time} بتوقيت القاهرة\n\nنسأل الله أن يتقبل منكم صالح الأعمال.\n\nالمصدر: الهيئة المصرية العامة للمساحة`;
+  return `🕌 حان الآن موعد أذان ${prayer.label}\n\n🕰️ ${slot.time} بتوقيت القاهرة\n\nنسأل الله أن يتقبل منكم صالح الأعمال.\n\nقوموا إلى صلاتكم يرحمنا ويرحمكم الله`;
 }
 async function ensurePrayerAlertsSchema(pool) {
   if (!pool) throw new Error("prayer alerts require PostgreSQL");

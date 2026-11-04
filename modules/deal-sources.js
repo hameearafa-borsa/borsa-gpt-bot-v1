@@ -3,7 +3,7 @@
 const { validateDeal } = require("./deals");
 const { normalizeArabic, toAsciiDigits } = require("../core/normalization");
 const { redactString } = require("../core/diagnostics");
-const { collectSnapFlyerCatalogDeals } = require("./snapflyer-catalog-deals");
+const { collectSnapFlyerFilteredOffers } = require("./snapflyer-filtered-offers");
 
 let nextScraperKeyIndex = 0;
 const MAX_CONCURRENT_SCRAPER_REQUESTS = 2;
@@ -283,7 +283,7 @@ async function mapWithConcurrency(items, limit, worker) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
   return results;
 }
-async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], edition = "all", fetchImpl, snapFlyerFetcher = collectSnapFlyerCatalogDeals, snapFlyerOptions = {} } = {}) {
+async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], edition = "all", fetchImpl, snapFlyerFetcher = collectSnapFlyerFilteredOffers, snapFlyerOptions = {} } = {}) {
   const tasks = [];
   // Each newsletter queries only the stores it can publish. This avoids
   // paying for Amazon results during the other-store edition and vice versa.

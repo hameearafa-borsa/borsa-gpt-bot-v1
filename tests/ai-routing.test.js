@@ -4,10 +4,12 @@ const fs = require("node:fs");
 const path = require("node:path");
 const aiSource = fs.readFileSync(path.join(__dirname, "../core/ai.js"), "utf8");
 const index = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
-const { createAI, providersFromEnv } = require("../core/ai");
+const { createAI, providersFromEnv, retryGeminiRequest } = require("../core/ai");
 
 assert.ok(aiSource.includes("gemini-3.8-flash"));
-assert.ok(aiSource.includes("process.env.GEMINI_TIMEOUT_MS || 45000"), "Gemini keeps a longer default timeout for complex, accurate answers");
+assert.ok(aiSource.includes("process.env.GEMINI_TIMEOUT_MS || 12000"), "Gemini attempts stay within Telegraf handler budget");
+assert.ok(aiSource.includes("retryGeminiRequest"), "Gemini retries one transient service failure");
+assert.ok(aiSource.includes("maxAttempts = Math.max(1, Math.min(2"), "Gemini retry count is strictly bounded to two attempts");
 assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts must be honored");
 assert.ok(aiSource.includes("x-goog-api-key"));
 const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
@@ -53,6 +55,22 @@ try {
 }
 
 (async () => {
+  let transientCalls = 0;
+  const recoveredAfter503 = await retryGeminiRequest(async () => {
+    transientCalls += 1;
+    if (transientCalls === 1) throw httpError(503, "upstream overloaded");
+    return "Gemini recovered";
+  }, { delayMs: 0 });
+  assert.equal(recoveredAfter503, "Gemini recovered");
+  assert.equal(transientCalls, 2, "a transient Gemini 503 gets exactly one retry");
+
+  let permanentCalls = 0;
+  await assert.rejects(retryGeminiRequest(async () => {
+    permanentCalls += 1;
+    throw httpError(400, "invalid request");
+  }, { delayMs: 0 }));
+  assert.equal(permanentCalls, 1, "permanent Gemini request errors are not retried");
+
   const googleOnlyCalls = [];
   const googleOnly = createAI({ provider: "gemini", providers: [
     provider("GEMINI_API_KEY_1", "gemini", async () => { googleOnlyCalls.push("gemini"); throw httpError(503, "Google unavailable"); }),

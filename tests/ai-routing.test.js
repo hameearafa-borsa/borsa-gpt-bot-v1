@@ -64,12 +64,12 @@ try {
   assert.equal(recoveredAfter503, "Gemini recovered");
   assert.equal(transientCalls, 2, "a transient Gemini 503 gets exactly one retry");
 
-  let permanentCalls = 0;
+  let permanentRetryCalls = 0;
   await assert.rejects(retryGeminiRequest(async () => {
-    permanentCalls += 1;
+    permanentRetryCalls += 1;
     throw httpError(400, "invalid request");
   }, { delayMs: 0 }));
-  assert.equal(permanentCalls, 1, "permanent Gemini request errors are not retried");
+  assert.equal(permanentRetryCalls, 1, "permanent Gemini request errors are not retried");
 
   const googleOnlyCalls = [];
   const googleOnly = createAI({ provider: "gemini", providers: [

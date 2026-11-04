@@ -37,6 +37,10 @@ async function filterRecentDeals(pool, deals, days = 7) {
   }
   return output;
 }
+function escapeHtml(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 function formatNewsletterMessage(deals, title, maxLength = 3900) {
   const safeTitle = String(title || "عروض بورصة المنظفات").slice(0, 120);
   const header = [`🛍️ ${safeTitle}`, "بورصة المنظفات لأصحاب المحلات", ""];
@@ -49,7 +53,7 @@ function formatNewsletterMessage(deals, title, maxLength = 3900) {
     if (d.merchant) block.push(`🏪 المتجر: ${String(d.merchant).slice(0, 80)}`);
     block.push(`💰 السعر: ${Number(d.price).toFixed(2)} جنيه`);
     if (Number(d.old_price) > Number(d.price)) block.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه`);
-    block.push(`🔗 ${String(d.url || "")}`);
+    if (d.url) block.push(`🔗 <a href="${escapeHtml(d.url)}">فتح العرض</a>`);
     const candidate = render([...blocks, block]);
     if (candidate.length > maxLength) continue;
     blocks.push(block);

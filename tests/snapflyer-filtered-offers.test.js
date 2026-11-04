@@ -53,6 +53,11 @@ assert.ok(!deals.some(item => /Apples|Smart TV|Persil/.test(item.title)));
   assert.equal(verified.ok, true);
   assert.equal(verified.finalUrl, "https://snapflyer.io/product/236503");
 
+  const canonicalized = await verifyProductUrl("https://snapflyer.io/product/236503", {
+    fetchImpl: async () => ({ status: 302, headers: { get: () => "https://snapflyer.io/eg/downtown/products/236503" } })
+  });
+  assert.equal(canonicalized.ok, true, "same-product canonical redirects should remain valid");
+
   const redirected = await verifyProductUrl("https://snapflyer.io/product/236503", {
     fetchImpl: async () => ({ status: 302, headers: { get: () => "https://snapflyer.io/product/999999" } })
   });

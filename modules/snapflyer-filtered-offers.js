@@ -77,8 +77,8 @@ function extractOfferFromAnchor(anchorHtml, rawHref, filterKey, baseUrl) {
   const afterPrice = text.slice(priceMatch.index + priceMatch[0].length);
   const discountMatch = afterPrice.match(DISCOUNT_RE);
   const discount = discountMatch ? Number(discountMatch[1]) : 0;
-  let oldPrice = null;
-  if (discount > 0 && discount < 100) oldPrice = Math.round(price / (1 - discount / 100) * 100) / 100;
+  const oldPriceMatch = afterPrice.match(/^\\s*(\\d{1,6}(?:,\\d{3})*(?:\\.\\d{1,2})?)(?=\\s*(?:-\\s*\\d+(?:\\.\\d+)?\\s*%|$))/);
+  const oldPrice = oldPriceMatch ? Number(oldPriceMatch[1].replace(/,/g, "")) : null;
 
   const deal = {
     merchant,

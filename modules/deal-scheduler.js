@@ -80,10 +80,19 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
         if (!next) return { ok: false, reason: "redirect_host_not_allowed" };
         // SnapFlyer product and catalog links must retain their exact target.
         // Never let a redirect silently replace a product with another item or store.
-        if (originalSnapFlyerUrl && (
-          next.hostname.toLowerCase() !== originalSnapFlyerUrl.hostname.toLowerCase() ||
-          next.pathname.replace(/\/$/, "").toLowerCase() !== originalSnapFlyerUrl.pathname.replace(/\/$/, "").toLowerCase()
-        )) return { ok: false, reason: "snapflyer_catalog_redirect_changed" };
+        if (originalSnapFlyerUrl) {
+          const productId = value =>
+            value.pathname.match(/^\/product\/(\d+)\/?$/i)?.[1] ||
+            value.pathname.match(/^\/eg\/[a-z0-9-]+\/products\/(\d+)\/?$/i)?.[1] || null;
+          const originalProductId = productId(originalSnapFlyerUrl);
+          const nextProductId = productId(next);
+          const sameProduct = originalProductId && nextProductId === originalProductId;
+          const sameCatalog = !originalProductId &&
+            next.pathname.replace(/\/$/, "").toLowerCase() === originalSnapFlyerUrl.pathname.replace(/\/$/, "").toLowerCase();
+          if (next.hostname.toLowerCase() !== originalSnapFlyerUrl.hostname.toLowerCase() || (!sameProduct && !sameCatalog)) {
+            return { ok: false, reason: "snapflyer_catalog_redirect_changed" };
+          }
+        }
         url = next;
         continue;
       }

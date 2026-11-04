@@ -39,14 +39,17 @@ function selectNewsletterDeals(recent, kind) {
 
 async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000, maxRedirects = 5 } = {}) {
   const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com", "snapflyer.io"]);
-  const isAllowedSnapFlyerCatalogUrl = url =>
-    url.hostname.toLowerCase() === "snapflyer.io" &&
-    /^\/eg\/downtown\/offers\/(?:kazyon|bim|metro-market)\/\d+\/?$/i.test(url.pathname);
+  const isAllowedSnapFlyerUrl = url =>
+    url.hostname.toLowerCase() === "snapflyer.io" && (
+      /^\/eg\/downtown\/offers\/(?:kazyon|bim|metro-market)\/\d+\/?$/i.test(url.pathname) ||
+      /^\/product\/\d+\/?$/i.test(url.pathname) ||
+      /^\/eg\/[a-z0-9-]+\/products\/\d+\/?$/i.test(url.pathname)
+    );
   const safeUrl = value => {
     try {
       const u = new URL(value);
       if (u.protocol !== "https:" || !allowedHosts.has(u.hostname.toLowerCase()) || u.username || u.password || (u.port && u.port !== "443")) return null;
-      if (u.hostname.toLowerCase() === "snapflyer.io" && !isAllowedSnapFlyerCatalogUrl(u)) return null;
+      if (u.hostname.toLowerCase() === "snapflyer.io" && !isAllowedSnapFlyerUrl(u)) return null;
       return u;
     } catch { return null; }
   };
@@ -75,9 +78,8 @@ async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs =
         catch { return { ok: false, reason: "redirect_host_not_allowed" }; }
         const next = safeUrl(resolvedLocation);
         if (!next) return { ok: false, reason: "redirect_host_not_allowed" };
-        // SnapFlyer offers intentionally point to the selected catalog page.
-        // Never let a redirect silently replace that destination with another
-        // retailer or a different catalog/store page.
+        // SnapFlyer product and catalog links must retain their exact target.
+        // Never let a redirect silently replace a product with another item or store.
         if (originalSnapFlyerUrl && (
           next.hostname.toLowerCase() !== originalSnapFlyerUrl.hostname.toLowerCase() ||
           next.pathname.replace(/\/$/, "").toLowerCase() !== originalSnapFlyerUrl.pathname.replace(/\/$/, "").toLowerCase()

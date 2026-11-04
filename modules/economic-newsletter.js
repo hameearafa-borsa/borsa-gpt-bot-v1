@@ -133,7 +133,7 @@ function formatEconomicBulletin(prices) {
     `سعر الجنيه الذهب: ${money(prices.goldPoundEgp, 0)} ج.م (تقريبي)`,
     "",
     "نتمنى لكم يوماً موفقاً وتجارة رابحة."
-  ].join("\\n");
+  ].join("\n");
 }
 
 async function getEconomicPrices({ now = new Date(), getTextImpl = getText } = {}) {

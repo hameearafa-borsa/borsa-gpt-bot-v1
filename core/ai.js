@@ -72,14 +72,39 @@ function groqProvider(key, model) {
   };
 }
 
+function isGeminiTransientError(error) {
+  const message = String(error?.message || "");
+  const status = providerStatus(error);
+  return [408, 429, 500, 502, 503, 504].includes(status) ||
+    /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(message);
+}
+
+async function retryGeminiRequest(run, options = {}) {
+  const maxAttempts = Math.max(1, Math.min(2, Number(options.maxAttempts) || 2));
+  const delayMs = Math.max(0, Math.min(1000, Number(options.delayMs ?? 350)));
+  let lastError;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await run();
+    } catch (error) {
+      lastError = error;
+      if (attempt >= maxAttempts || !isGeminiTransientError(error)) throw error;
+      if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastError;
+}
+
 function geminiProvider(key, model) {
   return async (prompt, options = {}) => {
     const selectedModel = model || "gemini-3.8-flash";
     const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`;
+    // Keep the full two-attempt budget below Telegraf's 30-second handler timeout.
     // Gemini 3.8 Flash request intentionally omits sampling configuration.
-    const data = await requestJson(endpoint, {
+    const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000);
+    const data = await retryGeminiRequest(() => requestJson(endpoint, {
       contents: [{ role: "user", parts: [{ text: String(prompt || "") }] }]
-    }, { "x-goog-api-key": key }, Number(process.env.GEMINI_TIMEOUT_MS || 45000));
+    }, { "x-goog-api-key": key }, timeoutMs));
     return { text: data.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("") || "", provider: "gemini", model: selectedModel };
   };
 }
@@ -201,4 +226,4 @@ function createAI(options = {}) {
   return { generate, providers: selected.map(x => x.name), primaryProvider: selected[0]?.provider || null };
 }
 
-module.exports = { createAI, providersFromEnv, formatProviderError };
+module.exports = { createAI, providersFromEnv, formatProviderError, retryGeminiRequest, isGeminiTransientError };

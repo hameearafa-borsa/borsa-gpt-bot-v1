@@ -35,6 +35,8 @@ const {
 
   assert.equal(result.errors.length, 0, "live SnapFlyer request must complete without transport errors");
   assert.ok(result.deals.length > 0, "live SnapFlyer page must yield at least one validated priced product");
+  const shavingFoam = result.deals.find(deal => /حلاقه|حلاقة|shaving/i.test(deal.title));
+  if (shavingFoam) assert.equal(shavingFoam.category, "personal_care", "live shaving products must be classified as personal care");
   for (const deal of result.deals) {
     assert.ok(deal.url.startsWith("https://snapflyer.io/"), "every extracted URL must remain on SnapFlyer HTTPS");
     assert.ok(Number.isFinite(deal.price) && deal.price > 0, "every extracted offer must have a positive numeric price");

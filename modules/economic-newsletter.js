@@ -120,16 +120,20 @@ function parseLocalMarketHtml(html) {
 function formatEconomicBulletin(prices) {
   const values = [prices?.brentUsd, prices?.usdEgp, prices?.goldPoundEgp, prices?.gold21Egp];
   if (!values.every(value => Number.isFinite(value) && value > 0)) throw new Error("economic_prices_invalid");
-  const money = (value, digits = 2) => new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: digits, maximumFractionDigits: digits
-  }).format(value);
+  const money = (value, digits = 2) => Number(value).toFixed(digits);
   return [
-    "🤖 الخدمة مقدمة بتقنيات GPT",
-    `🛢️ خام برنت: ${money(prices.brentUsd)} دولار`,
-    `💵 الدولار: ${money(prices.usdEgp, 2)} جنيه مصري`,
-    `🪙 الجنيه الذهب: ${money(prices.goldPoundEgp, 0)} جنيه مصري`,
-    `🥇 جرام الذهب عيار 21: ${money(prices.gold21Egp, 2)} جنيه مصري`
-  ].join("\n");
+    "نشرة الأسعار الاقتصادية اليومية – بورصة المنظفات",
+    "",
+    `سعر الدولار مقابل الجنيه: ${money(prices.usdEgp, 2)} ج.م`,
+    "",
+    `سعر برميل خام برنت: $${money(prices.brentUsd, 2)}`,
+    "",
+    `جرام الذهب عيار 21: ${money(prices.gold21Egp, 0)} ج.م (تقريبي العالمية)`,
+    "",
+    `سعر الجنيه الذهب: ${money(prices.goldPoundEgp, 0)} ج.م (تقريبي)`,
+    "",
+    "نتمنى لكم يوماً موفقاً وتجارة رابحة."
+  ].join("\\n");
 }
 
 async function getEconomicPrices({ now = new Date(), getTextImpl = getText } = {}) {

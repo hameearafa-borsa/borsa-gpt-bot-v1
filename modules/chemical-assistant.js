@@ -2,8 +2,22 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const RULES = JSON.parse(fs.readFileSync(path.join(__dirname, "../data/chemical-rules.json"), "utf8")).rules;
-const SAFE_FALLBACK = "أستطيع المساعدة في فهم المادة أو الاستخدام، لكن لا أنصح بخلط مواد كيميائية غير معروفة قبل معرفة الأسماء والتركيزات بدقة.";
+const SAFE_FALLBACK = "تعذر إعداد إجابة فنية موثوقة الآن. أرسل سؤالك مرة أخرى، وسأساعدك مع توضيح أي بيانات ناقصة قبل تحديد النسب أو خطوات الخلط.";
+const SERVICE_UNAVAILABLE_FALLBACK = "خدمة المساعد الكيميائي مشغولة أو غير متاحة مؤقتًا الآن. لم يتم رفض سؤالك أو اعتبار الخامات غير واضحة؛ حاول إرسال السؤال مرة أخرى بعد قليل. لا تبدأ خلطًا جديدًا قبل التأكد من التركيبة والتركيزات.";
+const SERVICE_CONFIG_FALLBACK = "يوجد عطل مؤقت في إعداد الاتصال بخدمة المساعد الكيميائي. لم يتم تقييم تركيبتك بعد؛ يرجى المحاولة لاحقًا.";
 
+function getProviderFallback(error) {
+  const message = String(error?.message || error || "");
+  const status = Number(message.match(/AI HTTP (\\d+)/)?.[1] || 0);
+  if ([408, 429, 500, 502, 503, 504].includes(status) ||
+      /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|overloaded|temporarily unavailable/i.test(message)) {
+    return SERVICE_UNAVAILABLE_FALLBACK;
+  }
+  if ([401, 403].includes(status) || /invalid_api_key|unauthorized|authentication failed/i.test(message)) {
+    return SERVICE_CONFIG_FALLBACK;
+  }
+  return SAFE_FALLBACK;
+}
 function safetyGate(question) {
   const s = String(question || "").toLowerCase();
   const bleach = /(كلور|كلوركس|مبيض|ماء جافيل|هيبوكلوريت|هيبو كلوريت)/.test(s);
@@ -108,7 +122,7 @@ async function answer(ai, question, onError = null) {
   if (!ai || typeof ai.generate !== "function") {
     const error = new Error("Gemini AI provider is not configured");
     if (typeof onError === "function") { try { onError(error); } catch {} }
-    return SAFE_FALLBACK;
+    return SERVICE_CONFIG_FALLBACK;
   }
   try {
     const result = await ai.generate(buildPrompt(question), { temperature: 0.3 });
@@ -124,7 +138,7 @@ async function answer(ai, question, onError = null) {
     return providerLabel ? `🤖 الخدمة مقدمة بتقنيات ${providerLabel}\n\n${answerText}` : answerText;
   } catch (error) {
     if (typeof onError === "function") { try { onError(error); } catch {} }
-    return SAFE_FALLBACK;
+    return getProviderFallback(error);
   }
 }
-module.exports = { answer, buildPrompt, buildConversationInput, ensureConversationContextSchema, resolveConversationInput, saveConversationContext, safetyGate, isChemicalQuestion, SAFE_FALLBACK, RULES };
+module.exports = { answer, buildPrompt, buildConversationInput, ensureConversationContextSchema, resolveConversationInput, saveConversationContext, safetyGate, isChemicalQuestion, getProviderFallback, SAFE_FALLBACK, SERVICE_UNAVAILABLE_FALLBACK, SERVICE_CONFIG_FALLBACK, RULES };

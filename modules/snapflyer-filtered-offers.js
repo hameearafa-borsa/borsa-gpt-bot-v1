@@ -26,6 +26,7 @@ const MERCHANT_NAMES = Object.freeze([
 const PRICE_RE = /(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:EGP\b|جنيه|ج\s*\.?\s*م\.?)/i;
 const DISCOUNT_RE = /-\s*(\d{1,2}(?:\.\d+)?)\s*%/;
 const EXCLUDE_RE = /\b(?:tv|laptop|mobile|phone|appliance|washing machine|coffee maker|furniture|fashion|shoes|toys|electronics)\b|تلفزيون|موبايل|لابتوب|غسالة ملابس|أجهزة كهربائية|أثاث|ملابس|أحذية|ألعاب/i;
+const RELEVANT_PRODUCT_RE = /detergent|powder|laundry|washing|dishwash|cleaner|cleaning|disinfectant|bleach|softener|tissue|paper towel|toilet paper|wipes|shampoo|soap|hand wash|body wash|deodorant|toothpaste|منظف|تنظيف|مسحوق|بودر|غسيل|غسالات|أطباق|اطباق|صحون|منعم|كلور|مطهر|مبيض|مناديل|ورق تواليت|شامبو|صابون|عناية|مزيل عرق|معجون أسنان/i;
 
 function productUrl(raw, baseUrl) {
   try {
@@ -77,7 +78,7 @@ function extractOfferFromAnchor(anchorHtml, rawHref, filterKey, baseUrl) {
   const afterPrice = text.slice(priceMatch.index + priceMatch[0].length);
   const discountMatch = afterPrice.match(DISCOUNT_RE);
   const discount = discountMatch ? Number(discountMatch[1]) : 0;
-  const oldPriceMatch = afterPrice.match(/^\\s*(\\d{1,6}(?:,\\d{3})*(?:\\.\\d{1,2})?)(?=\\s*(?:-\\s*\\d+(?:\\.\\d+)?\\s*%|$))/);
+  const oldPriceMatch = afterPrice.match(/^\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)(?=\s*(?:-\s*\d+(?:\.\d+)?\s*%|$))/);
   const oldPrice = oldPriceMatch ? Number(oldPriceMatch[1].replace(/,/g, "")) : null;
 
   const deal = {

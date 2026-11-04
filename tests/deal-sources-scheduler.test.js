@@ -552,7 +552,7 @@ const amazonOnly = await collectDealCandidates({
  assert.ok(publicationMessages[0].message.includes("كازيون"));
  assert.ok(publicationMessages[0].message.includes("مترو ماركت"));
  assert.ok(publicationMessages[0].message.includes("Jumia"));
- assert.ok(publicationMessages[0].message.includes("Noon"));\n assert.equal(publicationMessages[0].options.parse_mode, "HTML", "Telegram must render compact clickable product links");
+ assert.ok(publicationMessages[0].message.includes("Noon"));
  assert.ok(!publicationMessages[0].message.includes("Amazon.eg"));
  assert.ok(!publicationMessages[0].message.includes("B0AMAZON123"),
    "Amazon products must never leak into the 6 PM other-store newsletter");

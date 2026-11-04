@@ -21,6 +21,7 @@ const fixture = `
 <a href="/eg/downtown/products/191717">سناب فلاير كازيون برسيل مسحوق غسيل أوتوماتيك 3 كيلو ١٤٤٫٩٥ ج.م ١٦٩٫٩٥ -١٥٪</a>
 <a href="/eg/downtown/products/191718">سناب فلاير مترو ماركت أوكسي سائل أطباق 2 لتر ٨٩٫٥٠ جنيه</a>
 <a href="/eg/downtown/products/191719">SnapFlyer الفرجاني ماركت Active Man اكتيف مان فوم حلاقه 200 ملل 39.99 ج.م 50.95 -22%</a>
+<a href="/eg/downtown/products/191720">سناب فلاير سبينس Ariel أريال مسحوق غسيل 6 كيلو 349.95 ج.م 499.95 -30٪</a>
 <a href="/eg/downtown/products/191711">SnapFlyer Kazyon Bahi Automatic Powder 8+1 Kg 488 EGP</a>
 <a href="/eg/downtown/products/191712">SnapFlyer BIM Ariel Automatic Laundry Powder 9kg 514.95 EGP 599.95 -14%</a>
 <a href="/eg/downtown/products/191713">SnapFlyer Carrefour Fresh Apples 1 Kg 39.95 EGP</a>
@@ -29,16 +30,17 @@ const fixture = `
 <a href="/eg/downtown/products/191716">SnapFlyer UnknownStore Ariel Laundry Gel 2.5L 199.95 EGP 229.95 -13%</a>`;
 
 const deals = extractSnapFlyerFilteredOffers(fixture, filter, "https://snapflyer.io/eg/downtown/products?category=cleaning&type=laundry-detergent");
-assert.equal(deals.length, 7, "English and displayed-Arabic product links with a current EGP price should be accepted");
+assert.equal(deals.length, 8, "English and displayed-Arabic product links with a current EGP price should be accepted");
 assert.ok(deals.some(item => item.url === "https://snapflyer.io/product/236503" && item.price === 64.95 && item.old_price === 79.95));
 assert.ok(deals.some(item => item.title.includes("Bahi") && item.merchant === "Kazyon"));
 assert.ok(deals.some(item => item.title.includes("Ariel") && item.merchant === "BIM"));
 assert.ok(deals.some(item => item.title.includes("Ariel") && item.merchant === null), "missing merchant must not reject a valid offer");
 assert.ok(deals.some(item => item.title.includes("برسيل") && item.merchant === "كازيون" && item.price === 144.95 && item.old_price === 169.95),
   "Arabic merchant names, Arabic digits and Arabic decimal prices should be extracted");
+assert.ok(deals.some(item => item.title.includes("أريال") && item.merchant === "سبينس" && !item.title.startsWith("سبينس")), "Arabic Spinneys alias should be separated from the product title");
 assert.ok(deals.some(item => item.title.includes("أوكسي") && item.merchant === "مترو ماركت" && item.price === 89.5),
   "Arabic store and product names with Arabic currency should be extracted");
-assert.ok(deals.some(item => item.title.startsWith("Active Man") && item.merchant === "الفرجاني ماركت" && item.price === 39.99 && item.old_price === 50.95),
+assert.ok(deals.some(item => item.title.startsWith("Active Man") && item.merchant === "الفرجاني ماركت" && item.price === 39.99 && item.old_price === 50.95 && item.category === "personal_care"),
   "the live Arabic merchant spelling الفرجاني ماركت should be separated cleanly from the product title");
 assert.ok(!deals.some(item => /Apples|Smart TV|Persil/.test(item.title)));
 
@@ -53,7 +55,7 @@ assert.ok(!deals.some(item => /Apples|Smart TV|Persil/.test(item.title)));
   });
   assert.equal(calls.length, 2);
   assert.equal(result.sourceCount, 2);
-  assert.equal(result.deals.length, 7);
+  assert.equal(result.deals.length, 8);
   assert.equal(result.sourceStats.filter(item => item.ok).length, 2);
 
   const verified = await verifyProductUrl("https://snapflyer.io/product/236503", {

@@ -53,10 +53,18 @@ assert.ok(!deals.some(item => /Apples|Smart TV|Persil/.test(item.title)));
   assert.equal(verified.ok, true);
   assert.equal(verified.finalUrl, "https://snapflyer.io/product/236503");
 
+  let canonicalRedirectCalls = 0;
   const canonicalized = await verifyProductUrl("https://snapflyer.io/product/236503", {
-    fetchImpl: async () => ({ status: 302, headers: { get: () => "https://snapflyer.io/eg/downtown/products/236503" } })
+    fetchImpl: async () => {
+      canonicalRedirectCalls += 1;
+      if (canonicalRedirectCalls === 1) {
+        return { status: 302, headers: { get: () => "https://snapflyer.io/eg/downtown/products/236503" } };
+      }
+      return { status: 200 };
+    }
   });
   assert.equal(canonicalized.ok, true, "same-product canonical redirects should remain valid");
+  assert.equal(canonicalized.finalUrl, "https://snapflyer.io/eg/downtown/products/236503");
 
   const redirected = await verifyProductUrl("https://snapflyer.io/product/236503", {
     fetchImpl: async () => ({ status: 302, headers: { get: () => "https://snapflyer.io/product/999999" } })

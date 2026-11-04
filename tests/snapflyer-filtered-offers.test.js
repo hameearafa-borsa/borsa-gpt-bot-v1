@@ -2,7 +2,7 @@
 
 const assert = require("node:assert/strict");
 const {
-  FILTERS, filterUrl, productUrl, extractSnapFlyerFilteredOffers, collectSnapFlyerFilteredOffers
+  FILTERS, filterUrl, productUrl, parseMerchantAndTitle, extractSnapFlyerFilteredOffers, collectSnapFlyerFilteredOffers
 } = require("../modules/snapflyer-filtered-offers");
 const { verifyProductUrl } = require("../modules/deal-scheduler");
 
@@ -14,6 +14,15 @@ assert.equal(
 assert.equal(productUrl("https://snapflyer.io/product/236503", "https://snapflyer.io/eg/downtown/products"), "https://snapflyer.io/product/236503");
 assert.equal(productUrl("https://evil.example/product/236503", "https://snapflyer.io/eg/downtown/products"), null);
 assert.equal(productUrl("https://snapflyer.io/eg/downtown/stores/bim", "https://snapflyer.io/eg/downtown/products"), null);
+
+assert.deepEqual(parseMerchantAndTitle("بنده مصر Finish مسحوق غسالة أطباق 1 كجم"), {
+  merchant: "بنده مصر",
+  title: "Finish مسحوق غسالة أطباق 1 كجم"
+});
+assert.deepEqual(parseMerchantAndTitle("بنده Ariel مسحوق غسيل 2 كيلو"), {
+  merchant: "بنده",
+  title: "Ariel مسحوق غسيل 2 كيلو"
+});
 
 const filter = FILTERS.find(item => item.key === "laundry-detergent");
 const fixture = `

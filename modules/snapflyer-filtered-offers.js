@@ -65,7 +65,8 @@ function parseMerchantAndTitle(rawText) {
 function extractOfferFromAnchor(anchorHtml, rawHref, filterKey, baseUrl) {
   const url = productUrl(rawHref, baseUrl);
   if (!url) return null;
-  const text = plainText(anchorHtml);
+  const displayedText = plainText(anchorHtml);
+  const text = normalizeDisplayedDigits(displayedText);
   const priceMatch = PRICE_RE.exec(text);
   if (!priceMatch) return null;
   const price = parseEgpPrice(priceMatch[0]);
@@ -77,7 +78,7 @@ function extractOfferFromAnchor(anchorHtml, rawHref, filterKey, baseUrl) {
   if (title.length < 3 || EXCLUDE_RE.test(title) || (!RELEVANT_PRODUCT_RE.test(title) && !isRelevantOffer({ title }))) return null;
 
   const afterPrice = text.slice(priceMatch.index + priceMatch[0].length);
-  const discountMatch = afterPrice.match(DISCOUNT_RE);
+  const discountMatch = afterPrice.match(/-\\s*(\\d{1,2}(?:\\.\\d+)?)\\s*(?:%|٪)/);
   const discount = discountMatch ? Number(discountMatch[1]) : 0;
   const oldPriceMatch = afterPrice.match(/^\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)(?=\s*(?:-\s*\d+(?:\.\d+)?\s*%|$))/);
   const oldPrice = oldPriceMatch ? Number(oldPriceMatch[1].replace(/,/g, "")) : null;
@@ -112,7 +113,6 @@ function extractSnapFlyerFilteredOffers(html, filter, baseUrl) {
 function filterUrl(filter) {
   const url = new URL("https://snapflyer.io/eg/downtown/products");
   url.searchParams.set("category", filter.category);
-  url.searchParams.set("lang", "en");
   if (filter.type) url.searchParams.set("type", filter.type);
   return url.href;
 }
@@ -163,6 +163,6 @@ async function collectSnapFlyerFilteredOffers({ fetchPage = fetchStorePage, filt
 }
 
 module.exports = {
-  FILTERS, filterUrl, productUrl, categoryOf, parseMerchantAndTitle,
+  FILTERS, filterUrl, productUrl, categoryOf, parseMerchantAndTitle, normalizeDisplayedDigits,
   extractOfferFromAnchor, extractSnapFlyerFilteredOffers, collectSnapFlyerFilteredOffers
 };

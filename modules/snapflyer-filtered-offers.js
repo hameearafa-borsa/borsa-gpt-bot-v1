@@ -12,7 +12,8 @@ const FILTERS = Object.freeze([
   { key: "fabric-softener", category: "cleaning", type: "fabric-softener" },
   { key: "bleach", category: "cleaning", type: "bleach" },
   { key: "air-fresheners", category: "cleaning", type: "air-fresheners" },
-  { key: "tissues-paper", category: "cleaning", type: "tissues-paper" },\n  { key: "insecticides", category: "cleaning", type: "insecticides" },
+  { key: "tissues-paper", category: "cleaning", type: "tissues-paper" },
+  { key: "insecticides", category: "cleaning", type: "insecticides" },
   { key: "personal-care", category: "personal-care", type: null }
 ]);
 

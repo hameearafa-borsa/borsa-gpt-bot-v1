@@ -36,11 +36,20 @@ const {
   assert.throws(() => parseLocalMarketHtml("<html>لا توجد أسعار</html>"), /incomplete/);
 
   const message = formatEconomicBulletin({ brentUsd: 88.13, usdEgp: 56.25, goldPoundEgp: 50468, gold21Egp: 6305 });
-  assert.equal(message.split("\n").length, 5, "the GPT service attribution is included before the four economic indicators");
-  assert.ok(message.includes("خام برنت"));
-  assert.ok(message.includes("الدولار"));
-  assert.ok(message.includes("الجنيه الذهب"));
-  assert.ok(message.includes("عيار 21"));
+  assert.equal(message, [
+    "نشرة الأسعار الاقتصادية اليومية – بورصة المنظفات",
+    "",
+    "سعر الدولار مقابل الجنيه: 56.25 ج.م",
+    "",
+    "سعر برميل خام برنت: $88.13",
+    "",
+    "جرام الذهب عيار 21: 6305 ج.م (تقريبي العالمية)",
+    "",
+    "سعر الجنيه الذهب: 50468 ج.م (تقريبي)",
+    "",
+    "نتمنى لكم يوماً موفقاً وتجارة رابحة."
+  ].join("\n"));
+  assert.equal(message.split("\n").length, 11);
   assert.ok(!message.includes("http"));
   assert.throws(() => formatEconomicBulletin({ brentUsd: 88.13, usdEgp: 0, goldPoundEgp: 50468, gold21Egp: 6305 }), /invalid/);
 

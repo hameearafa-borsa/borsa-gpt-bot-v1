@@ -21,13 +21,24 @@ const MERCHANT_NAMES = Object.freeze([
   "Abdullah Al Othaim Markets Egypt", "El Fergany Hyper Market", "Metro Market",
   "Panda Market Egypt", "LuLu Hypermarket Egypt", "Beit El Gomla",
   "Awlad Ragab", "Kheir Zaman", "Hyper One", "Fathallah", "Spinneys",
-  "Carrefour", "Kazyon", "BIM", "Seoudi Market", "Raneen", "El Hawary"
+  "Carrefour", "Kazyon", "BIM", "Seoudi Market", "Raneen", "El Hawary",
+  "أسواق عبدالله العثيم", "عبدالله العثيم", "العثيم مصر", "العثيم", "بنده مصر", "بنده", "الفرجاني ماركت", "الفرجاني",
+  "مترو ماركت", "مترو", "باندا", "اللولو", "بيت الجملة", "أولاد رجب",
+  "خير زمان", "هايبر وان", "فتح الله", "سبينيس", "كارفور", "كازيون",
+  "بيم", "سبينس", "سعودي ماركت", "سعودي", "رنين", "الهواري"
 ].sort((a, b) => b.length - a.length));
+
+function normalizeDisplayedDigits(value) {
+  return String(value || "")
+    .replace(/[٠-٩۰-۹]/g, digit => String("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹".indexOf(digit) % 10))
+    .replace(/٫/g, ".")
+    .replace(/٬/g, ",");
+}
 
 const PRICE_RE = /(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:EGP\b|جنيه|ج\s*\.?\s*م\.?)/i;
 const DISCOUNT_RE = /-\s*(\d{1,2}(?:\.\d+)?)\s*%/;
 const EXCLUDE_RE = /\b(?:tv|laptop|mobile|phone|appliance|coffee maker|furniture|fashion|shoes|toys|electronics)\b|تلفزيون|موبايل|لابتوب|أجهزة كهربائية|أثاث|ملابس|أحذية|ألعاب/i;
-const RELEVANT_PRODUCT_RE = /detergent|powder|laundry|washing|dishwash|cleaner|cleaning|disinfectant|bleach|softener|air freshener|insecticide|tissue|paper towel|toilet paper|wipes|shampoo|soap|hand wash|body wash|deodorant|toothpaste|shaving|sanitary pad|منظف|تنظيف|مسحوق|بودر|غسيل|غسالات|أطباق|اطباق|صحون|منعم|كلور|مطهر|مبيض|مناديل|ورق تواليت|شامبو|صابون|عناية|مزيل عرق|معطر جو|مبيد حشري|فوط صحية|معجون أسنان/i;
+const RELEVANT_PRODUCT_RE = /detergent|powder|laundry|washing|dishwash|cleaner|cleaning|disinfectant|bleach|softener|air freshener|insecticide|tissue|paper towel|toilet paper|wipes|shampoo|soap|hand wash|body wash|deodorant|toothpaste|shaving|sanitary pad|حلاقة|حلاقه|منظف|تنظيف|مسحوق|بودر|غسيل|غسالات|أطباق|اطباق|صحون|منعم|كلور|مطهر|مبيض|مناديل|ورق تواليت|شامبو|صابون|عناية|مزيل عرق|معطر جو|مبيد حشري|فوط صحية|معجون أسنان/i;
 
 function productUrl(raw, baseUrl) {
   try {
@@ -45,12 +56,12 @@ function productUrl(raw, baseUrl) {
 function categoryOf(title) {
   const text = String(title || "").toLowerCase();
   if (/مناديل|ورق تواليت|فاين|كلينكس|tissue|toilet paper|paper towel|wipes/.test(text)) return "paper";
-  if (/شامبو|صابون|شاور|غسول|كريم|مزيل عرق|معجون أسنان|شفرات|فوط صحية|shampoo|soap|hand wash|hand soap|body wash|deodorant|toothpaste|razor|shaving|sanitary pad/.test(text)) return "personal_care";
+  if (/شامبو|صابون|شاور|غسول|كريم|مزيل عرق|معجون أسنان|شفرات|حلاقة|حلاقه|فوم حلاقة|فوم حلاقه|فوط صحية|active man|shampoo|soap|hand wash|hand soap|body wash|deodorant|toothpaste|razor|shaving|sanitary pad/.test(text)) return "personal_care";
   return "detergent";
 }
 
 function parseMerchantAndTitle(rawText) {
-  let text = String(rawText || "").replace(/^Snap\s*Flyer\s*/i, "").trim();
+  let text = String(rawText || "").replace(/^(?:Snap\s*Flyer|سناب\s*فلاير)\s*/i, "").trim();
   let merchant = null;
   for (const name of MERCHANT_NAMES) {
     if (text.toLocaleLowerCase("en").startsWith(name.toLocaleLowerCase("en"))) {
@@ -65,21 +76,22 @@ function parseMerchantAndTitle(rawText) {
 function extractOfferFromAnchor(anchorHtml, rawHref, filterKey, baseUrl) {
   const url = productUrl(rawHref, baseUrl);
   if (!url) return null;
-  const text = plainText(anchorHtml);
+  const displayedText = plainText(anchorHtml);
+  const text = normalizeDisplayedDigits(displayedText);
   const priceMatch = PRICE_RE.exec(text);
   if (!priceMatch) return null;
   const price = parseEgpPrice(priceMatch[0]);
   if (!(price > 0)) return null;
 
-  const prefix = text.slice(0, priceMatch.index).replace(/^Snap\s*Flyer\s*/i, "").trim();
+  const prefix = text.slice(0, priceMatch.index).replace(/^(?:Snap\s*Flyer|سناب\s*فلاير)\s*/i, "").trim();
   const { merchant, title: merchantlessPrefix } = parseMerchantAndTitle(prefix);
   const title = (merchantlessPrefix || prefix).replace(/^[|•·—–-]+|[|•·—–-]+$/g, "").trim();
   if (title.length < 3 || EXCLUDE_RE.test(title) || (!RELEVANT_PRODUCT_RE.test(title) && !isRelevantOffer({ title }))) return null;
 
   const afterPrice = text.slice(priceMatch.index + priceMatch[0].length);
-  const discountMatch = afterPrice.match(DISCOUNT_RE);
+  const discountMatch = afterPrice.match(/-\s*(\d{1,2}(?:\.\d+)?)\s*(?:%|٪)/);
   const discount = discountMatch ? Number(discountMatch[1]) : 0;
-  const oldPriceMatch = afterPrice.match(/^\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)(?=\s*(?:-\s*\d+(?:\.\d+)?\s*%|$))/);
+  const oldPriceMatch = afterPrice.match(/^\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)(?=\s*(?:-\s*\d+(?:\.\d+)?\s*(?:%|٪)|$))/);
   const oldPrice = oldPriceMatch ? Number(oldPriceMatch[1].replace(/,/g, "")) : null;
 
   const deal = {
@@ -112,7 +124,6 @@ function extractSnapFlyerFilteredOffers(html, filter, baseUrl) {
 function filterUrl(filter) {
   const url = new URL("https://snapflyer.io/eg/downtown/products");
   url.searchParams.set("category", filter.category);
-  url.searchParams.set("lang", "en");
   if (filter.type) url.searchParams.set("type", filter.type);
   return url.href;
 }
@@ -163,6 +174,6 @@ async function collectSnapFlyerFilteredOffers({ fetchPage = fetchStorePage, filt
 }
 
 module.exports = {
-  FILTERS, filterUrl, productUrl, categoryOf, parseMerchantAndTitle,
+  FILTERS, filterUrl, productUrl, categoryOf, parseMerchantAndTitle, normalizeDisplayedDigits,
   extractOfferFromAnchor, extractSnapFlyerFilteredOffers, collectSnapFlyerFilteredOffers
 };

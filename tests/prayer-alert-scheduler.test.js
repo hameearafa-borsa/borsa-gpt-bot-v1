@@ -30,7 +30,7 @@ const {
   assert.equal(currentPrayerSlot(schedule, new Date("2026-11-03T15:08:00.000Z")), null);
   assert.equal(currentPrayerSlot(schedule, new Date("2026-11-03T15:05:00.000Z")), null);
   const alertText = formatPrayerAlert(slot);
-  assert.equal(alertText, "🕌 حان الآن موعد أذان المغرب\\n\\n🕰️ 17:06 بتوقيت القاهرة\\n\\nنسأل الله أن يتقبل منكم صالح الأعمال.\\n\\nقوموا إلى صلاتكم يرحمنا ويرحمكم الله");
+  assert.equal(alertText, "🕌 حان الآن موعد أذان المغرب\n\n🕰️ 17:06 بتوقيت القاهرة\n\nنسأل الله أن يتقبل منكم صالح الأعمال.\n\nقوموا إلى صلاتكم يرحمنا ويرحمكم الله");
   assert.ok(!alertText.includes("المصدر"));
   assert.ok(!alertText.includes("الهيئة المصرية العامة للمساحة"));
 

@@ -48,8 +48,8 @@ const {
     "سعر الجنيه الذهب: 50468 ج.م (تقريبي)",
     "",
     "نتمنى لكم يوماً موفقاً وتجارة رابحة."
-  ].join("\\n"));
-  assert.equal(message.split("\\n").length, 11);
+  ].join("\n"));
+  assert.equal(message.split("\n").length, 11);
   assert.ok(!message.includes("http"));
   assert.throws(() => formatEconomicBulletin({ brentUsd: 88.13, usdEgp: 0, goldPoundEgp: 50468, gold21Egp: 6305 }), /invalid/);
 

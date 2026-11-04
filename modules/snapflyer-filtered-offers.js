@@ -22,10 +22,10 @@ const MERCHANT_NAMES = Object.freeze([
   "Panda Market Egypt", "LuLu Hypermarket Egypt", "Beit El Gomla",
   "Awlad Ragab", "Kheir Zaman", "Hyper One", "Fathallah", "Spinneys",
   "Carrefour", "Kazyon", "BIM", "Seoudi Market", "Raneen", "El Hawary",
-  "أسواق عبدالله العثيم", "عبدالله العثيم", "العثيم", "الفرجاني ماركت", "الفرجاني",
+  "أسواق عبدالله العثيم", "عبدالله العثيم", "العثيم مصر", "العثيم", "الفرجاني ماركت", "الفرجاني",
   "مترو ماركت", "مترو", "باندا", "اللولو", "بيت الجملة", "أولاد رجب",
   "خير زمان", "هايبر وان", "فتح الله", "سبينيس", "كارفور", "كازيون",
-  "بيم", "سعودي ماركت", "سعودي", "رنين", "الهواري"
+  "بيم", "سبينس", "سعودي ماركت", "سعودي", "رنين", "الهواري"
 ].sort((a, b) => b.length - a.length));
 
 function normalizeDisplayedDigits(value) {
@@ -56,7 +56,7 @@ function productUrl(raw, baseUrl) {
 function categoryOf(title) {
   const text = String(title || "").toLowerCase();
   if (/مناديل|ورق تواليت|فاين|كلينكس|tissue|toilet paper|paper towel|wipes/.test(text)) return "paper";
-  if (/شامبو|صابون|شاور|غسول|كريم|مزيل عرق|معجون أسنان|شفرات|فوط صحية|shampoo|soap|hand wash|hand soap|body wash|deodorant|toothpaste|razor|shaving|sanitary pad/.test(text)) return "personal_care";
+  if (/شامبو|صابون|شاور|غسول|كريم|مزيل عرق|معجون أسنان|شفرات|حلاقة|حلاقه|فوم حلاقة|فوم حلاقه|فوط صحية|active man|shampoo|soap|hand wash|hand soap|body wash|deodorant|toothpaste|razor|shaving|sanitary pad/.test(text)) return "personal_care";
   return "detergent";
 }
 

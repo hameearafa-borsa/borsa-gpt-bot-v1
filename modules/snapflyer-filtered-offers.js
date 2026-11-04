@@ -72,7 +72,7 @@ function extractOfferFromAnchor(anchorHtml, rawHref, filterKey, baseUrl) {
   const prefix = text.slice(0, priceMatch.index).replace(/^Snap\s*Flyer\s*/i, "").trim();
   const { merchant, title: merchantlessPrefix } = parseMerchantAndTitle(prefix);
   const title = (merchantlessPrefix || prefix).replace(/^[|•·—–-]+|[|•·—–-]+$/g, "").trim();
-  if (title.length < 3 || EXCLUDE_RE.test(title) || !isRelevantOffer({ title })) return null;
+  if (title.length < 3 || EXCLUDE_RE.test(title) || (!RELEVANT_PRODUCT_RE.test(title) && !isRelevantOffer({ title }))) return null;
 
   const afterPrice = text.slice(priceMatch.index + priceMatch[0].length);
   const discountMatch = afterPrice.match(DISCOUNT_RE);

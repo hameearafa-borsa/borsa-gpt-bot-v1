@@ -174,6 +174,6 @@ async function collectSnapFlyerFilteredOffers({ fetchPage = fetchStorePage, filt
 }
 
 module.exports = {
-  FILTERS, filterUrl, productUrl, categoryOf, parseMerchantAndTitle, normalizeDisplayedDigits, normalizeDisplayedDigits,
+  FILTERS, filterUrl, productUrl, categoryOf, parseMerchantAndTitle, normalizeDisplayedDigits,
   extractOfferFromAnchor, extractSnapFlyerFilteredOffers, collectSnapFlyerFilteredOffers
 };

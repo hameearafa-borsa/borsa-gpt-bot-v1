@@ -52,7 +52,30 @@ assert.match(links.renderChemicalLinks(built), /قناة التركيبات ال
 assert.equal(links.escapeHtml("<b>نص & تجربة</b>"), "&lt;b&gt;نص &amp; تجربة&lt;/b&gt;");
 console.log("chemical assistant routing, safety, and links tests: OK");
 
+assert.match(chemistry.getProviderFallback(new Error("AI HTTP 503: overloaded")), /مشغولة أو غير متاحة مؤقتًا/);
+assert.match(chemistry.getProviderFallback(new Error("AI HTTP 429: quota exceeded")), /مشغولة أو غير متاحة مؤقتًا/);
+assert.match(chemistry.getProviderFallback(new Error("AI HTTP 401: invalid_api_key")), /عطل مؤقت في إعداد الاتصال/);
+assert.match(chemistry.getProviderFallback(new Error("AI HTTP 400: invalid request")), /تعذر إعداد إجابة فنية موثوقة/);
+
 (async () => {
+  const validQuestion = "عايز تركيبة صابون سائل اقتصادية";
+  const serviceFailureAnswer = await chemistry.answer({
+    async generate() { throw new Error("AI HTTP 503: Google unavailable"); }
+  }, validQuestion);
+  assert.match(serviceFailureAnswer, /مشغولة أو غير متاحة مؤقتًا/);
+  assert.match(serviceFailureAnswer, /لم يتم رفض سؤالك/);
+
+  const permanentFailureAnswer = await chemistry.answer({
+    async generate() { throw new Error("AI HTTP 400: invalid request"); }
+  }, validQuestion);
+  assert.match(permanentFailureAnswer, /تعذر إعداد إجابة فنية موثوقة/);
+  assert.doesNotMatch(permanentFailureAnswer, /قبل معرفة الأسماء والتركيزات/);
+
+  const emptyAnswer = await chemistry.answer({
+    async generate() { return { text: "   ", provider: "gemini" }; }
+  }, validQuestion);
+  assert.match(emptyAnswer, /تعذر إعداد إجابة فنية موثوقة/);
+
   const sqlCalls = [];
   const pool = { async query(sql, params) {
     sqlCalls.push({ sql, params });

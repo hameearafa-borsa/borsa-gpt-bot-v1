@@ -257,7 +257,7 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     }
     let msg;
     try {
-      msg = await telegram.sendMessage(targetId, formatted.text, { disable_web_page_preview: true });
+      msg = await telegram.sendMessage(targetId, formatted.text, { disable_web_page_preview: true, parse_mode: "HTML" });
     } catch (error) {
       await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(() => {});
       await onError(error, { stage: "publish", batchKind: kind, batchKey: key, chatId: targetId });

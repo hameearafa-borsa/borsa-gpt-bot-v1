@@ -37,19 +37,23 @@ async function filterRecentDeals(pool, deals, days = 7) {
   }
   return output;
 }
+function escapeHtml(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
 function formatNewsletterMessage(deals, title, maxLength = 3900) {
-  const safeTitle = String(title || "عروض بورصة المنظفات").slice(0, 120);
+  const safeTitle = escapeHtml(String(title || "عروض بورصة المنظفات").slice(0, 120));
   const header = [`🛍️ ${safeTitle}`, "بورصة المنظفات لأصحاب المحلات", ""];
   const footer = "مدعوم بتقنيات ChatGPT";
   const items = [];
   const blocks = [];
   const render = current => [...header, ...current.flatMap((block, i) => [...block.map((line, j) => j === 0 ? `${i + 1}) ${line}` : line), ""]), footer].join("\n");
   for (const d of deals || []) {
-    const block = [String(d.title || "منتج").slice(0, 180)];
-    if (d.merchant) block.push(`🏪 المتجر: ${String(d.merchant).slice(0, 80)}`);
+    const block = [escapeHtml(String(d.title || "منتج").slice(0, 180))];
+    if (d.merchant) block.push(`🏪 المتجر: ${escapeHtml(String(d.merchant).slice(0, 80))}`);
     block.push(`💰 السعر: ${Number(d.price).toFixed(2)} جنيه`);
     if (Number(d.old_price) > Number(d.price)) block.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه`);
-    block.push(`🔗 ${String(d.url || "")}`);
+    if (d.url) block.push(`🔗 <a href="${escapeHtml(d.url)}">فتح العرض</a>`);
     const candidate = render([...blocks, block]);
     if (candidate.length > maxLength) continue;
     blocks.push(block);

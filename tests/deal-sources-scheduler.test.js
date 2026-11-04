@@ -178,7 +178,10 @@ const newsletterFixture = [
 const formattedNewsletter = formatNewsletterMessage(newsletterFixture, "اختبار النشرة", 300);
 assert.equal(formattedNewsletter.items.length, 1, "only complete product blocks fitting the limit should be selected");
 assert.ok(formattedNewsletter.text.length <= 300, "newsletter must remain under the Telegram message limit");
-assert.ok(formattedNewsletter.text.includes(newsletterFixture[0].url), "included product URLs must remain intact");
+assert.ok(formattedNewsletter.text.includes('<a href="https://www.amazon.eg/dp/B0ABCDEF12">فتح العرض</a>'),
+  "the full URL should be retained as a hidden Telegram link, not displayed as a long line");
+assert.ok(!formattedNewsletter.text.includes("https://www.amazon.eg/dp/B0ABCDEF12\\n"),
+  "the product URL must not appear as visible newsletter text");
 assert.ok(!formattedNewsletter.text.includes("x".repeat(100)), "an oversized URL must not be partially published");
 const sampleDate = new Date("2026-10-12T15:00:00.000Z");
 assert.equal(batchKey(sampleDate),"2026-10-12");

@@ -61,7 +61,7 @@ function categoryOf(title) {
 }
 
 function parseMerchantAndTitle(rawText) {
-  let text = String(rawText || "").replace(/^Snap\s*Flyer\s*/i, "").trim();
+  let text = String(rawText || "").replace(/^(?:Snap\s*Flyer|سناب\s*فلاير)\s*/i, "").trim();
   let merchant = null;
   for (const name of MERCHANT_NAMES) {
     if (text.toLocaleLowerCase("en").startsWith(name.toLocaleLowerCase("en"))) {
@@ -83,15 +83,15 @@ function extractOfferFromAnchor(anchorHtml, rawHref, filterKey, baseUrl) {
   const price = parseEgpPrice(priceMatch[0]);
   if (!(price > 0)) return null;
 
-  const prefix = text.slice(0, priceMatch.index).replace(/^Snap\s*Flyer\s*/i, "").trim();
+  const prefix = text.slice(0, priceMatch.index).replace(/^(?:Snap\s*Flyer|سناب\s*فلاير)\s*/i, "").trim();
   const { merchant, title: merchantlessPrefix } = parseMerchantAndTitle(prefix);
   const title = (merchantlessPrefix || prefix).replace(/^[|•·—–-]+|[|•·—–-]+$/g, "").trim();
   if (title.length < 3 || EXCLUDE_RE.test(title) || (!RELEVANT_PRODUCT_RE.test(title) && !isRelevantOffer({ title }))) return null;
 
   const afterPrice = text.slice(priceMatch.index + priceMatch[0].length);
-  const discountMatch = afterPrice.match(/-\\s*(\\d{1,2}(?:\\.\\d+)?)\\s*(?:%|٪)/);
+  const discountMatch = afterPrice.match(/-\s*(\d{1,2}(?:\.\d+)?)\s*(?:%|٪)/);
   const discount = discountMatch ? Number(discountMatch[1]) : 0;
-  const oldPriceMatch = afterPrice.match(/^\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)(?=\s*(?:-\s*\d+(?:\.\d+)?\s*%|$))/);
+  const oldPriceMatch = afterPrice.match(/^\s*(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)(?=\s*(?:-\s*\d+(?:\.\d+)?\s*(?:%|٪)|$))/);
   const oldPrice = oldPriceMatch ? Number(oldPriceMatch[1].replace(/,/g, "")) : null;
 
   const deal = {

@@ -50,7 +50,7 @@ assert.ok(!deals.some(item => /Apples|Smart TV|Persil/.test(item.title)));
   });
   assert.equal(calls.length, 2);
   assert.equal(result.sourceCount, 2);
-  assert.equal(result.deals.length, 4);
+  assert.equal(result.deals.length, 6);
   assert.equal(result.sourceStats.filter(item => item.ok).length, 2);
 
   const verified = await verifyProductUrl("https://snapflyer.io/product/236503", {

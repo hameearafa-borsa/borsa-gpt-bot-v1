@@ -1,0 +1,32 @@
+name: Live SnapFlyer Filtered Product Offers
+
+on:
+  push:
+    branches:
+      - fix/snapflyer-default-language-short-links-2026-11-04
+    paths:
+      - ".github/workflows/live-snapflyer-filtered-offers.yml"
+      - "tests/snapflyer-filtered-offers-live.js"
+      - "modules/snapflyer-filtered-offers.js"
+      - "modules/snapflyer-catalog-deals.js"
+      - "modules/catalog-newsletter-scheduler.js"
+
+permissions:
+  contents: read
+
+jobs:
+  live-filtered-offers:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Check out test branch
+        uses: actions/checkout@v4
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Fetch and validate one live SnapFlyer product filter
+        run: node tests/snapflyer-filtered-offers-live.js

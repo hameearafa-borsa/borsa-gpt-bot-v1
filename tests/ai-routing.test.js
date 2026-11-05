@@ -15,6 +15,9 @@ assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts m
 const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");
 assert.ok(!openAISection.includes("temperature:"), "Responses request must not send unsupported temperature field");
+assert.ok(openAISection.includes('type: "web_search"'), "OpenAI chemical fallback must use hosted web search");
+assert.ok(openAISection.includes('tool_choice = "required"'), "fallback must actually search rather than rely on model choice");
+assert.ok(openAISection.includes("web_search_call.action.sources"), "fallback must return source references");
 const geminiSection = aiSource.slice(aiSource.indexOf("function geminiProvider"), aiSource.indexOf("function providersFromEnv"));
 assert.ok(geminiSection.length > 0, "Gemini provider implementation should exist");
 assert.ok(geminiSection.includes('import("@google/genai")'), "Gemini requests must use the installed official SDK");
@@ -30,7 +33,7 @@ assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
 assert.ok(index.includes('createAI({ provider: "gemini" })'), "chemical assistant must be pinned to Google only");
-assert.ok(index.includes("never silently answer via OpenAI or Groq"));
+assert.ok(index.includes('const chemicalFallbackAI = createAI({ provider: "openai" })'), "OpenAI is only wired as the chemical assistant fallback");
 
 function provider(name, providerName, run) {
   return { name, provider: providerName, run };
@@ -138,6 +141,7 @@ try {
   });
   const sdkAnswer = await sdkGemini("اختبر اتصال المساعد الكيميائي");
   const sdkAnswerAgain = await sdkGemini("سؤال آخر");
+  await sdkGemini("سؤال مدعوم بالبحث", { googleSearch: true });
   assert.equal(sdkAnswer.text, "إجابة Gemini عبر المكتبة الرسمية");
   assert.equal(sdkAnswer.provider, "gemini");
   assert.equal(sdkAnswerAgain.model, "gemini-3.8-flash");

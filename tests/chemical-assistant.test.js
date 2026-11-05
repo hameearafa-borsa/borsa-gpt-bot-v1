@@ -68,7 +68,7 @@ assert.match(chemistry.getProviderFallback(new Error("AI HTTP 400: invalid reque
   assert.match(serviceFailureAnswer, /لم يتم رفض سؤالك/);
 
   let fallbackCalls = 0;
-  const recoveredBySearchedFallback = await chemistry.answer({
+  const recoveredByOpenAIFallback = await chemistry.answer({
     async generate(_prompt, options) {
       assert.equal(options.googleSearch, true, "Gemini chemical requests should use Google Search grounding");
       assert.equal(options.requestBudgetMs, 15000, "primary Gemini work should leave time for fallback");
@@ -77,15 +77,15 @@ assert.match(chemistry.getProviderFallback(new Error("AI HTTP 400: invalid reque
   }, validQuestion, null, {
     async generate(_prompt, options) {
       fallbackCalls++;
-      assert.equal(options.webSearch, true, "OpenAI fallback must perform web search");
+      assert.equal(options.webSearch, false, "OpenAI rescue must not require web search");
       assert.equal(options.model, undefined, "fallback should use the already configured OPENAI_MODEL");
-      assert.equal(options.timeoutMs, 12000);
-      return { text: "إجابة فنية مستندة إلى مصادر\n\nالمصادر: https://example.com/tds", provider: "openai" };
+      assert.equal(options.timeoutMs, 14000);
+      return { text: "إجابة فنية عملية مباشرة", provider: "openai" };
     }
   });
   assert.equal(fallbackCalls, 1);
-  assert.match(recoveredBySearchedFallback, /تقنيات OpenAI/);
-  assert.match(recoveredBySearchedFallback, /https:\/\/example.com\/tds/);
+  assert.match(recoveredByOpenAIFallback, /تقنيات OpenAI/);
+  assert.match(recoveredByOpenAIFallback, /إجابة فنية عملية مباشرة/);
 
   const permanentFailureAnswer = await chemistry.answer({
     async generate() { throw new Error("AI HTTP 400: invalid request"); }

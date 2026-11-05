@@ -132,17 +132,38 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
         contents: String(prompt || ""),
         config: { automaticContinuation: false }
       });
+      const runModel = async (stage, targetModel) => {
+        const startedAt = Date.now();
+        console.info(`[GEMINI_MODEL] stage=${stage} model=${targetModel} outcome=started`);
+        try {
+          const data = await request(targetModel);
+          console.info(`[GEMINI_MODEL] stage=${stage} model=${targetModel} outcome=succeeded duration_ms=${Date.now() - startedAt}`);
+          return data;
+        } catch (error) {
+          const status = providerStatus(error) || "unknown";
+          const retryable = isGeminiTransientError(error);
+          console.warn(`[GEMINI_MODEL] stage=${stage} model=${targetModel} outcome=failed status=${status} retryable=${retryable} duration_ms=${Date.now() - startedAt} error=${redactString(error?.message || "provider_error")}`);
+          throw error;
+        }
+      };
+
+      // Record the selected route for every request; never log prompts or credentials.
+      console.info(`[GEMINI_ROUTE] primary_model=${selectedModel} fallback_model=${fallbackModel || "disabled"}`);
 
       // Keep the full request budget bounded: one primary attempt, then at most
       // one alternate Gemini model attempt. No cross-provider fallback is used.
       try {
-        const data = await retryGeminiRequest(() => request(selectedModel), { maxAttempts: 1 });
+        const data = await retryGeminiRequest(() => runModel("primary", selectedModel), { maxAttempts: 1 });
         return { text: data?.text || "", provider: "gemini", model: selectedModel };
       } catch (primaryError) {
         if (!fallbackModel || fallbackModel === selectedModel || !isGeminiTransientError(primaryError)) {
+          const reason = !fallbackModel ? "not_configured" : fallbackModel === selectedModel ? "same_as_primary" : "permanent_primary_error";
+          console.info(`[GEMINI_FALLBACK] outcome=skipped reason=${reason} primary_model=${selectedModel} fallback_model=${fallbackModel || "disabled"}`);
           throw primaryError;
         }
-        const data = await request(fallbackModel);
+        console.info(`[GEMINI_FALLBACK] outcome=starting primary_model=${selectedModel} fallback_model=${fallbackModel}`);
+        const data = await runModel("fallback", fallbackModel);
+        console.info(`[GEMINI_FALLBACK] outcome=succeeded primary_model=${selectedModel} fallback_model=${fallbackModel}`);
         return { text: data?.text || "", provider: "gemini", model: fallbackModel };
       }
     } catch (error) {

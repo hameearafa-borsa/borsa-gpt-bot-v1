@@ -93,6 +93,20 @@ function makePool({ failPublishedUpdate = false, failObservation = false, failQu
   assert.equal(pool.calls.some(c => c.sql.startsWith("UPDATE deal_publication_queue") && c.params[1] === "published"), false,
     "a failed Telegram send must leave the queue item pending");
 
+  // If observation persistence fails, do not send an offer that cannot be recovered.
+  const persistenceFailurePool = makePool({ failObservation: true });
+  let persistenceFailureSendCount = 0;
+  await assert.rejects(() => publishDailyDeals({
+    pool: persistenceFailurePool,
+    telegram: { sendMessage: async () => { persistenceFailureSendCount++; return { message_id: 9050 }; } },
+    chatId: "-100123",
+    fetcher: async () => ({ deals: candidates }),
+    verify: async deals => deals,
+    now: date
+  }), /simulated observation persistence failure/);
+  assert.equal(persistenceFailureSendCount, 0,
+    "publication must not proceed when the observed offer could not be durably saved");
+
   // A multi-group run must gather candidates once and send once to each group.
   const multiPool = makePool();
   const sentTo = [];

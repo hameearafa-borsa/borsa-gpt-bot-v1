@@ -1,6 +1,6 @@
 "use strict";
 const { collectDealCandidates } = require("./deal-sources");
-const { TARGETS, AMAZON_TARGETS, filterRecentDeals, distributeDeals, formatNewsletterMessage } = require("./deal-publication");
+const { TARGETS, AMAZON_TARGETS, filterRecentDeals, distributeDeals, formatNewsletterMessage, rankDeals } = require("./deal-publication");
 const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
 const { isServiceEnabled } = require("../core/service-settings");
 
@@ -143,9 +143,13 @@ async function enqueueObservedDeals(pool, deals, source = "unknown", chatIds = [
   const saved = await persistDeals(pool, deals);
   let queued = 0;
   const targets = [...new Set((chatIds || []).map(Number).filter(Number.isSafeInteger))];
-  for (const deal of deals) {
+  const seenProducts = new Set();
+  // If a search returns several price variants for one exact product, queue
+  // only the strongest current candidate; still retain all valid observations.
+  for (const deal of rankDeals(deals)) {
     const valid = validateDeal(deal);
-    if (!valid.ok) continue;
+    if (!valid.ok || seenProducts.has(valid.productFingerprint)) continue;
+    seenProducts.add(valid.productFingerprint);
     for (const chatId of targets) {
       // A changed price/discount creates a new observation fingerprint. Retire
       // older pending observations for this same product in this specific chat.

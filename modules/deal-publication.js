@@ -34,9 +34,7 @@ function distributeDeals(deals, target = TARGETS) {
   // If one category is short, fill the remaining edition capacity from the
   // highest-ranked eligible offers in the other categories.
   const selectedFingerprints = new Set(Object.values(selected).flat().map(deal => deal.fingerprint));
-  const selectedTotal = Object.values(selected).reduce((sum, items) => sum + items.length, 0);
   for (const deal of deferred) {
-    if (selectedTotal + (deferred.indexOf(deal)) >= totalTarget) break;
     const categoryTotal = Object.values(selected).reduce((sum, items) => sum + items.length, 0);
     if (categoryTotal >= totalTarget) break;
     if (selectedFingerprints.has(deal.fingerprint)) continue;

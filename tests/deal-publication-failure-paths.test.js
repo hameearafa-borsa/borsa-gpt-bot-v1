@@ -93,6 +93,23 @@ function makePool({ failPublishedUpdate = false, failObservation = false, failQu
   assert.equal(pool.calls.some(c => c.sql.startsWith("UPDATE deal_publication_queue") && c.params[1] === "published"), false,
     "a failed Telegram send must leave the queue item pending");
 
+  // The same pending offer can be published in the next day's edition even if
+  // the fresh Amazon search returns nothing.
+  let retryFetchCount = 0;
+  let retrySendCount = 0;
+  const retry = await publishDailyDeals({
+    pool,
+    telegram: { sendMessage: async () => { retrySendCount++; return { message_id: 9002 }; } },
+    chatId: "-100123",
+    fetcher: async () => { retryFetchCount++; return { deals: [] }; },
+    verify: async deals => deals,
+    now: new Date("2026-10-13T14:00:00.000Z")
+  });
+  assert.equal(retryFetchCount, 1);
+  assert.equal(retrySendCount, 1, "a pending queued offer must be published on a later edition");
+  assert.equal(retry.published.length, 1);
+  assert.equal(retry.published[0].messageId, 9002);
+
   // If observation persistence fails, do not send an offer that cannot be recovered.
   const persistenceFailurePool = makePool({ failObservation: true });
   let persistenceFailureSendCount = 0;

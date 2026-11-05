@@ -1,6 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { publishDailyDeals } = require("../modules/deal-scheduler");
+const { dealFingerprint, dealProductFingerprint } = require("../modules/deals");
 
 const date = new Date("2026-10-12T14:00:00.000Z"); // 5 PM in Cairo
 const candidates = [{
@@ -14,7 +15,7 @@ const candidates = [{
   verified_url: true
 }];
 
-function makePool({ failPublishedUpdate = false, failObservation = false } = {}) {
+function makePool({ failPublishedUpdate = false, failObservation = false, failQueuePublished = false } = {}) {
   const calls = [];
   return {
     calls,
@@ -22,17 +23,25 @@ function makePool({ failPublishedUpdate = false, failObservation = false } = {})
       calls.push({ sql, params });
       if (sql.includes("FROM service_settings")) return { rows: [], rowCount: 0 };
       if (sql.startsWith("SELECT channel_kind,status")) return { rows: [], rowCount: 0 };
-      if (sql.startsWith("SELECT 1 FROM deal_observations")) return { rows: [], rowCount: 0 };
+      if (sql.startsWith("INSERT INTO deal_observations")) {
+        if (failObservation) throw new Error("simulated observation persistence failure");
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.startsWith("INSERT INTO deal_publication_queue")) return { rows: [{ fingerprint: params[0], status: "queued" }], rowCount: 1 };
+      if (sql.startsWith("UPDATE deal_publication_queue")) {
+        if (params[1] === "published" && failQueuePublished) throw new Error("simulated queue status failure");
+        return { rows: [], rowCount: 1 };
+      }
+      if (sql.startsWith("SELECT o.merchant")) return {
+        rows: candidates.map(deal => ({ ...deal, fingerprint: dealFingerprint(deal), product_fingerprint: dealProductFingerprint(deal) })),
+        rowCount: candidates.length
+      };
       if (sql.startsWith("INSERT INTO deal_publications")) return { rows: [{ id: 42 }], rowCount: 1 };
       if (sql.startsWith("UPDATE deal_publications SET status='published'")) {
         if (failPublishedUpdate) throw new Error("simulated publication record failure");
         return { rows: [], rowCount: 1 };
       }
       if (sql.startsWith("UPDATE deal_publications SET status='failed'")) return { rows: [], rowCount: 1 };
-      if (sql.startsWith("INSERT INTO deal_observations")) {
-        if (failObservation) throw new Error("simulated observation persistence failure");
-        return { rows: [], rowCount: 1 };
-      }
       throw new Error("Unexpected SQL in test: " + sql);
     }
   };
@@ -40,10 +49,10 @@ function makePool({ failPublishedUpdate = false, failObservation = false } = {})
 
 (async () => {
   // Confirmed Telegram send followed by DB failure must not mark the post failed.
-  for (const failure of ["publication_record", "persist_deals"]) {
+  for (const failure of ["publication_record", "update_deal_queue"]) {
     const pool = makePool({
       failPublishedUpdate: failure === "publication_record",
-      failObservation: failure === "persist_deals"
+      failQueuePublished: failure === "update_deal_queue"
     });
     const errors = [];
     let sendCount = 0;
@@ -64,7 +73,7 @@ function makePool({ failPublishedUpdate = false, failObservation = false } = {})
       "post-send database failures must never downgrade a sent message to failed");
   }
 
-  // A send failure is still recorded as failed and does not persist observations.
+  // A send failure is recorded, but the observed offer remains durably queued for a later run.
   const pool = makePool();
   const errors = [];
   const result = await publishDailyDeals({
@@ -79,7 +88,10 @@ function makePool({ failPublishedUpdate = false, failObservation = false } = {})
   assert.equal(result.published.length, 0);
   assert.ok(errors.includes("publish"));
   assert.equal(pool.calls.some(c => c.sql.startsWith("UPDATE deal_publications SET status='failed'")), true);
-  assert.equal(pool.calls.some(c => c.sql.startsWith("INSERT INTO deal_observations")), false);
+  assert.equal(pool.calls.some(c => c.sql.startsWith("INSERT INTO deal_observations")), true,
+    "observation must be saved before attempting publication");
+  assert.equal(pool.calls.some(c => c.sql.startsWith("UPDATE deal_publication_queue") && c.params[1] === "published"), false,
+    "a failed Telegram send must leave the queue item pending");
 
   // A multi-group run must gather candidates once and send once to each group.
   const multiPool = makePool();

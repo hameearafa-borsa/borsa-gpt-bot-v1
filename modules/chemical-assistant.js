@@ -157,7 +157,7 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
         const result = await fallbackAI.generate(buildPrompt(question), {
           temperature: 0.3, webSearch: false, timeoutMs: 14000
         });
-        if (!String(result?.text || "").trim()) throw new Error("OpenAI web search returned an empty response");
+        if (!String(result?.text || "").trim()) throw new Error("OpenAI fallback returned an empty response");
         console.info(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=succeeded`);
         return formatAnswer(result);
       } catch (fallbackError) {

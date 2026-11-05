@@ -197,6 +197,11 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
           console.info(`[GEMINI_FALLBACK] outcome=skipped reason=${reason} primary_model=${selectedModel} fallback_model=${fallbackModel || "disabled"}`);
           throw primaryError;
         }
+        const remainingBudgetMs = deadlineAt - Date.now();
+        if (remainingBudgetMs < timeoutMs + 1000) {
+          console.info(`[GEMINI_FALLBACK] outcome=skipped reason=request_budget_exhausted remaining_ms=${Math.max(0, remainingBudgetMs)} primary_model=${selectedModel} fallback_model=${fallbackModel}`);
+          throw primaryError;
+        }
         console.info(`[GEMINI_FALLBACK] outcome=starting primary_model=${selectedModel} fallback_model=${fallbackModel}`);
         const data = await retryGeminiRequest(
           () => runModel("fallback", fallbackModel),

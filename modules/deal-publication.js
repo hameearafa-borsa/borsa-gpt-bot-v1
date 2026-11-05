@@ -1,7 +1,7 @@
 "use strict";
 const { validateDeal, isRecentDuplicate } = require("./deals");
 
-const TARGETS = Object.freeze({ detergent: 5, paper: 5, personal_care: 5 });
+const TARGETS = Object.freeze({ detergent: 10, paper: 10, personal_care: 10 });
 function scoreDeal(deal) {
   const discount = Math.max(0, Math.min(90, Number(deal.discount_pct) || 0));
   const hasOldPrice = Number(deal.old_price) > Number(deal.price) && Number(deal.old_price) > 0;
@@ -17,15 +17,33 @@ function rankDeals(deals) {
 function distributeDeals(deals, target = TARGETS) {
   const ranked = rankDeals(deals);
   const selected = { detergent: [], paper: [], personal_care: [] };
+  const deferred = [];
   const seen = new Set();
+  const totalTarget = Object.values(target).reduce((sum, count) => sum + Math.max(0, Number(count) || 0), 0);
   for (const deal of ranked) {
     const check = validateDeal(deal);
     if (!check.ok || seen.has(check.fingerprint)) continue;
     seen.add(check.fingerprint);
     const category = deal.category;
-    if (selected[category].length < (target[category] || 0)) selected[category].push({ ...deal, fingerprint: check.fingerprint });
+    if (!selected[category]) continue;
+    const item = { ...deal, fingerprint: check.fingerprint };
+    if (selected[category].length < Math.max(0, Number(target[category]) || 0)) selected[category].push(item);
+    else deferred.push(item);
   }
-  return { ...selected, total: Object.values(selected).reduce((n,a)=>n+a.length,0), targetTotal: Object.values(target).reduce((n,n2)=>n+n2,0) };
+  // Category targets are preferred allocations, not hard exclusions.
+  // If one category is short, fill the remaining edition capacity from the
+  // highest-ranked eligible offers in the other categories.
+  const selectedFingerprints = new Set(Object.values(selected).flat().map(deal => deal.fingerprint));
+  const selectedTotal = Object.values(selected).reduce((sum, items) => sum + items.length, 0);
+  for (const deal of deferred) {
+    if (selectedTotal + (deferred.indexOf(deal)) >= totalTarget) break;
+    const categoryTotal = Object.values(selected).reduce((sum, items) => sum + items.length, 0);
+    if (categoryTotal >= totalTarget) break;
+    if (selectedFingerprints.has(deal.fingerprint)) continue;
+    selected[deal.category].push(deal);
+    selectedFingerprints.add(deal.fingerprint);
+  }
+  return { ...selected, total: Object.values(selected).reduce((n,a)=>n+a.length,0), targetTotal: totalTarget };
 }
 async function filterRecentDeals(pool, deals, days = 7) {
   const output = [];

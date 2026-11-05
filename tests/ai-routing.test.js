@@ -11,14 +11,14 @@ assert.ok(aiSource.includes("process.env.GEMINI_TIMEOUT_MS || 12000"), "Gemini a
 assert.ok(aiSource.includes("retryGeminiRequest"), "Gemini retries one transient service failure");
 assert.ok(aiSource.includes("maxAttempts = Math.max(1, Math.min(2"), "Gemini retry count is strictly bounded to two attempts");
 assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts must be honored");
-assert.ok(geminiSection.includes('import("@google/genai")'), "Gemini requests must use the installed official SDK");
-assert.ok(geminiSection.includes("new GoogleGenAI"));
-assert.ok(geminiSection.includes("retryOptions: { attempts: 1 }"), "the SDK retry layer must not multiply the app retry budget");
 const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");
 assert.ok(!openAISection.includes("temperature:"), "Responses request must not send unsupported temperature field");
 const geminiSection = aiSource.slice(aiSource.indexOf("function geminiProvider"), aiSource.indexOf("function providersFromEnv"));
 assert.ok(geminiSection.length > 0, "Gemini provider implementation should exist");
+assert.ok(geminiSection.includes('import("@google/genai")'), "Gemini requests must use the installed official SDK");
+assert.ok(geminiSection.includes("new GoogleGenAI"));
+assert.ok(geminiSection.includes("retryOptions: { attempts: 1 }"), "the SDK retry layer must not multiply the app retry budget");
 assert.ok(!geminiSection.includes("temperature"), "Gemini 3.8 Flash request must omit temperature sampling parameter");
 assert.ok(!geminiSection.includes("generationConfig"), "Gemini request should omit deprecated sampling configuration");
 assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));

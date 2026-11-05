@@ -2,7 +2,7 @@
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, createExtractionCounters, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
 const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, publishDailyDeals } = require("../modules/deal-scheduler");
-const { formatNewsletterMessage } = require("../modules/deal-publication");
+const { formatNewsletterMessage, distributeDeals } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
 assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), null);
@@ -202,7 +202,7 @@ assert.equal(newsletterKindAt(new Date("2026-10-12T14:59:00.000Z")),null);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T14:44:00.000Z")),true);
 assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),"other_sites", "keep the recovery window open at 7 PM Cairo");
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
-  Array.from({length: 6}, (_,i) => ({
+  Array.from({length: 12}, (_,i) => ({
     merchant: prefix, title: `${prefix} ${category} product ${i}`,
     url: `https://${host}/product-${category}-${i}`, price: 10+i,
     old_price: 15+i, discount_pct: 20, category
@@ -210,15 +210,28 @@ const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMa
 );
 const editionAmazon = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia")], "amazon");
 const editionOther = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia")], "other_sites");
-assert.equal(editionAmazon.length, 15, "Amazon edition caps at five items in each of three categories");
+assert.equal(editionAmazon.length, 30, "Amazon edition targets ten items in each of three categories");
 assert.ok(editionAmazon.every(d => new URL(d.url).hostname === "www.amazon.eg"));
-assert.equal(editionOther.length, 15, "other-store edition balances independently, not crowded out by Amazon");
+assert.equal(editionOther.length, 30, "other-store edition targets thirty items independently, not crowded out by Amazon");
 assert.ok(editionOther.every(d => new URL(d.url).hostname === "www.jumia.com.eg"));
 for (const edition of [editionAmazon, editionOther]) {
   for (const category of ["detergent","paper","personal_care"]) {
-    assert.ok(edition.filter(d => d.category === category).length <= 5);
+    assert.ok(edition.filter(d => d.category === category).length <= 10);
   }
 }
+
+const compensationDeals = [
+  ...Array.from({ length: 18 }, (_, i) => ({ merchant: "Amazon.eg", title: `مسحوق غسيل برسيل ${i} كيلو`, url: `https://www.amazon.eg/dp/B0COMP${String(i).padStart(6, "0")}`, price: 100 + i, old_price: 130 + i, discount_pct: 20, category: "detergent" })),
+  ...Array.from({ length: 3 }, (_, i) => ({ merchant: "Amazon.eg", title: `مناديل ورقية فاين ${i}`, url: `https://www.amazon.eg/dp/B0PAPR${String(i).padStart(5, "0")}`, price: 20 + i, old_price: 30 + i, discount_pct: 20, category: "paper" })),
+  ...Array.from({ length: 18 }, (_, i) => ({ merchant: "Amazon.eg", title: `شامبو نيفيا للعناية ${i}`, url: `https://www.amazon.eg/dp/B0CARE${String(i).padStart(5, "0")}`, price: 50 + i, old_price: 70 + i, discount_pct: 20, category: "personal_care" }))
+];
+const compensated = distributeDeals(compensationDeals);
+assert.equal(compensated.total, 30, "category shortages should be compensated up to the 30-offer edition limit");
+assert.equal(compensated.paper.length, 3, "the short category should publish all three eligible offers");
+assert.equal(compensated.detergent.length + compensated.personal_care.length, 27,
+  "the remaining capacity should be filled from other categories");
+assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length > 10,
+  "at least one available category should exceed its preferred ten-offer allocation when compensating");
 
 (async()=>{
  const ok = await verifyProductUrl("https://www.amazon.eg/dp/B0ABCDEF12", {fetchImpl:async url=>({status:200,url:String(url)})});

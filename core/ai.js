@@ -95,17 +95,48 @@ async function retryGeminiRequest(run, options = {}) {
   throw lastError;
 }
 
-function geminiProvider(key, model) {
-  return async (prompt, options = {}) => {
+function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000) } = {}) {
+  // Load the official SDK lazily so non-Gemini routes do not initialize it.
+  // Keep one authenticated client per configured key for the life of this provider.
+  let clientPromise;
+  const getClient = () => {
+    if (!clientPromise) {
+      clientPromise = Promise.resolve()
+        .then(loadSdk)
+        .then(({ GoogleGenAI }) => {
+          if (typeof GoogleGenAI !== "function") throw new Error("Gemini SDK did not export GoogleGenAI");
+          return new GoogleGenAI({
+            apiKey: key,
+            httpOptions: {
+              timeout: timeoutMs,
+              // The app owns the bounded retry policy below; disable SDK retries
+              // so two 12-second attempts remain inside Telegram's 30-second limit.
+              retryOptions: { attempts: 1 }
+            }
+          });
+        })
+        .catch(error => {
+          clientPromise = null;
+          throw error;
+        });
+    }
+    return clientPromise;
+  };
+
+  return async prompt => {
     const selectedModel = model || "gemini-3.8-flash";
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(selectedModel)}:generateContent`;
-    // Keep the full two-attempt budget below Telegraf's 30-second handler timeout.
-    // Gemini 3.8 Flash request intentionally omits sampling configuration.
-    const timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000);
-    const data = await retryGeminiRequest(() => requestJson(endpoint, {
-      contents: [{ role: "user", parts: [{ text: String(prompt || "") }] }]
-    }, { "x-goog-api-key": key }, timeoutMs));
-    return { text: data.candidates?.[0]?.content?.parts?.map(x => x.text || "").join("") || "", provider: "gemini", model: selectedModel };
+    try {
+      const ai = await getClient();
+      // Gemini 3.8 Flash request intentionally omits sampling configuration.
+      const data = await retryGeminiRequest(() => ai.models.generateContent({
+        model: selectedModel,
+        contents: String(prompt || ""),
+        config: { automaticContinuation: false }
+      }));
+      return { text: data?.text || "", provider: "gemini", model: selectedModel };
+    } catch (error) {
+      throw normalizeGeminiError(error);
+    }
   };
 }
 
@@ -142,8 +173,21 @@ function providersFromEnv() {
 }
 
 function providerStatus(error) {
+  const directStatus = Number(error?.status ?? error?.statusCode ?? error?.response?.status);
+  if (Number.isInteger(directStatus) && directStatus >= 100 && directStatus <= 599) return directStatus;
   const message = String(error?.message || "");
-  return Number(message.match(/AI HTTP (\d+)/)?.[1] || 0);
+  return Number(message.match(/AI HTTP (\\d+)/)?.[1] || 0);
+}
+
+function normalizeGeminiError(error) {
+  if (!error || typeof error !== "object") return error;
+  const status = providerStatus(error);
+  const message = redactString(String(error.message || "Gemini request failed").replace(/\\s+/g, " ").slice(0, 350));
+  if (!status || /^AI HTTP \\d+/.test(message)) return error;
+  const normalized = new Error(`AI HTTP ${status}: code=unknown; type=unknown; param=unknown; message=${message}`);
+  normalized.status = status;
+  normalized.cause = error;
+  return normalized;
 }
 
 function isCredentialError(error) {
@@ -226,4 +270,4 @@ function createAI(options = {}) {
   return { generate, providers: selected.map(x => x.name), primaryProvider: selected[0]?.provider || null };
 }
 
-module.exports = { createAI, providersFromEnv, formatProviderError, retryGeminiRequest, isGeminiTransientError };
+module.exports = { createAI, providersFromEnv, formatProviderError, retryGeminiRequest, isGeminiTransientError, geminiProvider, providerStatus };

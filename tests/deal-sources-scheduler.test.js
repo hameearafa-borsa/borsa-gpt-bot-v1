@@ -480,6 +480,33 @@ const amazonOnly = await collectDealCandidates({
    "one SnapFlyer store failure must remain visible without discarding successful catalog results");
  assert.ok(otherEditionWithCatalog.deals.every(deal => deal.source === "snapflyer_catalog"));
 
+ // SnapFlyer should start while slower retailer searches are still in flight.
+ const savedParallelKey = process.env.SCRAPER_API_KEY;
+ process.env.SCRAPER_API_KEY = "parallel-collection-test";
+ let releaseRetailerSearch;
+ const retailerGate = new Promise(resolve => { releaseRetailerSearch = resolve; });
+ let parallelSnapFlyerStarted = false;
+ const parallelCollection = collectDealCandidates({
+   edition: "other_sites",
+   otherQueries: ["parallel collection test"],
+   fetchImpl: async () => {
+     await retailerGate;
+     return { ok: true, status: 200, text: async () => "<html></html>" };
+   },
+   snapFlyerFetcher: async () => {
+     parallelSnapFlyerStarted = true;
+     return { deals: [], errors: [], sourceStats: [], sourceCount: 0 };
+   }
+ });
+ await Promise.resolve();
+ await Promise.resolve();
+ assert.equal(parallelSnapFlyerStarted, true,
+   "SnapFlyer collection must begin before retailer searches finish");
+ releaseRetailerSearch();
+ await parallelCollection;
+ if (savedParallelKey === undefined) delete process.env.SCRAPER_API_KEY;
+ else process.env.SCRAPER_API_KEY = savedParallelKey;
+
  let allEditionCatalogCalls = 0;
  const allEdition = await collectDealCandidates({
    edition: "all",

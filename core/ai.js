@@ -95,7 +95,7 @@ async function retryGeminiRequest(run, options = {}) {
   throw lastError;
 }
 
-function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000) } = {}) {
+function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000), fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "" } = {}) {
   // Load the official SDK lazily so non-Gemini routes do not initialize it.
   // Keep one authenticated client per configured key for the life of this provider.
   let clientPromise;
@@ -124,16 +124,27 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
   };
 
   return async prompt => {
-    const selectedModel = model || "gemini-3.8-flash";
+    const selectedModel = model || process.env.GEMINI_MODEL || "gemini-3.8-flash";
     try {
       const ai = await getClient();
-      // Gemini 3.8 Flash request intentionally omits sampling configuration.
-      const data = await retryGeminiRequest(() => ai.models.generateContent({
-        model: selectedModel,
+      const request = targetModel => ai.models.generateContent({
+        model: targetModel,
         contents: String(prompt || ""),
         config: { automaticContinuation: false }
-      }));
-      return { text: data?.text || "", provider: "gemini", model: selectedModel };
+      });
+
+      // Keep the full request budget bounded: one primary attempt, then at most
+      // one alternate Gemini model attempt. No cross-provider fallback is used.
+      try {
+        const data = await retryGeminiRequest(() => request(selectedModel), { maxAttempts: 1 });
+        return { text: data?.text || "", provider: "gemini", model: selectedModel };
+      } catch (primaryError) {
+        if (!fallbackModel || fallbackModel === selectedModel || !isGeminiTransientError(primaryError)) {
+          throw primaryError;
+        }
+        const data = await request(fallbackModel);
+        return { text: data?.text || "", provider: "gemini", model: fallbackModel };
+      }
     } catch (error) {
       throw normalizeGeminiError(error);
     }

@@ -1,6 +1,6 @@
 "use strict";
 const { collectDealCandidates } = require("./deal-sources");
-const { filterRecentDeals, distributeDeals, formatNewsletterMessage } = require("./deal-publication");
+const { TARGETS, AMAZON_TARGETS, filterRecentDeals, distributeDeals, formatNewsletterMessage } = require("./deal-publication");
 const { dealFingerprint, dealProductFingerprint, validateDeal } = require("./deals");
 const { isServiceEnabled } = require("../core/service-settings");
 
@@ -33,7 +33,7 @@ function selectNewsletterDeals(recent, kind) {
   };
   // Balance each edition independently so Amazon cannot crowd out the 6 PM edition.
   const editionPool = recent.filter(d => kind === "amazon" ? isAmazon(d) : !isAmazon(d));
-  const balanced = distributeDeals(editionPool);
+  const balanced = distributeDeals(editionPool, kind === "amazon" ? AMAZON_TARGETS : TARGETS);
   return [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
 }
 

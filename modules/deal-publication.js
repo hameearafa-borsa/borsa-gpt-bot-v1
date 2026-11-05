@@ -1,7 +1,8 @@
 "use strict";
 const { validateDeal, isRecentDuplicate } = require("./deals");
 
-const TARGETS = Object.freeze({ detergent: 10, paper: 10, personal_care: 10 });
+const TARGETS = Object.freeze({ detergent: 5, paper: 5, personal_care: 5 });
+const AMAZON_TARGETS = Object.freeze({ detergent: 10, paper: 10, personal_care: 10 });
 function scoreDeal(deal) {
   const discount = Math.max(0, Math.min(90, Number(deal.discount_pct) || 0));
   const hasOldPrice = Number(deal.old_price) > Number(deal.price) && Number(deal.old_price) > 0;
@@ -80,4 +81,4 @@ function formatNewsletterMessage(deals, title, maxLength = 3900) {
 function buildNewsletter(deals, title) {
   return formatNewsletterMessage(deals, title).text;
 }
-module.exports = { TARGETS, scoreDeal, rankDeals, distributeDeals, filterRecentDeals, formatNewsletterMessage, buildNewsletter };
+module.exports = { TARGETS, AMAZON_TARGETS, scoreDeal, rankDeals, distributeDeals, filterRecentDeals, formatNewsletterMessage, buildNewsletter };

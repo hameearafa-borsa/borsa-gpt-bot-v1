@@ -153,7 +153,7 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
       console.warn(`[CHEMICAL_FALLBACK] primary=gemini outcome=starting reason=temporary_service_failure`);
       try {
         const result = await fallbackAI.generate(buildPrompt(question), {
-          temperature: 0.3, webSearch: true, model: process.env.CHEMICAL_WEB_SEARCH_MODEL || "gpt-6-astra", timeoutMs: 12000
+          temperature: 0.3, webSearch: true, timeoutMs: 12000
         });
         if (!String(result?.text || "").trim()) throw new Error("OpenAI web search returned an empty response");
         console.info(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=succeeded`);

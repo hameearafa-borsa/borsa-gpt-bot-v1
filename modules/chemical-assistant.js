@@ -152,8 +152,10 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
     if (fallbackAI && typeof fallbackAI.generate === "function" && isTemporaryProviderFailure(primaryError)) {
       console.warn(`[CHEMICAL_FALLBACK] primary=gemini outcome=starting reason=temporary_service_failure`);
       try {
+        // Keep the emergency answer path fast: web search is optional for a
+        // formulation question and must not block the fallback model.
         const result = await fallbackAI.generate(buildPrompt(question), {
-          temperature: 0.3, webSearch: true, timeoutMs: 12000
+          temperature: 0.3, webSearch: false, timeoutMs: 14000
         });
         if (!String(result?.text || "").trim()) throw new Error("OpenAI web search returned an empty response");
         console.info(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=succeeded`);

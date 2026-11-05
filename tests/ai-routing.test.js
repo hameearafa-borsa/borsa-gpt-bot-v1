@@ -4,14 +4,16 @@ const fs = require("node:fs");
 const path = require("node:path");
 const aiSource = fs.readFileSync(path.join(__dirname, "../core/ai.js"), "utf8");
 const index = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
-const { createAI, providersFromEnv, retryGeminiRequest } = require("../core/ai");
+const { createAI, providersFromEnv, retryGeminiRequest, geminiProvider, providerStatus } = require("../core/ai");
 
 assert.ok(aiSource.includes("gemini-3.8-flash"));
 assert.ok(aiSource.includes("process.env.GEMINI_TIMEOUT_MS || 12000"), "Gemini attempts stay within Telegraf handler budget");
 assert.ok(aiSource.includes("retryGeminiRequest"), "Gemini retries one transient service failure");
 assert.ok(aiSource.includes("maxAttempts = Math.max(1, Math.min(2"), "Gemini retry count is strictly bounded to two attempts");
 assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts must be honored");
-assert.ok(aiSource.includes("x-goog-api-key"));
+assert.ok(geminiSection.includes('import("@google/genai")'), "Gemini requests must use the installed official SDK");
+assert.ok(geminiSection.includes("new GoogleGenAI"));
+assert.ok(geminiSection.includes("retryOptions: { attempts: 1 }"), "the SDK retry layer must not multiply the app retry budget");
 const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");
 assert.ok(!openAISection.includes("temperature:"), "Responses request must not send unsupported temperature field");
@@ -63,6 +65,58 @@ try {
   }, { delayMs: 0 });
   assert.equal(recoveredAfter503, "Gemini recovered");
   assert.equal(transientCalls, 2, "a transient Gemini 503 gets exactly one retry");
+
+  const sdkStatusError = new Error("temporary SDK failure");
+  sdkStatusError.status = 503;
+  assert.equal(providerStatus(sdkStatusError), 503, "SDK status fields must drive retry and provider fallback decisions");
+  let sdkRetryCalls = 0;
+  const recoveredSdkRequest = await retryGeminiRequest(async () => {
+    sdkRetryCalls++;
+    if (sdkRetryCalls === 1) throw sdkStatusError;
+    return "SDK retry recovered";
+  }, { delayMs: 0 });
+  assert.equal(recoveredSdkRequest, "SDK retry recovered");
+  assert.equal(sdkRetryCalls, 2, "an SDK 503 receives exactly one application-managed retry");
+
+  let sdkLoads = 0;
+  let sdkConstructors = 0;
+  let sdkOptions;
+  const sdkRequests = [];
+  class FakeGoogleGenAI {
+    constructor(options) {
+      sdkConstructors++;
+      sdkOptions = options;
+      this.models = {
+        async generateContent(request) {
+          sdkRequests.push(request);
+          return { text: "إجابة Gemini عبر المكتبة الرسمية" };
+        }
+      };
+    }
+  }
+  const sdkGemini = geminiProvider("sdk-test-key", "gemini-3.8-flash", {
+    timeoutMs: 9000,
+    loadSdk: async () => {
+      sdkLoads++;
+      return { GoogleGenAI: FakeGoogleGenAI };
+    }
+  });
+  const sdkAnswer = await sdkGemini("اختبر اتصال المساعد الكيميائي");
+  const sdkAnswerAgain = await sdkGemini("سؤال آخر");
+  assert.equal(sdkAnswer.text, "إجابة Gemini عبر المكتبة الرسمية");
+  assert.equal(sdkAnswer.provider, "gemini");
+  assert.equal(sdkAnswerAgain.model, "gemini-3.8-flash");
+  assert.equal(sdkLoads, 1, "the SDK module should be loaded once per provider");
+  assert.equal(sdkConstructors, 1, "one authenticated SDK client should be reused per key");
+  assert.deepEqual(sdkOptions, {
+    apiKey: "sdk-test-key",
+    httpOptions: { timeout: 9000, retryOptions: { attempts: 1 } }
+  });
+  assert.deepEqual(sdkRequests[0], {
+    model: "gemini-3.8-flash",
+    contents: "اختبر اتصال المساعد الكيميائي",
+    config: { automaticContinuation: false }
+  });
 
   let permanentRetryCalls = 0;
   await assert.rejects(retryGeminiRequest(async () => {

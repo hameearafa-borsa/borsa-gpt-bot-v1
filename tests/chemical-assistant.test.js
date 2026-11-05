@@ -78,7 +78,7 @@ assert.match(chemistry.getProviderFallback(new Error("AI HTTP 400: invalid reque
     async generate(_prompt, options) {
       fallbackCalls++;
       assert.equal(options.webSearch, true, "OpenAI fallback must perform web search");
-      assert.equal(options.model, "gpt-6-astra");
+      assert.equal(options.model, undefined, "fallback should use the already configured OPENAI_MODEL");
       assert.equal(options.timeoutMs, 12000);
       return { text: "إجابة فنية مستندة إلى مصادر\n\nالمصادر: https://example.com/tds", provider: "openai" };
     }

@@ -139,6 +139,57 @@ async function persistDeals(pool, deals) {
   }
   return saved;
 }
+async function enqueueObservedDeals(pool, deals, source = "unknown") {
+  const saved = await persistDeals(pool, deals);
+  let queued = 0;
+  for (const deal of deals) {
+    const valid = validateDeal(deal);
+    if (!valid.ok) continue;
+    const result = await pool.query(
+      `INSERT INTO deal_publication_queue(fingerprint,source,status,first_queued_at,last_observed_at,updated_at)
+       VALUES($1,$2,'queued',NOW(),NOW(),NOW())
+       ON CONFLICT(fingerprint) DO UPDATE
+       SET source=EXCLUDED.source,last_observed_at=NOW(),updated_at=NOW(),
+           status=CASE WHEN deal_publication_queue.status='published' THEN 'published' ELSE 'queued' END
+       RETURNING fingerprint,status`,
+      [valid.fingerprint, source]
+    );
+    if (result.rowCount) queued++;
+  }
+  return { saved, queued };
+}
+async function loadQueuedDeals(pool, source = "amazon", limit = 500) {
+  await pool.query(
+    `UPDATE deal_publication_queue
+     SET status='expired',updated_at=NOW()
+     WHERE source=$1 AND status='queued'
+       AND last_observed_at < NOW() - INTERVAL '36 hours'`,
+    [source]
+  );
+  const result = await pool.query(
+    `SELECT o.merchant,o.title,o.url,o.category,o.price,o.old_price,o.discount_pct,
+            o.fingerprint,o.product_fingerprint,q.first_queued_at,q.last_observed_at
+     FROM deal_publication_queue q
+     JOIN deal_observations o ON o.fingerprint=q.fingerprint
+     WHERE q.source=$1 AND q.status='queued'
+       AND q.last_observed_at >= NOW() - INTERVAL '36 hours'
+     ORDER BY q.first_queued_at ASC
+     LIMIT $2`,
+    [source, limit]
+  );
+  return result.rows || [];
+}
+async function updateQueuedDeals(pool, deals, status) {
+  const fingerprints = [...new Set((deals || []).map(deal => deal.fingerprint).filter(Boolean))];
+  if (!fingerprints.length) return 0;
+  const result = await pool.query(
+    `UPDATE deal_publication_queue
+     SET status=$2, published_at=CASE WHEN $2='published' THEN NOW() ELSE published_at END, updated_at=NOW()
+     WHERE fingerprint = ANY($1::text[]) AND status='queued'`,
+    [fingerprints, status]
+  );
+  return result.rowCount || 0;
+}
 async function resolveDealChatIds({ pool, chatId, chatIds }) {
   if (Array.isArray(chatIds)) return [...new Set(chatIds.map(Number).filter(Number.isSafeInteger))];
   // Explicit chatId is retained for tests and intentional single-group runs.
@@ -209,16 +260,26 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     try { await onDiagnostics(details); } catch { /* Diagnostics must never block publication. */ }
   };
   await emitDiagnostics({ ...diagnosticsBase, stage: "collected", elapsedMs: Date.now() - collectionStartedAt });
-  if (!gathered.deals?.length) {
+  if (!gathered.deals?.length && kind !== "amazon") {
     await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null };
   }
-  const verified = await verify(gathered.deals);
-  // Amazon search pages repeatedly surface the same unchanged listings.
-  // Use a shorter exact-offer cooldown for Amazon so its daily edition can
-  // rotate useful deals more often; keep the longer protection for other stores.
-  const duplicateCooldownDays = kind === "amazon" ? 2 : 7;
-  const recent = await filterRecentDeals(pool, verified, duplicateCooldownDays);
+  const verified = await verify(gathered.deals || []);
+  // Amazon observations enter a durable queue before newsletter selection.
+  // Pending items survive daily collection runs until published or expired.
+  const duplicateCooldownDays = kind === "amazon" ? 0 : 7;
+  let recent;
+  if (kind === "amazon") {
+    await enqueueObservedDeals(pool, verified, "amazon");
+    const queued = await loadQueuedDeals(pool, "amazon");
+    const refreshedQueue = await verify(queued);
+    const refreshedFingerprints = new Set(refreshedQueue.map(deal => deal.fingerprint));
+    const rejectedQueueItems = queued.filter(deal => !refreshedFingerprints.has(deal.fingerprint));
+    await updateQueuedDeals(pool, rejectedQueueItems, "expired");
+    recent = refreshedQueue;
+  } else {
+    recent = await filterRecentDeals(pool, verified, duplicateCooldownDays);
+  }
   if (!recent.length) {
     await emitDiagnostics({ ...diagnosticsBase, stage: "filtered", verifiedCount: verified.length, recentCount: 0, selectedCount: 0, duplicateCooldownDays, elapsedMs: Date.now() - collectionStartedAt });
     return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
@@ -272,12 +333,14 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     }
   }
 
-  // Persist each observed offer once after at least one Telegram send was confirmed.
+  // Amazon offers were persisted and queued before selection. Mark only the
+  // formatted offers as published after Telegram confirms at least one send.
   if (published.length) {
     try {
-      await persistDeals(pool, formattedItems);
+      if (kind === "amazon") await updateQueuedDeals(pool, formattedItems, "published");
+      else await persistDeals(pool, formattedItems);
     } catch (error) {
-      await onError(error, { stage: "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) });
+      await onError(error, { stage: kind === "amazon" ? "update_deal_queue" : "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) });
     }
   }
   return {
@@ -354,4 +417,4 @@ function shouldResetDealBackoff(previousKind, currentKind) {
   return Boolean(previousKind && currentKind && previousKind !== currentKind);
 }
 
-module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, startDealScheduler };
+module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, enqueueObservedDeals, loadQueuedDeals, updateQueuedDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, startDealScheduler };

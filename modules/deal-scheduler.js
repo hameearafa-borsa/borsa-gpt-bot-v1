@@ -282,6 +282,10 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   }
   if (!recent.length) {
     await emitDiagnostics({ ...diagnosticsBase, stage: "filtered", verifiedCount: verified.length, recentCount: 0, selectedCount: 0, duplicateCooldownDays, elapsedMs: Date.now() - collectionStartedAt });
+    if (kind === "amazon" && !gathered.deals?.length) {
+      await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
+      return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [] };
+    }
     return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
   }
   const items = selectNewsletterDeals(recent, kind);

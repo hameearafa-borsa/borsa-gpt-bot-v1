@@ -22,6 +22,8 @@ assert.equal(chemistry.isChemicalQuestion("المنظفات أسعارها زا�
 assert.equal(chemistry.isChemicalQuestion("/chemical"), false);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة شعبية اقتصادية/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة أعلى جودة/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /TDS\/SDS/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /لا تعتمد على منشورات التواصل الاجتماعي/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /unknown-mixture/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /لا تطلب من المستخدم تحويلها إلى أسماء علمية/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تكسابون أو N70 غالبًا SLES/);

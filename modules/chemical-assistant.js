@@ -116,7 +116,14 @@ function buildPrompt(question) {
     "سؤال المستخدم وسياق رسائله السابقة:\n" + String(question || "").slice(0, 7000)
   ].join("\n");
 }
-async function answer(ai, question, onError = null) {
+function isTemporaryProviderFailure(error) {
+  const message = String(error?.message || error || "");
+  const status = Number(error?.status || message.match(/AI HTTP (\d+)/)?.[1] || 0);
+  return [408, 429, 500, 502, 503, 504].includes(status) ||
+    /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|overloaded|temporarily unavailable/i.test(message);
+}
+
+async function answer(ai, question, onError = null, fallbackAI = null) {
   const gate = safetyGate(question);
   if (gate) return gate;
   if (!ai || typeof ai.generate !== "function") {
@@ -124,11 +131,9 @@ async function answer(ai, question, onError = null) {
     if (typeof onError === "function") { try { onError(error); } catch {} }
     return SERVICE_CONFIG_FALLBACK;
   }
-  try {
-    const result = await ai.generate(buildPrompt(question), { temperature: 0.3 });
+  const formatAnswer = result => {
     const answerText = String(result?.text || "").trim();
     if (!answerText) return SAFE_FALLBACK;
-    // Identify the engine that actually returned this answer; never label it GPT by default.
     const provider = String(result?.provider || "").toLowerCase();
     const providerLabel = provider.includes("groq") ? "Groq"
       : provider.includes("gemini") ? "Gemini"
@@ -136,9 +141,30 @@ async function answer(ai, question, onError = null) {
       : provider.includes("openrouter") ? "OpenRouter"
       : "";
     return providerLabel ? `🤖 الخدمة مقدمة بتقنيات ${providerLabel}\n\n${answerText}` : answerText;
-  } catch (error) {
-    if (typeof onError === "function") { try { onError(error); } catch {} }
-    return getProviderFallback(error);
+  };
+  try {
+    const result = await ai.generate(buildPrompt(question), {
+      temperature: 0.3, googleSearch: true, requestBudgetMs: 15000
+    });
+    return formatAnswer(result);
+  } catch (primaryError) {
+    if (fallbackAI && typeof fallbackAI.generate === "function" && isTemporaryProviderFailure(primaryError)) {
+      console.warn(`[CHEMICAL_FALLBACK] primary=gemini outcome=starting reason=temporary_service_failure`);
+      try {
+        const result = await fallbackAI.generate(buildPrompt(question), {
+          temperature: 0.3, webSearch: true, model: process.env.CHEMICAL_WEB_SEARCH_MODEL || "gpt-6-astra", timeoutMs: 12000
+        });
+        if (!String(result?.text || "").trim()) throw new Error("OpenAI web search returned an empty response");
+        console.info(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=succeeded`);
+        return formatAnswer(result);
+      } catch (fallbackError) {
+        console.warn(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=failed error=${String(fallbackError?.message || "provider_error").slice(0, 220)}`);
+        if (typeof onError === "function") { try { onError(fallbackError); } catch {} }
+        return getProviderFallback(fallbackError);
+      }
+    }
+    if (typeof onError === "function") { try { onError(primaryError); } catch {} }
+    return getProviderFallback(primaryError);
   }
 }
-module.exports = { answer, buildPrompt, buildConversationInput, ensureConversationContextSchema, resolveConversationInput, saveConversationContext, safetyGate, isChemicalQuestion, getProviderFallback, SAFE_FALLBACK, SERVICE_UNAVAILABLE_FALLBACK, SERVICE_CONFIG_FALLBACK, RULES };
+module.exports = { answer, buildPrompt, buildConversationInput, ensureConversationContextSchema, resolveConversationInput, saveConversationContext, safetyGate, isChemicalQuestion, getProviderFallback, isTemporaryProviderFailure, SAFE_FALLBACK, SERVICE_UNAVAILABLE_FALLBACK, SERVICE_CONFIG_FALLBACK, RULES };

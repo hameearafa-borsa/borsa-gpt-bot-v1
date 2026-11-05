@@ -79,23 +79,40 @@ function isGeminiTransientError(error) {
     /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up/i.test(message);
 }
 
+function isGeminiRetryableError(error) {
+  // Retry only explicit temporary server-overload responses. 504/timeouts already
+  // consume most of the request budget, while 429 may represent a quota limit.
+  return [500, 502, 503].includes(providerStatus(error));
+}
+
 async function retryGeminiRequest(run, options = {}) {
   const maxAttempts = Math.max(1, Math.min(2, Number(options.maxAttempts) || 2));
-  const delayMs = Math.max(0, Math.min(1000, Number(options.delayMs ?? 350)));
+  const baseDelayMs = Math.max(0, Math.min(1000, Number(options.delayMs ?? 350)));
+  const maxDelayMs = Math.max(baseDelayMs, Math.min(1500, Number(options.maxDelayMs ?? 900)));
+  const deadlineAt = Number(options.deadlineAt) || 0;
+  const attemptTimeoutMs = Math.max(0, Number(options.attemptTimeoutMs) || 0);
+  const random = typeof options.random === "function" ? options.random : Math.random;
   let lastError;
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await run();
     } catch (error) {
       lastError = error;
-      if (attempt >= maxAttempts || !isGeminiTransientError(error)) throw error;
+      if (attempt >= maxAttempts || !isGeminiRetryableError(error)) throw error;
+      const exponentialDelay = Math.min(maxDelayMs, baseDelayMs * (2 ** (attempt - 1)));
+      const jitterMs = exponentialDelay > 0 ? Math.floor(random() * Math.min(250, Math.ceil(exponentialDelay * 0.25))) : 0;
+      const delayMs = exponentialDelay + jitterMs;
+      const remainingMs = deadlineAt ? deadlineAt - Date.now() : Infinity;
+      // Leave enough time for one complete next request plus a small safety margin.
+      if (deadlineAt && remainingMs < attemptTimeoutMs + delayMs + 1000) throw error;
+      options.onRetry?.({ attempt, nextAttempt: attempt + 1, delayMs, status: providerStatus(error) });
       if (delayMs) await new Promise(resolve => setTimeout(resolve, delayMs));
     }
   }
   throw lastError;
 }
 
-function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000), fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "" } = {}) {
+function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), timeoutMs = Math.max(1000, Math.min(12000, Number(process.env.GEMINI_TIMEOUT_MS || 12000))), fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "" } = {}) {
   // Load the official SDK lazily so non-Gemini routes do not initialize it.
   // Keep one authenticated client per configured key for the life of this provider.
   let clientPromise;
@@ -157,12 +174,22 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
         }
       };
 
-      // Record model attempts and outcomes without logging prompts or credentials.
-
-      // Keep the full request budget bounded: one primary attempt, then at most
-      // one alternate Gemini model attempt. No cross-provider fallback is used.
+      // One shared wall-clock budget covers the primary model, its bounded retry,
+      // and the alternate model. No cross-provider fallback is enabled here.
+      const requestBudgetMs = Math.max(timeoutMs, Math.min(28000, Number(process.env.GEMINI_REQUEST_BUDGET_MS) || 26000));
+      const deadlineAt = Date.now() + requestBudgetMs;
+      const retryOptions = stage => ({
+        maxAttempts: 2,
+        delayMs: 350,
+        maxDelayMs: 900,
+        deadlineAt,
+        attemptTimeoutMs: timeoutMs,
+        onRetry: event => console.info(
+          `[GEMINI_RETRY] stage=${stage} model=${stage === "primary" ? selectedModel : fallbackModel} outcome=scheduled attempt=${event.attempt} next_attempt=${event.nextAttempt} status=${event.status} delay_ms=${event.delayMs}`
+        )
+      });
       try {
-        const data = await retryGeminiRequest(() => runModel("primary", selectedModel), { maxAttempts: 1 });
+        const data = await retryGeminiRequest(() => runModel("primary", selectedModel), retryOptions("primary"));
         return { text: data?.text || "", provider: "gemini", model: selectedModel };
       } catch (primaryError) {
         if (!fallbackModel || fallbackModel === selectedModel || !isGeminiTransientError(primaryError)) {
@@ -170,8 +197,16 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
           console.info(`[GEMINI_FALLBACK] outcome=skipped reason=${reason} primary_model=${selectedModel} fallback_model=${fallbackModel || "disabled"}`);
           throw primaryError;
         }
+        const remainingBudgetMs = deadlineAt - Date.now();
+        if (remainingBudgetMs < timeoutMs + 1000) {
+          console.info(`[GEMINI_FALLBACK] outcome=skipped reason=request_budget_exhausted remaining_ms=${Math.max(0, remainingBudgetMs)} primary_model=${selectedModel} fallback_model=${fallbackModel}`);
+          throw primaryError;
+        }
         console.info(`[GEMINI_FALLBACK] outcome=starting primary_model=${selectedModel} fallback_model=${fallbackModel}`);
-        const data = await runModel("fallback", fallbackModel);
+        const data = await retryGeminiRequest(
+          () => runModel("fallback", fallbackModel),
+          retryOptions("fallback")
+        );
         console.info(`[GEMINI_FALLBACK] outcome=succeeded primary_model=${selectedModel} fallback_model=${fallbackModel}`);
         return { text: data?.text || "", provider: "gemini", model: fallbackModel };
       }
@@ -311,4 +346,4 @@ function createAI(options = {}) {
   return { generate, providers: selected.map(x => x.name), primaryProvider: selected[0]?.provider || null };
 }
 
-module.exports = { createAI, providersFromEnv, formatProviderError, retryGeminiRequest, isGeminiTransientError, geminiProvider, providerStatus };
+module.exports = { createAI, providersFromEnv, formatProviderError, retryGeminiRequest, isGeminiTransientError, isGeminiRetryableError, geminiProvider, providerStatus };

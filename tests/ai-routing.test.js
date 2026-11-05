@@ -38,7 +38,7 @@ function httpError(status, message = "simulated provider failure") {
   return new Error(`AI HTTP ${status}: ${message}`);
 }
 
-const envNames = ["AI_PROVIDER", "AI_FALLBACK_ENABLED", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3", "GEMINI_MODEL", "GEMINI_FALLBACK_MODEL"];
+const envNames = ["AI_PROVIDER", "AI_FALLBACK_ENABLED", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3", "GEMINI_MODEL", "GEMINI_FALLBACK_MODEL", "GEMINI_REQUEST_BUDGET_MS"];
 const savedEnv = Object.fromEntries(envNames.map(name => [name, process.env[name]]));
 try {
   process.env.AI_PROVIDER = "gemini";
@@ -235,6 +235,43 @@ try {
     "gemini-3.6-flash"
   ], "the alternate model also receives one bounded retry for a transient 503");
   assert.ok(retryFallbackLogs.some(line => line.includes("[GEMINI_RETRY] stage=fallback") && line.includes("status=503")), "fallback retry scheduling must be logged");
+
+  const savedRequestBudget = process.env.GEMINI_REQUEST_BUDGET_MS;
+  process.env.GEMINI_REQUEST_BUDGET_MS = "5";
+  const exhaustedBudgetRequests = [];
+  class ExhaustedBudgetGoogleGenAI {
+    constructor() {
+      this.models = {
+        async generateContent(request) {
+          exhaustedBudgetRequests.push(request);
+          await new Promise(resolve => setTimeout(resolve, 10));
+          const error = new Error("primary deadline exceeded");
+          error.status = 504;
+          throw error;
+        }
+      };
+    }
+  }
+  const exhaustedBudgetGemini = geminiProvider("budget-test-key", "gemini-3.8-flash", {
+    timeoutMs: 1,
+    fallbackModel: "gemini-3.6-flash",
+    loadSdk: async () => ({ GoogleGenAI: ExhaustedBudgetGoogleGenAI })
+  });
+  const exhaustedBudgetLogs = [];
+  const budgetOriginalInfo = console.info;
+  const budgetOriginalWarn = console.warn;
+  console.info = message => exhaustedBudgetLogs.push(String(message));
+  console.warn = message => exhaustedBudgetLogs.push(String(message));
+  try {
+    await assert.rejects(exhaustedBudgetGemini("اختبار انتهاء الميزانية"));
+  } finally {
+    console.info = budgetOriginalInfo;
+    console.warn = budgetOriginalWarn;
+    if (savedRequestBudget === undefined) delete process.env.GEMINI_REQUEST_BUDGET_MS;
+    else process.env.GEMINI_REQUEST_BUDGET_MS = savedRequestBudget;
+  }
+  assert.deepEqual(exhaustedBudgetRequests.map(request => request.model), ["gemini-3.8-flash"], "the fallback must not start after the shared request budget is exhausted");
+  assert.ok(exhaustedBudgetLogs.some(line => line.includes("reason=request_budget_exhausted")), "budget exhaustion must be recorded as a fallback skip reason");
 
   const fallbackRequests = [];
   class FallbackGoogleGenAI {

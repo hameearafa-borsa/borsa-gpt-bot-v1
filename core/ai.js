@@ -125,8 +125,18 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
 
   return async prompt => {
     const selectedModel = model || process.env.GEMINI_MODEL || "gemini-3.8-flash";
+    console.info(`[GEMINI_ROUTE] primary_model=${selectedModel} fallback_model=${fallbackModel || "disabled"}`);
     try {
-      const ai = await getClient();
+      const initStartedAt = Date.now();
+      let ai;
+      try {
+        ai = await getClient();
+        console.info(`[GEMINI_CLIENT] outcome=ready duration_ms=${Date.now() - initStartedAt}`);
+      } catch (error) {
+        const status = providerStatus(error) || "unknown";
+        console.warn(`[GEMINI_CLIENT] outcome=failed status=${status} retryable=${isGeminiTransientError(error)} duration_ms=${Date.now() - initStartedAt} error=${redactString(error?.message || "client_initialization_failed")}`);
+        throw error;
+      }
       const request = targetModel => ai.models.generateContent({
         model: targetModel,
         contents: String(prompt || ""),
@@ -147,8 +157,7 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
         }
       };
 
-      // Record the selected route for every request; never log prompts or credentials.
-      console.info(`[GEMINI_ROUTE] primary_model=${selectedModel} fallback_model=${fallbackModel || "disabled"}`);
+      // Record model attempts and outcomes without logging prompts or credentials.
 
       // Keep the full request budget bounded: one primary attempt, then at most
       // one alternate Gemini model attempt. No cross-provider fallback is used.

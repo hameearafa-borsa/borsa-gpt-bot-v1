@@ -22,6 +22,8 @@ assert.equal(chemistry.isChemicalQuestion("المنظفات أسعارها زا�
 assert.equal(chemistry.isChemicalQuestion("/chemical"), false);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة شعبية اقتصادية/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تركيبة أعلى جودة/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /TDS\/SDS/);
+assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /لا تعتمد على منشورات التواصل الاجتماعي/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /unknown-mixture/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /لا تطلب من المستخدم تحويلها إلى أسماء علمية/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /تكسابون أو N70 غالبًا SLES/);
@@ -64,6 +66,26 @@ assert.match(chemistry.getProviderFallback(new Error("AI HTTP 400: invalid reque
   }, validQuestion);
   assert.match(serviceFailureAnswer, /مشغولة أو غير متاحة مؤقتًا/);
   assert.match(serviceFailureAnswer, /لم يتم رفض سؤالك/);
+
+  let fallbackCalls = 0;
+  const recoveredBySearchedFallback = await chemistry.answer({
+    async generate(_prompt, options) {
+      assert.equal(options.googleSearch, true, "Gemini chemical requests should use Google Search grounding");
+      assert.equal(options.requestBudgetMs, 15000, "primary Gemini work should leave time for fallback");
+      throw new Error("AI HTTP 503: Google unavailable");
+    }
+  }, validQuestion, null, {
+    async generate(_prompt, options) {
+      fallbackCalls++;
+      assert.equal(options.webSearch, true, "OpenAI fallback must perform web search");
+      assert.equal(options.model, undefined, "fallback should use the already configured OPENAI_MODEL");
+      assert.equal(options.timeoutMs, 12000);
+      return { text: "إجابة فنية مستندة إلى مصادر\n\nالمصادر: https://example.com/tds", provider: "openai" };
+    }
+  });
+  assert.equal(fallbackCalls, 1);
+  assert.match(recoveredBySearchedFallback, /تقنيات OpenAI/);
+  assert.match(recoveredBySearchedFallback, /https:\/\/example.com\/tds/);
 
   const permanentFailureAnswer = await chemistry.answer({
     async generate() { throw new Error("AI HTTP 400: invalid request"); }

@@ -43,13 +43,33 @@ function formatProviderError(statusCode, providerError) {
 
 function openAIProvider(key, model) {
   return async (prompt, options = {}) => {
-    const data = await requestJson("https://api.openai.com/v1/responses", {
-      model: model || "gpt-6-luna",
+    const selectedModel = options.model || model || "gpt-6-luna";
+    const body = {
+      model: selectedModel,
       instructions: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية. أخرج المطلوب بدقة وبالعربية عند الحاجة.",
       input: String(prompt || "")
-    }, { authorization: `Bearer ${key}` });
-    const text = data.output_text || (data.output || []).flatMap(item => item.content || []).filter(part => part.type === "output_text").map(part => part.text || "").join("");
-    return { text, provider: "openai", model: model || "gpt-6-luna" };
+    };
+    if (options.webSearch === true) {
+      body.tools = [{ type: "web_search", search_context_size: "medium" }];
+      body.tool_choice = "required";
+      body.include = ["web_search_call.action.sources"];
+    }
+    const data = await requestJson("https://api.openai.com/v1/responses", body, { authorization: `Bearer ${key}` }, Number(options.timeoutMs) || undefined);
+    let text = data.output_text || (data.output || []).flatMap(item => item.content || []).filter(part => part.type === "output_text").map(part => part.text || "").join("");
+    if (options.webSearch === true) {
+      const sources = [];
+      for (const item of data.output || []) {
+        if (item.type !== "web_search_call") continue;
+        for (const source of item.action?.sources || []) {
+          const url = String(source.url || "");
+          if (/^https:\/\//i.test(url) && !sources.some(entry => entry.url === url)) {
+            sources.push({ title: String(source.title || new URL(url).hostname).slice(0, 120), url });
+          }
+        }
+      }
+      if (sources.length) text += "\n\nالمصادر التي استندت إليها:\n" + sources.slice(0, 5).map(source => `• ${source.title}: ${source.url}`).join("\n");
+    }
+    return { text, provider: "openai", model: selectedModel };
   };
 }
 
@@ -140,7 +160,7 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
     return clientPromise;
   };
 
-  return async prompt => {
+  return async (prompt, options = {}) => {
     const selectedModel = model || process.env.GEMINI_MODEL || "gemini-3.8-flash";
     console.info(`[GEMINI_ROUTE] primary_model=${selectedModel} fallback_model=${fallbackModel || "disabled"}`);
     try {
@@ -157,7 +177,10 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
       const request = targetModel => ai.models.generateContent({
         model: targetModel,
         contents: String(prompt || ""),
-        config: { automaticContinuation: false }
+        config: {
+          automaticContinuation: false,
+          ...(options.googleSearch === true ? { tools: [{ googleSearch: {} }] } : {})
+        }
       });
       const runModel = async (stage, targetModel) => {
         const startedAt = Date.now();
@@ -176,7 +199,8 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
 
       // One shared wall-clock budget covers the primary model, its bounded retry,
       // and the alternate model. No cross-provider fallback is enabled here.
-      const requestBudgetMs = Math.max(timeoutMs, Math.min(28000, Number(process.env.GEMINI_REQUEST_BUDGET_MS) || 26000));
+      const configuredBudget = Number(options.requestBudgetMs) || Number(process.env.GEMINI_REQUEST_BUDGET_MS) || 26000;
+      const requestBudgetMs = Math.max(timeoutMs, Math.min(28000, configuredBudget));
       const deadlineAt = Date.now() + requestBudgetMs;
       const retryOptions = stage => ({
         maxAttempts: 2,
@@ -188,9 +212,23 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
           `[GEMINI_RETRY] stage=${stage} model=${stage === "primary" ? selectedModel : fallbackModel} outcome=scheduled attempt=${event.attempt} next_attempt=${event.nextAttempt} status=${event.status} delay_ms=${event.delayMs}`
         )
       });
+      const formatGroundedResult = (data, targetModel) => {
+        let text = data?.text || "";
+        const chunks = data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const sources = [];
+        for (const chunk of chunks) {
+          const web = chunk?.web;
+          const url = String(web?.uri || "");
+          if (/^https:\/\//i.test(url) && !sources.some(source => source.url === url)) {
+            sources.push({ title: String(web.title || new URL(url).hostname).slice(0, 120), url });
+          }
+        }
+        if (sources.length) text += "\n\nمصادر البحث:\n" + sources.slice(0, 5).map(source => `• ${source.title}: ${source.url}`).join("\n");
+        return { text, provider: "gemini", model: targetModel };
+      };
       try {
         const data = await retryGeminiRequest(() => runModel("primary", selectedModel), retryOptions("primary"));
-        return { text: data?.text || "", provider: "gemini", model: selectedModel };
+        return formatGroundedResult(data, selectedModel);
       } catch (primaryError) {
         if (!fallbackModel || fallbackModel === selectedModel || !isGeminiTransientError(primaryError)) {
           const reason = !fallbackModel ? "not_configured" : fallbackModel === selectedModel ? "same_as_primary" : "permanent_primary_error";
@@ -208,7 +246,7 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
           retryOptions("fallback")
         );
         console.info(`[GEMINI_FALLBACK] outcome=succeeded primary_model=${selectedModel} fallback_model=${fallbackModel}`);
-        return { text: data?.text || "", provider: "gemini", model: fallbackModel };
+        return formatGroundedResult(data, fallbackModel);
       }
     } catch (error) {
       throw normalizeGeminiError(error);

@@ -67,8 +67,9 @@ try {
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
-// Chemical guidance is intentionally Google-only: never silently answer via OpenAI or Groq.
+// Gemini remains primary; OpenAI is reserved for a searched fallback when Gemini is temporarily unavailable.
 const chemicalAI = createAI({ provider: "gemini" });
+const chemicalFallbackAI = createAI({ provider: "openai" });
 let botUserId = null;
 let stopDeals = () => {};
 let stopCatalogs = () => {};
@@ -556,7 +557,7 @@ bot.on(["text", "photo"], async ctx => {
     if (!(await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) { await ctx.reply("المساعد الكيميائي متوقف لهذه المجموعة حاليًا."); return; }
     if (!["group", "supergroup"].includes(m.chatType)) return;
     const question = await chemical.resolveConversationInput(db.pool, ctx.message, args || "اكتب سؤالك الكيميائي بوضوح.");
-    const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
+    const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }), chemicalFallbackAI);
     const links = buildChemicalLinks(question);
     const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";
     const body = `🧪 المساعد الكيميائي\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;

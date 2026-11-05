@@ -295,6 +295,13 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
     tasks.push({ source: "carrefour", query: "", queryIndex: 0 });
   }
   if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
+  // Start SnapFlyer collection alongside the retailer searches. Its bounded
+  // category-page requests should not wait behind slow ScraperAPI responses.
+  const snapFlyerPromise = edition === "other_sites" || edition === "all"
+    ? Promise.resolve()
+      .then(() => snapFlyerFetcher(snapFlyerOptions))
+      .then(result => ({ result }), error => ({ error }))
+    : null;
   const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
   const deals = [], errors = [], sourceStats = [];
   let snapFlyerSourceCount = 0;
@@ -335,9 +342,14 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
       if (!seen.has(key)) { seen.add(key); deals.push(d); }
     }
   }
-  if (edition === "other_sites" || edition === "all") {
-    try {
-      const catalogResult = await snapFlyerFetcher(snapFlyerOptions);
+  if (snapFlyerPromise) {
+    const settled = await snapFlyerPromise;
+    if (settled.error) {
+      const error = settled.error;
+      errors.push({ source: "snapflyer_catalogs", reason: String(error?.message || "fetch_failed").slice(0, 120) });
+      sourceStats.push({ source: "snapflyer_catalogs", ok: false, stage: "transport", extractedCount: 0, reason: "fetch_failed" });
+    } else {
+      const catalogResult = settled.result || {};
       snapFlyerSourceCount = Number.isInteger(catalogResult.sourceCount) && catalogResult.sourceCount > 0 ? catalogResult.sourceCount : 0;
       for (const deal of catalogResult.deals || []) {
         const key = String(deal.url) + "|" + String(deal.title) + "|" + String(deal.price);
@@ -351,9 +363,6 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
           json: createExtractionCounters().json, html: createExtractionCounters().html
         });
       }
-    } catch (error) {
-      errors.push({ source: "snapflyer_catalogs", reason: String(error?.message || "fetch_failed").slice(0, 120) });
-      sourceStats.push({ source: "snapflyer_catalogs", ok: false, stage: "transport", extractedCount: 0, reason: "fetch_failed" });
     }
   }
   for (const task of tasks) if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });

@@ -138,7 +138,18 @@ try {
     fallbackModel: "gemini-3.6-flash",
     loadSdk: async () => ({ GoogleGenAI: FallbackGoogleGenAI })
   });
-  const fallbackAnswer = await fallbackGemini("اختبر المحرك الاحتياطي");
+  const geminiLogs = [];
+  const originalInfo = console.info;
+  const originalWarn = console.warn;
+  console.info = message => geminiLogs.push(String(message));
+  console.warn = message => geminiLogs.push(String(message));
+  let fallbackAnswer;
+  try {
+    fallbackAnswer = await fallbackGemini("اختبر المحرك الاحتياطي");
+  } finally {
+    console.info = originalInfo;
+    console.warn = originalWarn;
+  }
   assert.equal(fallbackAnswer.text, "إجابة المحرك الاحتياطي");
   assert.equal(fallbackAnswer.provider, "gemini");
   assert.equal(fallbackAnswer.model, "gemini-3.6-flash");
@@ -146,6 +157,10 @@ try {
     "gemini-3.8-flash",
     "gemini-3.6-flash"
   ], "a transient primary-model failure should trigger exactly one alternate Gemini model request");
+  assert.ok(geminiLogs.some(line => line.includes("stage=primary model=gemini-3.8-flash outcome=failed status=504")), "logs must identify the failed primary model and HTTP status");
+  assert.ok(geminiLogs.some(line => line.includes("stage=fallback model=gemini-3.6-flash outcome=succeeded")), "logs must identify successful fallback model");
+  assert.ok(geminiLogs.some(line => line.includes("outcome=succeeded primary_model=gemini-3.8-flash fallback_model=gemini-3.6-flash")), "logs must record fallback completion");
+  assert.ok(!geminiLogs.some(line => line.includes("اختبر المحرك الاحتياطي") || line.includes("fallback-test-key")), "model logs must not expose prompts or API keys");
 
   const permanentModelRequests = [];
   class PermanentGoogleGenAI {

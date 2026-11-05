@@ -129,7 +129,7 @@ function formatEconomicBulletin(prices) {
     `💵 الدولار: ${money(prices.usdEgp, 2)} جنيه مصري`,
     `🪙 الجنيه الذهب: ${money(prices.goldPoundEgp, 0)} جنيه مصري`,
     `🥇 جرام الذهب عيار 21: ${money(prices.gold21Egp, 2)} جنيه مصري`
-  ].join("\n");
+  ].join("\n\n");
 }
 
 async function getEconomicPrices({ now = new Date(), getTextImpl = getText } = {}) {

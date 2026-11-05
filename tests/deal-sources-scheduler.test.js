@@ -2,7 +2,7 @@
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, createExtractionCounters, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
 const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, publishDailyDeals } = require("../modules/deal-scheduler");
-const { formatNewsletterMessage, distributeDeals } = require("../modules/deal-publication");
+const { formatNewsletterMessage, distributeDeals, AMAZON_TARGETS } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
 assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), null);
@@ -212,12 +212,11 @@ const editionAmazon = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazo
 const editionOther = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia")], "other_sites");
 assert.equal(editionAmazon.length, 30, "Amazon edition targets ten items in each of three categories");
 assert.ok(editionAmazon.every(d => new URL(d.url).hostname === "www.amazon.eg"));
-assert.equal(editionOther.length, 30, "other-store edition targets thirty items independently, not crowded out by Amazon");
+assert.equal(editionOther.length, 15, "other-store edition keeps its existing fifteen-offer limit");
 assert.ok(editionOther.every(d => new URL(d.url).hostname === "www.jumia.com.eg"));
-for (const edition of [editionAmazon, editionOther]) {
-  for (const category of ["detergent","paper","personal_care"]) {
-    assert.ok(edition.filter(d => d.category === category).length <= 10);
-  }
+for (const category of ["detergent","paper","personal_care"]) {
+  assert.ok(editionAmazon.filter(d => d.category === category).length <= 10);
+  assert.ok(editionOther.filter(d => d.category === category).length <= 5);
 }
 
 const compensationDeals = [
@@ -225,7 +224,7 @@ const compensationDeals = [
   ...Array.from({ length: 3 }, (_, i) => ({ merchant: "Amazon.eg", title: `مناديل ورقية فاين ${i}`, url: `https://www.amazon.eg/dp/B0PAPR${String(i).padStart(5, "0")}`, price: 20 + i, old_price: 30 + i, discount_pct: 20, category: "paper" })),
   ...Array.from({ length: 18 }, (_, i) => ({ merchant: "Amazon.eg", title: `شامبو نيفيا للعناية ${i}`, url: `https://www.amazon.eg/dp/B0CARE${String(i).padStart(5, "0")}`, price: 50 + i, old_price: 70 + i, discount_pct: 20, category: "personal_care" }))
 ];
-const compensated = distributeDeals(compensationDeals);
+const compensated = distributeDeals(compensationDeals, AMAZON_TARGETS);
 assert.equal(compensated.total, 30, "category shortages should be compensated up to the 30-offer edition limit");
 assert.equal(compensated.paper.length, 3, "the short category should publish all three eligible offers");
 assert.equal(compensated.detergent.length + compensated.personal_care.length, 27,

@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { publishDailyDeals } = require("../modules/deal-scheduler");
+const { publishDailyDeals, enqueueObservedDeals } = require("../modules/deal-scheduler");
 const { dealFingerprint, dealProductFingerprint } = require("../modules/deals");
 
 const date = new Date("2026-10-12T14:00:00.000Z"); // 5 PM in Cairo
@@ -48,6 +48,30 @@ function makePool({ failPublishedUpdate = false, failObservation = false, failQu
 }
 
 (async () => {
+  // Several price candidates for the same ASIN retain all observations but
+  // queue only the strongest current offer for each destination group.
+  const rankedQueueCalls = [];
+  const rankedPool = {
+    async query(sql, params = []) {
+      if (sql.startsWith("INSERT INTO deal_observations")) return { rows: [], rowCount: 1 };
+      if (sql.startsWith("UPDATE deal_publication_queue")) return { rows: [], rowCount: 0 };
+      if (sql.startsWith("INSERT INTO deal_publication_queue")) {
+        rankedQueueCalls.push(params);
+        return { rows: [{ fingerprint: params[0], status: "queued" }], rowCount: 1 };
+      }
+      throw new Error("Unexpected SQL in ranked queue test: " + sql);
+    }
+  };
+  const sameProductCandidates = [
+    { ...candidates[0], price: 110, discount_pct: 8 },
+    { ...candidates[0], price: 90, discount_pct: 25 }
+  ];
+  const rankedResult = await enqueueObservedDeals(rankedPool, sameProductCandidates, "amazon", [-100123]);
+  assert.equal(rankedResult.saved, 2, "all valid price observations remain stored");
+  assert.equal(rankedQueueCalls.length, 1, "only one current candidate per product enters the queue");
+  assert.equal(rankedQueueCalls[0][0], dealFingerprint(sameProductCandidates[1]),
+    "the strongest discount candidate should be queued");
+
   // Confirmed Telegram send followed by DB failure must not mark the post failed.
   for (const failure of ["publication_record", "update_deal_queue"]) {
     const pool = makePool({

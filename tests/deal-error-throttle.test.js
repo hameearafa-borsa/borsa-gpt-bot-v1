@@ -9,6 +9,8 @@ const { publishDailyDeals } = require("../modules/deal-scheduler");
     async query(sql) {
       if (sql.includes("FROM service_settings")) return { rows: [], rowCount: 0 };
       if (sql.includes("SELECT channel_kind,status FROM deal_publications")) return { rows: [], rowCount: 0 };
+      if (sql.includes("UPDATE deal_publication_queue")) return { rows: [], rowCount: 0 };
+      if (sql.includes("SELECT o.merchant")) return { rows: [], rowCount: 0 };
       if (sql.includes("INSERT INTO deal_error_notifications")) {
         notificationWrites++;
         return { rows: [{ should_notify: notificationWrites === 1 }], rowCount: 1 };

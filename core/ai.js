@@ -112,7 +112,7 @@ async function retryGeminiRequest(run, options = {}) {
   throw lastError;
 }
 
-function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), timeoutMs = Number(process.env.GEMINI_TIMEOUT_MS || 12000), fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "" } = {}) {
+function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), timeoutMs = Math.max(1000, Math.min(12000, Number(process.env.GEMINI_TIMEOUT_MS || 12000))), fallbackModel = process.env.GEMINI_FALLBACK_MODEL || "" } = {}) {
   // Load the official SDK lazily so non-Gemini routes do not initialize it.
   // Keep one authenticated client per configured key for the life of this provider.
   let clientPromise;

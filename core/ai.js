@@ -212,9 +212,23 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
           `[GEMINI_RETRY] stage=${stage} model=${stage === "primary" ? selectedModel : fallbackModel} outcome=scheduled attempt=${event.attempt} next_attempt=${event.nextAttempt} status=${event.status} delay_ms=${event.delayMs}`
         )
       });
+      const formatGroundedResult = (data, targetModel) => {
+        let text = data?.text || "";
+        const chunks = data?.candidates?.[0]?.groundingMetadata?.groundingChunks || [];
+        const sources = [];
+        for (const chunk of chunks) {
+          const web = chunk?.web;
+          const url = String(web?.uri || "");
+          if (/^https:\/\//i.test(url) && !sources.some(source => source.url === url)) {
+            sources.push({ title: String(web.title || new URL(url).hostname).slice(0, 120), url });
+          }
+        }
+        if (sources.length) text += "\n\nمصادر البحث:\n" + sources.slice(0, 5).map(source => `• ${source.title}: ${source.url}`).join("\n");
+        return { text, provider: "gemini", model: targetModel };
+      };
       try {
         const data = await retryGeminiRequest(() => runModel("primary", selectedModel), retryOptions("primary"));
-        return { text: data?.text || "", provider: "gemini", model: selectedModel };
+        return formatGroundedResult(data, selectedModel);
       } catch (primaryError) {
         if (!fallbackModel || fallbackModel === selectedModel || !isGeminiTransientError(primaryError)) {
           const reason = !fallbackModel ? "not_configured" : fallbackModel === selectedModel ? "same_as_primary" : "permanent_primary_error";
@@ -232,7 +246,7 @@ function geminiProvider(key, model, { loadSdk = () => import("@google/genai"), t
           retryOptions("fallback")
         );
         console.info(`[GEMINI_FALLBACK] outcome=succeeded primary_model=${selectedModel} fallback_model=${fallbackModel}`);
-        return { text: data?.text || "", provider: "gemini", model: fallbackModel };
+        return formatGroundedResult(data, fallbackModel);
       }
     } catch (error) {
       throw normalizeGeminiError(error);

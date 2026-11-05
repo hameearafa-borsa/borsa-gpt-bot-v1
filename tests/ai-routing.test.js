@@ -4,7 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const aiSource = fs.readFileSync(path.join(__dirname, "../core/ai.js"), "utf8");
 const index = fs.readFileSync(path.join(__dirname, "../index.js"), "utf8");
-const { createAI, providersFromEnv, retryGeminiRequest, geminiProvider, providerStatus } = require("../core/ai");
+const { createAI, providersFromEnv, retryGeminiRequest, geminiProvider, providerStatus, isGeminiRetryableError } = require("../core/ai");
 
 assert.ok(aiSource.includes("gemini-3.8-flash"));
 assert.ok(aiSource.includes("process.env.GEMINI_TIMEOUT_MS || 12000"), "Gemini attempts stay within Telegraf handler budget");
@@ -66,6 +66,40 @@ try {
   assert.equal(recoveredAfter503, "Gemini recovered");
   assert.equal(transientCalls, 2, "a transient Gemini 503 gets exactly one retry");
 
+  assert.equal(isGeminiRetryableError(httpError(503)), true, "Gemini 503 responses are eligible for a bounded retry");
+  assert.equal(isGeminiRetryableError(httpError(504)), false, "Gemini 504 responses go directly to fallback to protect the total request budget");
+  assert.equal(isGeminiRetryableError(httpError(429)), false, "quota/rate-limit responses are not blindly retried");
+
+  const retryDelayEvents = [];
+  let jitterCalls = 0;
+  let retryPolicyCalls = 0;
+  const retryPolicyResult = await retryGeminiRequest(async () => {
+    retryPolicyCalls += 1;
+    if (retryPolicyCalls === 1) throw httpError(503, "overloaded");
+    return "bounded retry recovered";
+  }, {
+    delayMs: 10,
+    maxDelayMs: 100,
+    random: () => { jitterCalls += 1; return 0.5; },
+    onRetry: event => retryDelayEvents.push(event)
+  });
+  assert.equal(retryPolicyResult, "bounded retry recovered");
+  assert.equal(retryPolicyCalls, 2, "a retry policy makes at most two attempts");
+  assert.equal(jitterCalls, 1, "retry delay includes bounded jitter");
+  assert.equal(retryDelayEvents[0].status, 503);
+  assert.ok(retryDelayEvents[0].delayMs >= 10 && retryDelayEvents[0].delayMs <= 13, "backoff delay is bounded and jittered");
+
+  let deadlineRetryCalls = 0;
+  await assert.rejects(retryGeminiRequest(async () => {
+    deadlineRetryCalls += 1;
+    throw httpError(503, "overloaded");
+  }, {
+    delayMs: 100,
+    deadlineAt: Date.now() + 100,
+    attemptTimeoutMs: 12000
+  }));
+  assert.equal(deadlineRetryCalls, 1, "a retry is skipped when the shared request budget cannot fit another full attempt");
+
   const sdkStatusError = new Error("temporary SDK failure");
   sdkStatusError.status = 503;
   assert.equal(providerStatus(sdkStatusError), 503, "SDK status fields must drive retry and provider fallback decisions");
@@ -117,6 +151,90 @@ try {
     contents: "اختبر اتصال المساعد الكيميائي",
     config: { automaticContinuation: false }
   });
+
+  const retryingPrimaryRequests = [];
+  class RetryingPrimaryGoogleGenAI {
+    constructor() {
+      this.models = {
+        async generateContent(request) {
+          retryingPrimaryRequests.push(request);
+          if (retryingPrimaryRequests.length === 1) {
+            const error = new Error("temporary overload");
+            error.status = 503;
+            throw error;
+          }
+          return { text: "تم التعافي بعد إعادة المحاولة" };
+        }
+      };
+    }
+  }
+  const retryingPrimaryGemini = geminiProvider("retry-primary-test-key", "gemini-3.8-flash", {
+    fallbackModel: "gemini-3.6-flash",
+    loadSdk: async () => ({ GoogleGenAI: RetryingPrimaryGoogleGenAI })
+  });
+  const retryPrimaryLogs = [];
+  const retryPrimaryOriginalInfo = console.info;
+  const retryPrimaryOriginalWarn = console.warn;
+  console.info = message => retryPrimaryLogs.push(String(message));
+  console.warn = message => retryPrimaryLogs.push(String(message));
+  let retryPrimaryAnswer;
+  try {
+    retryPrimaryAnswer = await retryingPrimaryGemini("اختبار إعادة محاولة الأساسي");
+  } finally {
+    console.info = retryPrimaryOriginalInfo;
+    console.warn = retryPrimaryOriginalWarn;
+  }
+  assert.equal(retryPrimaryAnswer.text, "تم التعافي بعد إعادة المحاولة");
+  assert.deepEqual(retryingPrimaryRequests.map(request => request.model), [
+    "gemini-3.8-flash",
+    "gemini-3.8-flash"
+  ], "a primary 503 is retried once before considering the alternate model");
+  assert.ok(retryPrimaryLogs.some(line => line.includes("[GEMINI_RETRY] stage=primary") && line.includes("status=503")), "primary retry scheduling must be logged");
+
+  const retryingFallbackRequests = [];
+  class RetryingFallbackGoogleGenAI {
+    constructor() {
+      this.models = {
+        async generateContent(request) {
+          retryingFallbackRequests.push(request);
+          if (request.model === "gemini-3.8-flash") {
+            const error = new Error("primary deadline exceeded");
+            error.status = 504;
+            throw error;
+          }
+          if (retryingFallbackRequests.filter(item => item.model === "gemini-3.6-flash").length === 1) {
+            const error = new Error("fallback overloaded");
+            error.status = 503;
+            throw error;
+          }
+          return { text: "تم التعافي عبر الاحتياطي" };
+        }
+      };
+    }
+  }
+  const retryingFallbackGemini = geminiProvider("retry-fallback-test-key", "gemini-3.8-flash", {
+    fallbackModel: "gemini-3.6-flash",
+    loadSdk: async () => ({ GoogleGenAI: RetryingFallbackGoogleGenAI })
+  });
+  const retryFallbackLogs = [];
+  const retryFallbackOriginalInfo = console.info;
+  const retryFallbackOriginalWarn = console.warn;
+  console.info = message => retryFallbackLogs.push(String(message));
+  console.warn = message => retryFallbackLogs.push(String(message));
+  let retryFallbackAnswer;
+  try {
+    retryFallbackAnswer = await retryingFallbackGemini("اختبار إعادة محاولة الاحتياطي");
+  } finally {
+    console.info = retryFallbackOriginalInfo;
+    console.warn = retryFallbackOriginalWarn;
+  }
+  assert.equal(retryFallbackAnswer.text, "تم التعافي عبر الاحتياطي");
+  assert.deepEqual(retryingFallbackRequests.map(request => request.model), [
+    "gemini-3.8-flash",
+    "gemini-3.6-flash",
+    "gemini-3.6-flash"
+  ], "the alternate model also receives one bounded retry for a transient 503");
+  assert.ok(retryFallbackLogs.some(line => line.includes("[GEMINI_RETRY] stage=fallback") && line.includes("status=503")), "fallback retry scheduling must be logged");
 
   const fallbackRequests = [];
   class FallbackGoogleGenAI {

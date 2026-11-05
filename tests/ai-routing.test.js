@@ -8,6 +8,7 @@ const { createAI, providersFromEnv, retryGeminiRequest, geminiProvider, provider
 
 assert.ok(aiSource.includes("gemini-3.8-flash"));
 assert.ok(aiSource.includes("process.env.GEMINI_TIMEOUT_MS || 12000"), "Gemini attempts stay within Telegraf handler budget");
+assert.ok(aiSource.includes("Math.min(12000, Number(process.env.GEMINI_TIMEOUT_MS || 12000))"), "Gemini attempt timeout is capped at 12 seconds even if Railway is misconfigured");
 assert.ok(aiSource.includes("retryGeminiRequest"), "Gemini retries one transient service failure");
 assert.ok(aiSource.includes("maxAttempts = Math.max(1, Math.min(2"), "Gemini retry count is strictly bounded to two attempts");
 assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts must be honored");

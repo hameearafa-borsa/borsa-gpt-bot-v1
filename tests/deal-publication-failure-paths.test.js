@@ -141,6 +141,32 @@ function makePool({ failPublishedUpdate = false, failObservation = false, failQu
   assert.equal(multi.published.length, 2, "both approved groups should receive the newsletter");
   assert.equal(multiPool.calls.filter(c => c.sql.startsWith("INSERT INTO deal_observations")).length, 1,
     "observed offers should be persisted once, not once per group");
+  assert.equal(multiPool.calls.filter(c => c.sql.startsWith("INSERT INTO deal_publication_queue")).length, 2,
+    "each pending offer must have an independent queue row for every target group");
+  assert.ok(multiPool.calls.some(c => c.sql.includes("old.product_fingerprint=$3") && c.sql.includes("q.chat_id=$2")),
+    "a changed product offer must expire its older pending price in that group");
+
+  // A partial multi-group send must complete only the successful group's queue.
+  const partialPool = makePool();
+  const partialSent = [];
+  await publishDailyDeals({
+    pool: partialPool,
+    telegram: { sendMessage: async target => {
+      partialSent.push(Number(target));
+      if (Number(target) === -100456) throw new Error("second group unavailable");
+      return { message_id: 9201 };
+    } },
+    chatIds: [-100123, -100456],
+    fetcher: async () => ({ deals: candidates }),
+    verify: async deals => deals,
+    now: date
+  });
+  const completedChats = partialPool.calls
+    .filter(c => c.sql.startsWith("UPDATE deal_publication_queue") && c.params[1] === "published")
+    .map(c => c.params[2]);
+  assert.deepEqual(partialSent, [-100123, -100456]);
+  assert.deepEqual(completedChats, [-100123],
+    "one group's success must not mark the other group's pending offer as published");
 
   console.log("deal publication failure-path tests: OK");
 })().catch(error => { console.error(error); process.exit(1); });

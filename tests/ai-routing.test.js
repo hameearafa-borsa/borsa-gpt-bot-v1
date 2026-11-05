@@ -38,7 +38,7 @@ function httpError(status, message = "simulated provider failure") {
   return new Error(`AI HTTP ${status}: ${message}`);
 }
 
-const envNames = ["AI_PROVIDER", "AI_FALLBACK_ENABLED", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3"];
+const envNames = ["AI_PROVIDER", "AI_FALLBACK_ENABLED", "GEMINI_API_KEY", "GEMINI_API_KEY_1", "GEMINI_API_KEY_2", "GEMINI_API_KEY_3", "GEMINI_MODEL", "GEMINI_FALLBACK_MODEL"];
 const savedEnv = Object.fromEntries(envNames.map(name => [name, process.env[name]]));
 try {
   process.env.AI_PROVIDER = "gemini";
@@ -117,6 +117,57 @@ try {
     contents: "اختبر اتصال المساعد الكيميائي",
     config: { automaticContinuation: false }
   });
+
+  const fallbackRequests = [];
+  class FallbackGoogleGenAI {
+    constructor() {
+      this.models = {
+        async generateContent(request) {
+          fallbackRequests.push(request);
+          if (request.model === "gemini-3.8-flash") {
+            const error = new Error("upstream deadline expired");
+            error.status = 504;
+            throw error;
+          }
+          return { text: "إجابة المحرك الاحتياطي" };
+        }
+      };
+    }
+  }
+  const fallbackGemini = geminiProvider("fallback-test-key", "gemini-3.8-flash", {
+    fallbackModel: "gemini-3.6-flash",
+    loadSdk: async () => ({ GoogleGenAI: FallbackGoogleGenAI })
+  });
+  const fallbackAnswer = await fallbackGemini("اختبر المحرك الاحتياطي");
+  assert.equal(fallbackAnswer.text, "إجابة المحرك الاحتياطي");
+  assert.equal(fallbackAnswer.provider, "gemini");
+  assert.equal(fallbackAnswer.model, "gemini-3.6-flash");
+  assert.deepEqual(fallbackRequests.map(request => request.model), [
+    "gemini-3.8-flash",
+    "gemini-3.6-flash"
+  ], "a transient primary-model failure should trigger exactly one alternate Gemini model request");
+
+  const permanentModelRequests = [];
+  class PermanentGoogleGenAI {
+    constructor() {
+      this.models = {
+        async generateContent(request) {
+          permanentModelRequests.push(request);
+          const error = new Error("unsupported request");
+          error.status = 400;
+          throw error;
+        }
+      };
+    }
+  }
+  const permanentModelGemini = geminiProvider("permanent-test-key", "gemini-3.8-flash", {
+    fallbackModel: "gemini-3.6-flash",
+    loadSdk: async () => ({ GoogleGenAI: PermanentGoogleGenAI })
+  });
+  await assert.rejects(permanentModelGemini("سؤال غير صالح"));
+  assert.deepEqual(permanentModelRequests.map(request => request.model), [
+    "gemini-3.8-flash"
+  ], "permanent request errors must not trigger alternate-model fallback");
 
   let permanentRetryCalls = 0;
   await assert.rejects(retryGeminiRequest(async () => {

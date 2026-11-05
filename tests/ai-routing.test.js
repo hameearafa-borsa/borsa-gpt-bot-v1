@@ -156,6 +156,7 @@ try {
     contents: "اختبر اتصال المساعد الكيميائي",
     config: { automaticContinuation: false }
   });
+  assert.deepEqual(sdkRequests[2].config.tools, [{ googleSearch: {} }], "chemical Gemini requests can enable Google Search grounding");
 
   const retryingPrimaryRequests = [];
   class RetryingPrimaryGoogleGenAI {

@@ -176,14 +176,14 @@ function providerStatus(error) {
   const directStatus = Number(error?.status ?? error?.statusCode ?? error?.response?.status);
   if (Number.isInteger(directStatus) && directStatus >= 100 && directStatus <= 599) return directStatus;
   const message = String(error?.message || "");
-  return Number(message.match(/AI HTTP (\\d+)/)?.[1] || 0);
+  return Number(message.match(/AI HTTP (\d+)/)?.[1] || 0);
 }
 
 function normalizeGeminiError(error) {
   if (!error || typeof error !== "object") return error;
   const status = providerStatus(error);
-  const message = redactString(String(error.message || "Gemini request failed").replace(/\\s+/g, " ").slice(0, 350));
-  if (!status || /^AI HTTP \\d+/.test(message)) return error;
+  const message = redactString(String(error.message || "Gemini request failed").replace(/\s+/g, " ").slice(0, 350));
+  if (!status || /^AI HTTP \d+/.test(message)) return error;
   const normalized = new Error(`AI HTTP ${status}: code=unknown; type=unknown; param=unknown; message=${message}`);
   normalized.status = status;
   normalized.cause = error;

@@ -15,9 +15,10 @@ assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts m
 const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");
 assert.ok(!openAISection.includes("temperature:"), "Responses request must not send unsupported temperature field");
-assert.ok(openAISection.includes('type: "web_search"'), "OpenAI chemical fallback must use hosted web search");
-assert.ok(openAISection.includes('tool_choice = "required"'), "fallback must actually search rather than rely on model choice");
-assert.ok(openAISection.includes("web_search_call.action.sources"), "fallback must return source references");
+assert.ok(openAISection.includes('if (options.webSearch === true)'), "OpenAI web search must be opt-in so emergency answers are not blocked by search latency");
+assert.ok(openAISection.includes('type: "web_search"'), "OpenAI should retain hosted web search when explicitly requested");
+assert.ok(openAISection.includes('tool_choice = "required"'), "an explicitly requested web search must actually execute");
+assert.ok(openAISection.includes("web_search_call.action.sources"), "explicit web search should return source references");
 const geminiSection = aiSource.slice(aiSource.indexOf("function geminiProvider"), aiSource.indexOf("function providersFromEnv"));
 assert.ok(geminiSection.length > 0, "Gemini provider implementation should exist");
 assert.ok(geminiSection.includes('import("@google/genai")'), "Gemini requests must use the installed official SDK");

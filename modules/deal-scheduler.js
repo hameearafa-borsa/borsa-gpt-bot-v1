@@ -139,54 +139,68 @@ async function persistDeals(pool, deals) {
   }
   return saved;
 }
-async function enqueueObservedDeals(pool, deals, source = "unknown") {
+async function enqueueObservedDeals(pool, deals, source = "unknown", chatIds = []) {
   const saved = await persistDeals(pool, deals);
   let queued = 0;
+  const targets = [...new Set((chatIds || []).map(Number).filter(Number.isSafeInteger))];
   for (const deal of deals) {
     const valid = validateDeal(deal);
     if (!valid.ok) continue;
-    const result = await pool.query(
-      `INSERT INTO deal_publication_queue(fingerprint,source,status,first_queued_at,last_observed_at,updated_at)
-       VALUES($1,$2,'queued',NOW(),NOW(),NOW())
-       ON CONFLICT(fingerprint) DO UPDATE
-       SET source=EXCLUDED.source,last_observed_at=NOW(),updated_at=NOW(),
-           status=CASE WHEN deal_publication_queue.status='published' THEN 'published' ELSE 'queued' END
-       RETURNING fingerprint,status`,
-      [valid.fingerprint, source]
-    );
-    if (result.rowCount) queued++;
+    for (const chatId of targets) {
+      // A changed price/discount creates a new observation fingerprint. Retire
+      // older pending observations for this same product in this specific chat.
+      await pool.query(
+        `UPDATE deal_publication_queue q
+         SET status='expired',updated_at=NOW()
+         FROM deal_observations old
+         WHERE q.fingerprint=old.fingerprint
+           AND q.source=$1 AND q.chat_id=$2 AND q.status='queued'
+           AND old.product_fingerprint=$3 AND q.fingerprint<>$4`,
+        [source, chatId, valid.productFingerprint, valid.fingerprint]
+      );
+      const result = await pool.query(
+        `INSERT INTO deal_publication_queue(fingerprint,chat_id,source,status,first_queued_at,last_observed_at,updated_at)
+         VALUES($1,$2,$3,'queued',NOW(),NOW(),NOW())
+         ON CONFLICT(fingerprint,chat_id) DO UPDATE
+         SET source=EXCLUDED.source,last_observed_at=NOW(),updated_at=NOW(),
+             status=CASE WHEN deal_publication_queue.status='published' THEN 'published' ELSE 'queued' END
+         RETURNING fingerprint,status`,
+        [valid.fingerprint, chatId, source]
+      );
+      if (result.rowCount) queued++;
+    }
   }
   return { saved, queued };
 }
-async function loadQueuedDeals(pool, source = "amazon", limit = 500) {
+async function loadQueuedDeals(pool, source = "amazon", chatId, limit = 500) {
   await pool.query(
     `UPDATE deal_publication_queue
      SET status='expired',updated_at=NOW()
-     WHERE source=$1 AND status='queued'
+     WHERE source=$1 AND chat_id=$2 AND status='queued'
        AND last_observed_at < NOW() - INTERVAL '36 hours'`,
-    [source]
+    [source, chatId]
   );
   const result = await pool.query(
     `SELECT o.merchant,o.title,o.url,o.category,o.price,o.old_price,o.discount_pct,
             o.fingerprint,o.product_fingerprint,q.first_queued_at,q.last_observed_at
      FROM deal_publication_queue q
      JOIN deal_observations o ON o.fingerprint=q.fingerprint
-     WHERE q.source=$1 AND q.status='queued'
+     WHERE q.source=$1 AND q.chat_id=$2 AND q.status='queued'
        AND q.last_observed_at >= NOW() - INTERVAL '36 hours'
      ORDER BY q.first_queued_at ASC
-     LIMIT $2`,
-    [source, limit]
+     LIMIT $3`,
+    [source, chatId, limit]
   );
   return result.rows || [];
 }
-async function updateQueuedDeals(pool, deals, status) {
+async function updateQueuedDeals(pool, deals, status, chatId) {
   const fingerprints = [...new Set((deals || []).map(deal => deal.fingerprint).filter(Boolean))];
   if (!fingerprints.length) return 0;
   const result = await pool.query(
     `UPDATE deal_publication_queue
      SET status=$2, published_at=CASE WHEN $2='published' THEN NOW() ELSE published_at END, updated_at=NOW()
-     WHERE fingerprint = ANY($1::text[]) AND status='queued'`,
-    [fingerprints, status]
+     WHERE fingerprint = ANY($1::text[]) AND status='queued' AND chat_id=$3`,
+    [fingerprints, status, chatId]
   );
   return result.rowCount || 0;
 }
@@ -265,18 +279,24 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null };
   }
   const verified = await verify(gathered.deals || []);
-  // Amazon observations enter a durable queue before newsletter selection.
-  // Pending items survive daily collection runs until published or expired.
+  // Amazon queue state is independent per destination group. Historical
+  // deal_observations are not backfilled: before this queue existed, they were
+  // persisted only after a confirmed Telegram send.
   const duplicateCooldownDays = kind === "amazon" ? 0 : 7;
-  let recent;
+  let recent = [];
+  const recentByChat = new Map();
   if (kind === "amazon") {
-    await enqueueObservedDeals(pool, verified, "amazon");
-    const queued = await loadQueuedDeals(pool, "amazon");
-    const refreshedQueue = await verify(queued);
-    const refreshedFingerprints = new Set(refreshedQueue.map(deal => deal.fingerprint));
-    const rejectedQueueItems = queued.filter(deal => !refreshedFingerprints.has(deal.fingerprint));
-    await updateQueuedDeals(pool, rejectedQueueItems, "expired");
-    recent = refreshedQueue;
+    await enqueueObservedDeals(pool, verified, "amazon", targetChatIds);
+    for (const targetId of unreservedTargets) {
+      const queued = await loadQueuedDeals(pool, "amazon", targetId);
+      const refreshedQueue = await verify(queued);
+      const refreshedFingerprints = new Set(refreshedQueue.map(deal => deal.fingerprint));
+      const rejectedQueueItems = queued.filter(deal => !refreshedFingerprints.has(deal.fingerprint));
+      await updateQueuedDeals(pool, rejectedQueueItems, "expired", targetId);
+      recentByChat.set(targetId, refreshedQueue);
+      recent.push(...refreshedQueue);
+    }
+    recent = [...new Map(recent.map(deal => [deal.fingerprint, deal])).values()];
   } else {
     recent = await filterRecentDeals(pool, verified, duplicateCooldownDays);
   }
@@ -288,29 +308,37 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     }
     return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
   }
-  const items = selectNewsletterDeals(recent, kind);
+  const itemsByChat = new Map();
+  if (kind === "amazon") {
+    for (const targetId of unreservedTargets) itemsByChat.set(targetId, selectNewsletterDeals(recentByChat.get(targetId) || [], kind));
+  } else {
+    const commonItems = selectNewsletterDeals(recent, kind);
+    for (const targetId of unreservedTargets) itemsByChat.set(targetId, commonItems);
+  }
+  const items = [...new Map([...itemsByChat.values()].flat().map(deal => [deal.fingerprint, deal])).values()];
   await emitDiagnostics({
     ...diagnosticsBase, stage: "filtered", verifiedCount: verified.length,
     recentCount: recent.length, selectedCount: items.length,
     selectedByMerchant: Object.fromEntries([...new Set(items.map(item => String(item.merchant || "unknown")))].map(merchant => [merchant, items.filter(item => String(item.merchant || "unknown") === merchant).length])),
     duplicateCooldownDays, elapsedMs: Date.now() - collectionStartedAt
   });
-  if (!items.length) {
+  if (![...itemsByChat.values()].some(groupItems => groupItems.length)) {
     await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
   }
   const title = kind === "amazon"
     ? "عروض أمازون للمنظفات والورقيات والعناية"
     : "عروض المتاجر الأخرى المختارة";
-  const formatted = formatNewsletterMessage(items, title);
-  const formattedItems = formatted.items;
-  if (!formattedItems.length) {
-    await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: kind, batchKey: key });
-    return { skipped: true, reason: "message_too_long", batchKey: key, kind };
-  }
 
   const published = [];
   for (const targetId of unreservedTargets) {
+    const targetItems = itemsByChat.get(targetId) || [];
+    const formatted = formatNewsletterMessage(targetItems, title);
+    const formattedItems = formatted.items;
+    if (!formattedItems.length) {
+      await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: kind, batchKey: key, chatId: targetId });
+      continue;
+    }
     const reservation = await pool.query(
       "INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status) VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind,chat_id) DO NOTHING RETURNING id",
       [key, kind, targetId, formattedItems.length]
@@ -335,16 +363,20 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     } catch (error) {
       await onError(error, { stage: "publication_record", batchKind: kind, batchKey: key, messageId: msg.message_id, chatId: targetId });
     }
+    if (kind === "amazon") {
+      try {
+        await updateQueuedDeals(pool, formattedItems, "published", targetId);
+      } catch (error) {
+        await onError(error, { stage: "update_deal_queue", batchKind: kind, batchKey: key, messageIds: [msg.message_id], chatId: targetId });
+      }
+    }
   }
 
-  // Amazon offers were persisted and queued before selection. Mark only the
-  // formatted offers as published after Telegram confirms at least one send.
-  if (published.length) {
+  if (kind !== "amazon" && published.length) {
     try {
-      if (kind === "amazon") await updateQueuedDeals(pool, formattedItems, "published");
-      else await persistDeals(pool, formattedItems);
+      await persistDeals(pool, itemsByChat.get(published[0].chatId) || []);
     } catch (error) {
-      await onError(error, { stage: kind === "amazon" ? "update_deal_queue" : "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) });
+      await onError(error, { stage: "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) });
     }
   }
   return {

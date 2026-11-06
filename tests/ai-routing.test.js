@@ -12,6 +12,8 @@ assert.ok(aiSource.includes("timeout: timeoutMs"), "provider-specific timeouts m
 assert.ok(aiSource.includes("x-goog-api-key"));
 const openAISection = aiSource.slice(aiSource.indexOf("function openAIProvider"), aiSource.indexOf("function groqProvider"));
 assert.ok(openAISection.length > 0, "OpenAI provider implementation should exist");
+assert.match(openAISection, /max_output_tokens: 3500/);
+assert.match(openAISection, /Number\(options\.timeoutMs \|\| process\.env\.AI_TIMEOUT_MS \|\| 120000\)/);
 assert.ok(!openAISection.includes("temperature:"), "Responses request must not send unsupported temperature field");
 const geminiSection = aiSource.slice(aiSource.indexOf("function geminiProvider"), aiSource.indexOf("function providersFromEnv"));
 assert.ok(geminiSection.length > 0, "Gemini provider implementation should exist");
@@ -21,12 +23,17 @@ assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
 assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
 assert.ok(aiSource.includes("isProviderWideFailure(e) || (!retryable && !credentialError)"), "provider-wide failures should skip sibling keys when cross-provider fallback is enabled");
+const groqSection = aiSource.slice(aiSource.indexOf("function groqProvider"), aiSource.indexOf("function geminiProvider"));
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
+assert.match(groqSection, /max_tokens: 3500/);
+assert.match(groqSection, /Number\(options\.timeoutMs \|\| process\.env\.AI_TIMEOUT_MS \|\| 120000\)/);
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
 assert.ok(index.includes('createAI({ provider: "openai", fallbackProviders: ["groq"] })'), "chemical assistant must use OpenAI first and Groq only as fallback");
+assert.ok(index.includes("async function replyWithChemicalAnswer"), "chemical responses should run in the background");
+assert.ok(index.includes("أراجع طلبك وأجهز إجابة فنية مفصلة"), "the user should receive immediate progress feedback");
 assert.match(index, /canManage\(ctx\.telegram, m\.chatId, m\.userId\)/, "chemical command must be limited to bot owner or actual group creator");
-assert.doesNotMatch(index, /chemical\.isChemicalQuestion\(chemicalInput\)/, "ordinary group messages must never trigger the chemical assistant");
+assert.doesNotMatch(index, /chemical\.isChemicalQuestion\(text\)/, "ordinary group messages must never trigger the chemical assistant");
 assert.match(index, /if \(!args\.trim\(\)\)/, "empty /chemical commands must not consume an AI request");
 
 function provider(name, providerName, run) {

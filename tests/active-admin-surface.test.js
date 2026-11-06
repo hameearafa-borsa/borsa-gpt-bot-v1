@@ -33,5 +33,5 @@ const chemicalHandler=source.slice(chemicalStart,chemicalEnd);
 assert.match(chemicalHandler,/canManage\(ctx\.telegram, m\.chatId, m\.userId\)/,"only the bot master or actual group creator may invoke chemistry");
 assert.match(chemicalHandler,/serviceSettings\.isServiceEnabled\(db\.pool, "chemical", m\.chatId\)/);
 assert.match(chemicalHandler,/if \(!args\.trim\(\)\)/,"empty command must not invoke AI");
-assert.match(chemicalHandler,/chemical\.answer\(chemicalAI, question/);
-assert.doesNotMatch(source,/chemical\.isChemicalQuestion\(chemicalInput\)/,"ordinary messages must not be analyzed for chemical questions");
+assert.match(chemicalHandler,/replyWithChemicalAnswer\(ctx, question/);
+assert.doesNotMatch(source,/chemical\.isChemicalQuestion\(text\)/,"ordinary messages must not be analyzed for chemical questions");

@@ -58,7 +58,7 @@ async function answer(ai, question, onError = null) {
     return SAFE_FALLBACK;
   }
   try {
-    const result = await ai.generate(buildPrompt(question), { temperature: 0.3, timeoutMs: 30000 });
+    const result = await ai.generate(buildPrompt(question), { temperature: 0.3, timeoutMs: 120000 });
     const answerText = String(result?.text || "").trim();
     if (!answerText) return SAFE_FALLBACK;
     const provider = String(result?.provider || "").toLowerCase();

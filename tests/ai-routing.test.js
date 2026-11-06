@@ -395,6 +395,33 @@ try {
   const rateLimitResult = await rateLimitRouted.generate("test prompt");
   assert.equal(rateLimitResult.provider, "gemini");
   assert.deepEqual(rateLimitCalls, ["gemini-1", "gemini-2"], "a key-specific 429 should rotate to another Gemini key before changing providers");
+  const openAITimeoutCalls = [];
+  const openAITimeoutProviders = [
+    provider("OPENAI_API_KEY", "openai", async (_prompt, options) => { openAITimeoutCalls.push(["openai-1", options.timeoutMs]); throw new Error("AI timeout"); }),
+    provider("OPENAI_API_KEY_2", "openai", async (_prompt, options) => { openAITimeoutCalls.push(["openai-2", options.timeoutMs]); throw new Error("AI timeout"); }),
+    provider("OPENAI_API_KEY_3", "openai", async (_prompt, options) => { openAITimeoutCalls.push(["openai-3", options.timeoutMs]); return { text: "OpenAI recovered", provider: "openai" }; }),
+    provider("GROQ_API_KEY", "groq", async () => { openAITimeoutCalls.push(["groq"]); return { text: "must not run", provider: "groq" }; })
+  ];
+  const rotatingOpenAI = createAI({ provider: "openai", fallbackProviders: ["groq"], providers: openAITimeoutProviders });
+  const rotatedOpenAI = await rotatingOpenAI.generate("chemical prompt", { timeoutMs: 3500, requestBudgetMs: 14000 });
+  assert.equal(rotatedOpenAI.provider, "openai");
+  assert.deepEqual(openAITimeoutCalls.map(call => call[0]), ["openai-1", "openai-2", "openai-3"], "an OpenAI timeout should rotate through configured keys before changing provider");
+  assert.ok(openAITimeoutCalls.every(call => call[1] <= 3500), "each OpenAI key attempt must stay within its per-key timeout");
+
+  const groqRescueCalls = [];
+  const groqRescueProviders = [
+    provider("OPENAI_API_KEY", "openai", async () => { groqRescueCalls.push("openai-1"); throw new Error("AI timeout"); }),
+    provider("OPENAI_API_KEY_2", "openai", async () => { groqRescueCalls.push("openai-2"); throw new Error("AI timeout"); }),
+    provider("OPENAI_API_KEY_3", "openai", async () => { groqRescueCalls.push("openai-3"); throw new Error("AI timeout"); }),
+    provider("GROQ_API_KEY", "groq", async () => { groqRescueCalls.push("groq-1"); throw httpError(429, "rate limit"); }),
+    provider("GROQ_API_KEY_2", "groq", async () => { groqRescueCalls.push("groq-2"); return { text: "Groq rescue answer", provider: "groq" }; })
+  ];
+  const groqRescue = createAI({ provider: "openai", fallbackProviders: ["groq"], providers: groqRescueProviders });
+  const groqRecovered = await groqRescue.generate("chemical prompt", { timeoutMs: 3500, requestBudgetMs: 14000 });
+  assert.equal(groqRecovered.provider, "groq");
+  assert.deepEqual(groqRescueCalls, ["openai-1", "openai-2", "openai-3", "groq-1", "groq-2"], "all configured OpenAI keys should be tried before Groq, which can rotate to its second key on a key-specific 429");
+
+  assert.ok(index.includes("chemical.answer(chemicalAI, chemicalInput") && index.includes("}), chemicalFallbackAI);"), "automatic group chemical questions must receive the same OpenAI/Groq rescue path as /chemical");
 
   const credentialCalls = [];
   const credentialProviders = [

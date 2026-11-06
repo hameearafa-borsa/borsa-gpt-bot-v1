@@ -14,7 +14,6 @@ on:
       - feature/deals-two-newsletters-carrefour-kazyon-2026-10-25
       - fix/deals-fetch-resilience-2026-10-30
       - fix/snapflyer-default-language-short-links-2026-11-04
-      - feature/chemical-openai-owner-only-market-prompt-2026-11-07
 
 permissions:
   contents: read

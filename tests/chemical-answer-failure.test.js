@@ -21,7 +21,7 @@ const chemical = require("../modules/chemical-assistant");
   const openaiAnswer = await chemical.answer({
     async generate(prompt, options) {
       openaiCalls.push({ prompt, options });
-      assert.match(prompt, /أسماء الخامات المتداولة في سوق المنظفات المصري/);
+      assert.match(prompt, /أسماء الخامات المتداولة في السوق المصري/);
       assert.equal(options.temperature, 0.3);
       return { text: "تركيبة مبدئية عملية", provider: "openai" };
     }

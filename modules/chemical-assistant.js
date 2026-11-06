@@ -93,26 +93,26 @@ async function saveConversationContext(pool, { chatId, assistantMessageId, conte
 function buildPrompt(question) {
   const safetyRules = RULES.map(rule => "- " + rule.key + ": " + rule.trigger + " — " + rule.action).join("\n");
   const marketNames = [
-    "افهم أسماء الخامات الدارجة في السوق المصري ولا تطلب من المستخدم تحويلها إلى أسماء علمية لمجرد اختلاف التسمية.",
-    "أمثلة استرشادية: تكسابون أو N70 غالبًا SLES؛ سلفونيك أو LABSA غالبًا حمض ألكيل بنزين سلفونيك الخطي؛ بيتائين غالبًا Cocamidopropyl Betaine؛ صودا كاوية هي هيدروكسيد الصوديوم؛ ملح الطعام هو كلوريد الصوديوم؛ جلسرين هو Glycerol؛ وCMC هو كربوكسي ميثيل سليلوز.",
-    "هذه مطابقة أولية للأسماء التجارية وليست ضمانًا لهوية كل مورد: كمبرلان وتيلوز وبعض الأسماء التجارية قد تختلف مواصفاتها؛ اقبل الاسم المتداول واطلب صورة الملصق أو التركيز فقط إذا كان الاختلاف يغيّر السلامة أو الحساب.",
-    "لا تطلب الاسم العلمي من المستخدم إذا كان الاسم التجاري معروفًا بما يكفي. لا تطلب إعادة كتابة الخامات التي ذكرها في الرسائل السابقة.",
-    "إذا كانت الرسالة ردًا على إجابة سابقة، اعتبر رسائل المستخدم السابقة المرفقة جزءًا من نفس المحادثة، وادمجها بدل البدء من الصفر.",
-    "لا تطرح قائمة طويلة من الأسئلة. اسأل سؤالًا توضيحيًا واحدًا فقط إذا كانت معلومة أساسية تمنع اختيار التركيبة، مثل هل المنتج سائل أطباق أم صابون يدين أم سائل غسيل.",
-    "عند توافر المعلومات، قدّم إجابة عملية مباشرة: جدول تركيبة مبدئية محسوبة على 100 كجم، اسم الخامة المتداول، وظيفتها، النسبة والكمية، ثم ترتيب الإضافة وطريقة التصنيع وضبط pH واللزوجة واختبارات الجودة.",
-    "ميّز بين نسبة المادة التجارية كما تُشترى ونسبة المادة الفعالة. اذكر افتراضات التركيز بوضوح، ولا تخترع مواصفة مورد أو نسبة لا يمكن تبريرها.",
-    "لا تعد المستخدم بجودة تضاهي الشركات لمجرد الوصفة؛ اشرح أن الوصول إليها يتطلب اختبار تنظيف ورغوة وثبات وميكروبيولوجي وتوافق العبوة ومراجعة التكلفة.",
-    "إذا نقص تركيز خامة مؤثرة، لا ترفض السؤال كله: قدم ما يمكن تأكيده واسأل عن التركيز أو الدرجة التجارية المحددة فقط.",
+    "استخدم أسماء الخامات المتداولة في سوق المنظفات المصري أولًا لأنها الأسهل لصاحب المحل، ثم أضف الاسم العلمي أو الاختصار بين قوسين عند الحاجة.",
+    "أمثلة شائعة مع ضرورة مراعاة اختلاف درجات الموردين: تكسابون أو تكسابون N70 (غالبًا SLES)، سلفونيك (غالبًا LABSA)، صودا كاوية (هيدروكسيد الصوديوم NaOH)، بيتائين (غالبًا CAPB)، كمبرلان (غالبًا CDEA/مقوّي رغوة حسب الدرجة)، ملح (كلوريد الصوديوم)، جلسرين، إيديتا أو EDTA، CMC، تيلوز، تراي إيثانول أمين أو TEA، صودا آش (كربونات الصوديوم)، حمض ليمون (حمض الستريك)، عطر، لون، ومادة حافظة مناسبة.",
+    "لا تجزم بالتركيب العلمي لاسم تجاري يختلف بين الموردين: كمبرلان وتيلوز وأسماء الدرجات التجارية قد تختلف. اذكر المطابقة على أنها شائعة أو محتملة، واطلب صورة العبوة أو النشرة فقط عندما يؤثر اختلاف الدرجة في السلامة أو الحساب.",
+    "لا تطلب من المستخدم تحويل أسماء السوق إلى أسماء علمية، ولا تطلب منه سرد الخامات المتاحة قبل أن تقترح تركيبة. افترض أنه يريد معرفة ما يشتريه ويحضّره، لا أنه يشترط استخدام الموجود لديه.",
+    "لا تطلب إعادة كتابة الخامات أو المعلومات التي ذكرها في الرسائل السابقة المرفقة. إذا كان الطلب ردًا على إجابة سابقة، أكمل من نفس السياق ولا تبدأ من الصفر.",
   ].join("\n");
   return [
-    "أنت مستشار فني متخصص في تصنيع المنظفات التجارية للسوق المصري، وتخاطب أصحاب الورش والمحلات بلغة عربية مصرية واضحة ومحترمة.",
-    "كن عمليًا ومباشرًا، ولا تتعامل مع المستخدم كطالب كيمياء مطالب بحفظ الأسماء العلمية. ابدأ بفهم هدف المنتج والخامات المتاحة.",
+    "أنت مستشار فني عملي متخصص في تركيبات وتصنيع المنظفات التجارية المناسبة لأصحاب المحلات والورش الصغيرة في السوق المصري. اكتب بعربية مصرية واضحة ومحترمة، واشرح المصطلحات دون تعقيد أكاديمي.",
+    "مهمتك أن تساعد المستخدم فعليًا في الوصول إلى تركيبة مناسبة، لا أن تكتفي بالنصائح العامة أو التحذيرات أو الاعتذار. إذا طلب تركيبة وذكر نوع المنتج، فاقترح تركيبة مبدئية قابلة للفهم والتجربة على نطاق صغير باستخدام خامات متداولة في مصر. لا تتهرب بطلب قائمة الخامات التي يملكها.",
+    "اختر تركيبة واحدة مناسبة للهدف والميزانية ومستوى صاحب المحل. قدّم بديلًا اقتصاديًا أو أعلى جودة فقط إذا طلب المستخدم المقارنة أو كان الفرق مفيدًا بوضوح. إذا لم يحدد الميزانية، اختر حلًا عمليًا متوازن التكلفة والجودة واذكر افتراضك.",
     marketNames,
-    "عندما تسمح المعلومات، قدّم تركيبة شعبية اقتصادية وتركيبة أعلى جودة؛ وإذا كانت البيانات لا تكفي، اسأل سؤالًا واحدًا فقط. لا تكرر السؤال ولا تتهرب بطلب قائمة الخامات إذا كانت موجودة في نص المحادثة.",
-    "اذكر خطوات التشغيل بالتسلسل، واحتياطات التعامل مع الصودا الكاوية والمواد المركزة، ولا تقدّم خلطات خطرة. لا تخلط الكلور/المبيض بالأحماض أو الأمونيا.",
+    "عند تقديم تركيبة: اعرض جدولًا واضحًا يحتوي اسم الخامة بالسوق المصري أولًا، والاسم العلمي/الاختصار عند الحاجة، ووظيفة الخامة، والنسبة، والكمية بالكيلوجرام. اجعل الحساب على أساس 100 كجم افتراضيًا، واذكر أن الماء يكمل الوزن إلى 100 كجم. راجع أن مجموع الكميات يساوي 100 كجم وأن النسب تساوي 100%؛ لا تعرض حسابًا غير متزن.",
+    "افصل بوضوح بين وزن الخامة التجارية كما تُشترى ووزن المادة الفعالة. اذكر افتراضات التركيز والدرجة التجارية، مثل تكسابون N70 أو بيتائين بتركيز محدد، ولا تفترض أن كل مورد يبيع الدرجة نفسها. إذا كان تركيز خامة مؤثرًا مجهولًا، قدّم ما يمكن تقديمه على افتراض معلن واسأل سؤالًا واحدًا محددًا عند الضرورة بدل رفض الإجابة كلها.",
+    "بعد الجدول، اشرح ترتيب الإضافة وطريقة التشغيل بأدوات بسيطة وخطوات مرقمة، وما الذي يراقبه صاحب المحل أثناء الخلط. اذكر مجال pH أو طريقة ضبط اللزوجة فقط عندما يكون مناسبًا للمنتج ويمكن تبريره؛ لا تخترع أرقامًا أو جرعات.",
+    "إذا كان نوع المنتج نفسه غير واضح أو كان هناك اختيار واحد يغيّر التركيبة جذريًا، اسأل سؤالًا توضيحيًا واحدًا فقط. لا تسأل أسئلة كثيرة، ولا تجعل توفر الخامات لدى المستخدم شرطًا لتقديم اقتراح.",
+    "لا تدّع أن التركيبة مجرّبة أو معتمدة أو تضاهي منتجًا تجاريًا قبل الاختبار. وضّح باختصار أنها تركيبة مبدئية يلزم اختبار عينة صغيرة منها للتنظيف والرغوة والثبات والتوافق مع العبوة، ثم مراجعة التكلفة قبل الإنتاج أو البيع.",
+    "اذكر احتياطات السلامة المرتبطة بالخامات المستخدمة تحديدًا، وتعامل بحذر مع الصودا الكاوية والأحماض والمواد المركزة. لا تقدّم خطوات لخلط الكلور/المبيض مع الأحماض أو الأمونيا أو المواد الأمينية غير المؤكدة.",
     "قواعد السلامة المحلية الملزمة:\n" + safetyRules,
-    "عند توفر البحث، فضّل نشرات الشركات الفنية TDS/SDS والمراجع العلمية والجامعية، ولا تعتمد على منشورات التواصل الاجتماعي أو صفحات البيع وحدها لإثبات تركيبة أو نسبة. اذكر روابط المصادر المتاحة، وميّز بين المعلومة المؤكدة والاستنتاج، ولا تدّعِ قراءة صفحة كاملة إذا لم يتوفر إلا مقتطفها.",
-    "إذا لم تكن لديك بيانات موثوقة تكفي لنسبة محددة، قل ذلك بوضوح ولا تخترعها حتى لو وجدت تركيبات متداولة على الإنترنت.",
+    "عند توفر البحث، فضّل نشرات الشركات الفنية TDS/SDS والمراجع العلمية والجامعية. لا تعتبر منشورات التواصل الاجتماعي أو صفحات البيع دليلًا كافيًا على صحة تركيبة أو نسبة. ميّز بين المعلومة المؤكدة والافتراض، ولا تدّعِ قراءة مصدر لم تتح لك بياناته.",
+    "إذا لم تتوفر بيانات موثوقة لنسبة معينة، لا تخترعها. اشرح موضع عدم اليقين وقدّم بديلًا آمنًا أو اطلب المعلومة الوحيدة اللازمة.",
     "أخرج محتوى الإجابة فقط دون إنشاء روابط؛ سيضيف البوت روابط القناة وGoogle وYouTube من قوالب ثابتة.",
     "سؤال المستخدم وسياق رسائله السابقة:\n" + String(question || "").slice(0, 7000)
   ].join("\n");
@@ -124,11 +124,11 @@ function isTemporaryProviderFailure(error) {
     /timeout|ECONNRESET|ECONNREFUSED|EAI_AGAIN|socket hang up|overloaded|temporarily unavailable/i.test(message);
 }
 
-async function answer(ai, question, onError = null, fallbackAI = null) {
+async function answer(ai, question, onError = null) {
   const gate = safetyGate(question);
   if (gate) return gate;
   if (!ai || typeof ai.generate !== "function") {
-    const error = new Error("Gemini AI provider is not configured");
+    const error = new Error("OpenAI chemical assistant provider is not configured");
     if (typeof onError === "function") { try { onError(error); } catch {} }
     return SERVICE_CONFIG_FALLBACK;
   }
@@ -137,40 +137,24 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
     if (!answerText) return SAFE_FALLBACK;
     const provider = String(result?.provider || "").toLowerCase();
     const providerLabel = provider.includes("groq") ? "Groq"
-      : provider.includes("gemini") ? "Gemini"
       : provider.includes("openai") ? "OpenAI"
+      : provider.includes("gemini") ? "Gemini"
       : provider.includes("openrouter") ? "OpenRouter"
       : "";
     return providerLabel ? `🤖 الخدمة مقدمة بتقنيات ${providerLabel}\n\n${answerText}` : answerText;
   };
   try {
+    // OpenAI is primary; createAI rotates its configured OpenAI keys, then tries Groq within this shared budget.
     const result = await ai.generate(buildPrompt(question), {
-      temperature: 0.3, googleSearch: true, requestBudgetMs: 15000
+      temperature: 0.3,
+      webSearch: false,
+      timeoutMs: 3500,
+      requestBudgetMs: 14000
     });
     return formatAnswer(result);
-  } catch (primaryError) {
-    if (fallbackAI && typeof fallbackAI.generate === "function" && isTemporaryProviderFailure(primaryError)) {
-      console.warn(`[CHEMICAL_FALLBACK] primary=gemini outcome=starting reason=temporary_service_failure`);
-      try {
-        // Keep the emergency answer path fast: web search is optional for a
-        // formulation question and must not block the fallback model.
-        const result = await fallbackAI.generate(buildPrompt(question), {
-          temperature: 0.3,
-          webSearch: false,
-          timeoutMs: 3500,
-          requestBudgetMs: 14000
-        });
-        if (!String(result?.text || "").trim()) throw new Error("OpenAI fallback returned an empty response");
-        console.info(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=succeeded`);
-        return formatAnswer(result);
-      } catch (fallbackError) {
-        console.warn(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=failed error=${String(fallbackError?.message || "provider_error").slice(0, 220)}`);
-        if (typeof onError === "function") { try { onError(fallbackError); } catch {} }
-        return getProviderFallback(fallbackError);
-      }
-    }
-    if (typeof onError === "function") { try { onError(primaryError); } catch {} }
-    return getProviderFallback(primaryError);
+  } catch (error) {
+    if (typeof onError === "function") { try { onError(error); } catch {} }
+    return getProviderFallback(error);
   }
 }
 module.exports = { answer, buildPrompt, buildConversationInput, ensureConversationContextSchema, resolveConversationInput, saveConversationContext, safetyGate, isChemicalQuestion, getProviderFallback, isTemporaryProviderFailure, SAFE_FALLBACK, SERVICE_UNAVAILABLE_FALLBACK, SERVICE_CONFIG_FALLBACK, RULES };

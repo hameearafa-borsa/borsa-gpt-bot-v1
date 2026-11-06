@@ -29,7 +29,7 @@ assert.match(prompt, /مجموع الكميات يساوي 100 كجم/);
 assert.match(prompt, /TDS\/SDS/);
 assert.match(prompt, /unknown-mixture/);
 assert.match(prompt, /bleach-acid-warning/);
-assert.match(prompt, /لا تخلط الكلور\/المبيض مع الأحماض أو الأمونيا/);
+assert.match(prompt, /لا تقدّم خطوات لخلط الكلور\/المبيض مع الأحماض أو الأمونيا/);
 assert.doesNotMatch(prompt, /ابدأ بفهم هدف المنتج والخامات المتاحة/);
 
 const followUp = chemistry.buildConversationInput({

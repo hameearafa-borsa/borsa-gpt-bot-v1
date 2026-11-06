@@ -34,7 +34,7 @@ assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
 assert.ok(index.includes('createAI({ provider: "gemini" })'), "chemical assistant must be pinned to Google only");
-assert.ok(index.includes('const chemicalFallbackAI = createAI({ provider: "openai" })'), "OpenAI is only wired as the chemical assistant fallback");
+assert.ok(index.includes('const chemicalFallbackAI = createAI({ provider: "openai", fallbackProviders: ["groq"] })'), "chemical rescue should rotate OpenAI keys before trying Groq");
 
 function provider(name, providerName, run) {
   return { name, provider: providerName, run };

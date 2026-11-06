@@ -63,7 +63,7 @@ try {
   process.exit(1);
 }
 
-const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 70000 });
+const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
 const chemicalAI = createAI({ provider: "openai", fallbackProviders: ["groq"] });
 let botUserId = null;

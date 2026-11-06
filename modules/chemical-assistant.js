@@ -141,7 +141,7 @@ async function answer(ai, question, onError = null) {
       : provider.includes("gemini") ? "Gemini"
       : provider.includes("openrouter") ? "OpenRouter"
       : "";
-    return providerLabel ? `🤖 الخدمة مقدمة بتقنيات ${providerLabel}\\n\\n${answerText}` : answerText;
+    return providerLabel ? `🤖 الخدمة مقدمة بتقنيات ${providerLabel}\n\n${answerText}` : answerText;
   };
   try {
     // OpenAI is primary; createAI rotates its configured OpenAI keys, then tries Groq within this shared budget.

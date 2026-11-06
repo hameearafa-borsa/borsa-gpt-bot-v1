@@ -79,7 +79,8 @@ assert.match(chemistry.getProviderFallback(new Error("AI HTTP 400: invalid reque
       fallbackCalls++;
       assert.equal(options.webSearch, false, "OpenAI rescue must not require web search");
       assert.equal(options.model, undefined, "fallback should use the already configured OPENAI_MODEL");
-      assert.equal(options.timeoutMs, 14000);
+      assert.equal(options.timeoutMs, 3500, "each fallback key receives a short bounded timeout");
+      assert.equal(options.requestBudgetMs, 14000, "fallback keys and providers share a bounded 14-second budget");
       return { text: "إجابة فنية عملية مباشرة", provider: "openai" };
     }
   });

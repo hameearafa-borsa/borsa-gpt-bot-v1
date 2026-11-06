@@ -23,6 +23,7 @@ assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
 assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
 assert.ok(aiSource.includes("isProviderWideFailure(e) || (!retryable && !credentialError)"), "provider-wide failures should skip sibling keys when cross-provider fallback is enabled");
+const groqSection = aiSource.slice(aiSource.indexOf("function groqProvider"), aiSource.indexOf("function geminiProvider"));
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.match(groqSection, /max_tokens: 2000/);
 assert.match(groqSection, /Number\(options\.timeoutMs \|\| process\.env\.AI_TIMEOUT_MS \|\| 30000\)/);

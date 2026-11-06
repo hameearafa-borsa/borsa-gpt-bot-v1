@@ -28,7 +28,8 @@ const chemical = require("../modules/chemical-assistant");
   assert.match(recovered, /OpenAI/, "the fallback provider should be identified");
   assert.equal(fallbackOptions.length, 1, "the OpenAI fallback should be called exactly once");
   assert.equal(fallbackOptions[0].options.webSearch, false, "web search must not be mandatory on the rescue path");
-  assert.equal(fallbackOptions[0].options.timeoutMs, 14000, "the rescue request receives a bounded 14-second timeout");
+  assert.equal(fallbackOptions[0].options.timeoutMs, 3500, "each fallback key receives a short bounded timeout");
+  assert.equal(fallbackOptions[0].options.requestBudgetMs, 14000, "all fallback keys and providers share a bounded 14-second budget");
 
   const missingErrors = [];
   const missingFallback = await chemical.answer(null, "عايز تركيبة صابون سائل", error => missingErrors.push(error));

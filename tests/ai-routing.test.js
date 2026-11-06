@@ -24,7 +24,10 @@ assert.ok(aiSource.includes("isProviderWideFailure(e) || (!retryable && !credent
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
-assert.ok(index.includes('createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] })'));
+assert.ok(index.includes('createAI({ provider: "openai", fallbackProviders: ["groq"] })'), "chemical assistant must use OpenAI first and Groq only as fallback");
+assert.match(index, /canManage\(ctx\.telegram, m\.chatId, m\.userId\)/, "chemical command must be limited to bot owner or actual group creator");
+assert.doesNotMatch(index, /chemical\.isChemicalQuestion\(chemicalInput\)/, "ordinary group messages must never trigger the chemical assistant");
+assert.match(index, /if \(!args\.trim\(\)\)/, "empty /chemical commands must not consume an AI request");
 
 function provider(name, providerName, run) {
   return { name, provider: providerName, run };

@@ -25,3 +25,13 @@ assert.ok(handler.includes('canManage(ctx.telegram, m.chatId, m.userId)'),"group
 assert.match(source,/bot\.action\(\/\^prv:\(approve\|new\|ignore\):\(\\d\+\)\$\/, async ctx => \{\s*\/\/ Stop Telegram's callback spinner before database and administrator API checks\.\s*await ctx\.answerCbQuery\(/);
 assert.match(source,/bot\.action\(\/\^prv:edit:\(\\d\+\)\$\/, async ctx => \{\s*\/\/ Acknowledge immediately so Telegram does not leave the button spinning while access is checked\.\s*await ctx\.answerCbQuery\(/);
 console.log("Borsa runtime surface and settings authorization test: OK");
+
+const chemicalStart=source.indexOf("if (isChemicalCommand)");
+const chemicalEnd=source.indexOf('if (cmd === "weather"',chemicalStart);
+assert.ok(chemicalStart>=0 && chemicalEnd>chemicalStart,"chemical command handler must exist");
+const chemicalHandler=source.slice(chemicalStart,chemicalEnd);
+assert.match(chemicalHandler,/canManage\(ctx\.telegram, m\.chatId, m\.userId\)/,"only the bot master or actual group creator may invoke chemistry");
+assert.match(chemicalHandler,/serviceSettings\.isServiceEnabled\(db\.pool, "chemical", m\.chatId\)/);
+assert.match(chemicalHandler,/if \(!args\.trim\(\)\)/,"empty command must not invoke AI");
+assert.match(chemicalHandler,/chemical\.answer\(chemicalAI, question/);
+assert.doesNotMatch(source,/chemical\.isChemicalQuestion\(chemicalInput\)/,"ordinary messages must not be analyzed for chemical questions");

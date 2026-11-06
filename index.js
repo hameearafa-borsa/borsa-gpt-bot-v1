@@ -65,7 +65,7 @@ try {
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
-const chemicalAI = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"] });
+const chemicalAI = createAI({ provider: "openai", fallbackProviders: ["groq"] });
 let botUserId = null;
 let stopDeals = () => {};
 let stopCatalogs = () => {};
@@ -547,9 +547,20 @@ bot.on("text", async ctx => {
   }
 
   if (isChemicalCommand) {
-    if (!(await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) { await ctx.reply("المساعد الكيميائي متوقف لهذه المجموعة حاليًا."); return; }
-    if (!["group", "supergroup"].includes(m.chatType)) return;
-    const question = args || "اكتب سؤالك الكيميائي بوضوح.";
+    if (![ "group", "supergroup" ].includes(m.chatType)) return;
+    if (!(await canManage(ctx.telegram, m.chatId, m.userId))) {
+      await ctx.reply("المساعد الكيميائي متاح لمالك البوت أو منشئ المجموعة فقط.");
+      return;
+    }
+    if (!(await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) {
+      await ctx.reply("المساعد الكيميائي متوقف لهذه المجموعة حاليًا.");
+      return;
+    }
+    if (!args.trim()) {
+      await ctx.reply("اكتب سؤالك بعد الأمر /chemical، مثل: /chemical عايز تركيبة جيل غسيل ملابس.");
+      return;
+    }
+    const question = args.trim();
     const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(question);
     const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";

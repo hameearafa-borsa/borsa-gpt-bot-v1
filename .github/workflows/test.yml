@@ -13,6 +13,7 @@ on:
       - chemical-assistant-gemini-reply-once
       - feature/deals-two-newsletters-carrefour-kazyon-2026-10-25
       - fix/deals-fetch-resilience-2026-10-30
+      - feature/chemical-openai-owner-market-prompt-2026-11-07
 
 permissions:
   contents: read

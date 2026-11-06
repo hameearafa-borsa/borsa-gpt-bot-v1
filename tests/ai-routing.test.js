@@ -34,11 +34,11 @@ assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
 assert.ok(index.includes('const chemicalAI = createAI({ provider: "openai", fallbackProviders: ["groq"] })'), "chemical assistant must use OpenAI as primary and Groq only after OpenAI key rotation");
-assert.match(index, /canManage\\(ctx\\.telegram, m\\.chatId, m\\.userId\\)/, "chemical command must be limited to the bot master or the actual group creator");
-assert.match(index, /isAuthorizedChat\\(m\\.chatId\\)/, "chemical command must remain limited to approved groups");
-assert.match(index, /chemical\\.answer\\(chemicalAI, question/);
-assert.doesNotMatch(index, /chemical\\.isChemicalQuestion\\(chemicalInput\\)/, "ordinary group messages must never trigger the chemical assistant");
-assert.doesNotMatch(index, /chemical\\.resolveConversationInput\\(db\\.pool, ctx\\.message, text\\)/, "ordinary group messages must not be read for chemical intent");
+assert.match(index, /canManage\(ctx\.telegram, m\.chatId, m\.userId\)/, "chemical command must be limited to the bot master or the actual group creator");
+assert.match(index, /isAuthorizedChat\(m\.chatId\)/, "chemical command must remain limited to approved groups");
+assert.match(index, /chemical\.answer\(chemicalAI, question/);
+assert.doesNotMatch(index, /chemical\.isChemicalQuestion\(chemicalInput\)/, "ordinary group messages must never trigger the chemical assistant");
+assert.doesNotMatch(index, /chemical\.resolveConversationInput\(db\.pool, ctx\.message, text\)/, "ordinary group messages must not be read for chemical intent");
 
 function provider(name, providerName, run) {
   return { name, provider: providerName, run };

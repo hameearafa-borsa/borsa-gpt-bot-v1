@@ -29,7 +29,7 @@ assert.ok(!geminiSection.includes("generationConfig"), "Gemini request should om
 assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
 assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
-assert.ok(aiSource.includes("isProviderWideFailure(e) || (!retryable && !credentialError)"), "provider-wide failures should skip sibling keys when cross-provider fallback is enabled");
+assert.ok(aiSource.includes("(isProviderWideFailure(e) && !rotateOpenAIKeyAfterTimeout) || (!retryable && !credentialError)"), "provider-wide failures should skip sibling keys except for bounded OpenAI timeout key rotation");
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));

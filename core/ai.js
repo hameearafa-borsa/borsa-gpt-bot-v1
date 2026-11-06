@@ -83,7 +83,7 @@ function groqProvider(key, model) {
         { role: "system", content: "أنت المساعد الكيميائي لبوت بورصة المنظفات. أجب بالعربية الواضحة، لا تخترع نسبًا أو بيانات تجارية، واذكر مخاطر السلامة بوضوح." },
         { role: "user", content: String(prompt || "") }
       ]
-    }, { authorization: `Bearer ${key}` });
+    }, { authorization: `Bearer ${key}` }, Number(options.timeoutMs) || undefined);
     return {
       text: data.choices?.[0]?.message?.content || "",
       provider: "groq",
@@ -348,12 +348,21 @@ function createAI(options = {}) {
     const providerOrder = allowCrossProvider ? selected : selected.filter(p => p.provider === selected[0].provider);
     let last;
     let skipProvider = null;
+    const requestBudgetMs = Math.max(0, Number(options.requestBudgetMs) || 0);
+    const deadlineAt = requestBudgetMs ? Date.now() + requestBudgetMs : 0;
     for (let i = 0; i < providerOrder.length; i++) {
       const p = providerOrder[i];
       if (skipProvider === p.provider) continue;
       if (skipProvider && skipProvider !== p.provider) skipProvider = null;
+      if (deadlineAt && deadlineAt - Date.now() <= 0) break;
       try {
-        const result = await p.run(prompt, options);
+        const attemptOptions = { ...options };
+        if (deadlineAt) {
+          const remainingMs = deadlineAt - Date.now();
+          const configuredTimeoutMs = Math.max(1, Number(options.timeoutMs) || remainingMs);
+          attemptOptions.timeoutMs = Math.max(1, Math.min(configuredTimeoutMs, remainingMs));
+        }
+        const result = await p.run(prompt, attemptOptions);
         if (!String(result?.text || "").trim()) {
           const error = new Error("AI provider returned an empty response");
           error.aiProvider = p.provider;
@@ -370,7 +379,12 @@ function createAI(options = {}) {
         console.warn(`[AI_FAIL] provider=${p.provider} key_slot=${p.name} retryable=${retryable} credential_error=${credentialError} error=${redactString(e?.message || "provider_error")}`);
         // Invalid credentials may be isolated to one key slot. Do not retry permanent
         // model/request errors across every key of the same provider.
-        if (isProviderWideFailure(e) || (!retryable && !credentialError)) {
+        // A timeout can be isolated to one OpenAI credential/connection path.
+        // Try the next configured OpenAI key within the shared request budget;
+        // keep skipping sibling keys for explicit provider-wide 5xx failures.
+        const rotateOpenAIKeyAfterTimeout = p.provider === "openai" &&
+          /AI timeout|ETIMEDOUT|timed? ?out/i.test(String(e?.message || ""));
+        if ((isProviderWideFailure(e) && !rotateOpenAIKeyAfterTimeout) || (!retryable && !credentialError)) {
           if (!allowCrossProvider) throw e;
           skipProvider = p.provider;
         }

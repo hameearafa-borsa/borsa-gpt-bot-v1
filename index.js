@@ -563,8 +563,8 @@ bot.on("text", async ctx => {
     const question = args.trim();
     const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(question);
-    const mention = ctx.from?.username ? `@${ctx.from.username}\\n` : "";
-    const body = `🧪 المساعد الكيميائي\\n\\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\\n\\n${renderChemicalLinks(links)}` : ""}\\n\\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";
+    const body = `🧪 المساعد الكيميائي\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });
     return;
   }

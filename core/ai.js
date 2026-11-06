@@ -46,8 +46,9 @@ function openAIProvider(key, model) {
     const data = await requestJson("https://api.openai.com/v1/responses", {
       model: model || "gpt-6-luna",
       instructions: "أنت محرك GPT Core لبوت بورصة المنظفات. لا تخترع بيانات تجارية. أخرج المطلوب بدقة وبالعربية عند الحاجة.",
-      input: String(prompt || "")
-    }, { authorization: `Bearer ${key}` });
+      input: String(prompt || ""),
+      max_output_tokens: 2000
+    }, { authorization: `Bearer ${key}` }, Number(options.timeoutMs || process.env.AI_TIMEOUT_MS || 30000));
     const text = data.output_text || (data.output || []).flatMap(item => item.content || []).filter(part => part.type === "output_text").map(part => part.text || "").join("");
     return { text, provider: "openai", model: model || "gpt-6-luna" };
   };
@@ -62,8 +63,9 @@ function groqProvider(key, model) {
       messages: [
         { role: "system", content: "أنت المساعد الكيميائي لبوت بورصة المنظفات. أجب بالعربية الواضحة، لا تخترع نسبًا أو بيانات تجارية، واذكر مخاطر السلامة بوضوح." },
         { role: "user", content: String(prompt || "") }
-      ]
-    }, { authorization: `Bearer ${key}` });
+      ],
+      max_tokens: 2000
+    }, { authorization: `Bearer ${key}` }, Number(options.timeoutMs || process.env.AI_TIMEOUT_MS || 30000));
     return {
       text: data.choices?.[0]?.message?.content || "",
       provider: "groq",

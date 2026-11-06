@@ -33,8 +33,12 @@ assert.ok(aiSource.includes("(isProviderWideFailure(e) && !rotateOpenAIKeyAfterT
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
-assert.ok(index.includes('createAI({ provider: "gemini" })'), "chemical assistant must be pinned to Google only");
-assert.ok(index.includes('const chemicalFallbackAI = createAI({ provider: "openai", fallbackProviders: ["groq"] })'), "chemical rescue should rotate OpenAI keys before trying Groq");
+assert.ok(index.includes('const chemicalAI = createAI({ provider: "openai", fallbackProviders: ["groq"] })'), "chemical assistant must use OpenAI as primary and Groq only after OpenAI key rotation");
+assert.match(index, /canManage\\(ctx\\.telegram, m\\.chatId, m\\.userId\\)/, "chemical command must be limited to the bot master or the actual group creator");
+assert.match(index, /isAuthorizedChat\\(m\\.chatId\\)/, "chemical command must remain limited to approved groups");
+assert.match(index, /chemical\\.answer\\(chemicalAI, question/);
+assert.doesNotMatch(index, /chemical\\.isChemicalQuestion\\(chemicalInput\\)/, "ordinary group messages must never trigger the chemical assistant");
+assert.doesNotMatch(index, /chemical\\.resolveConversationInput\\(db\\.pool, ctx\\.message, text\\)/, "ordinary group messages must not be read for chemical intent");
 
 function provider(name, providerName, run) {
   return { name, provider: providerName, run };
@@ -360,7 +364,7 @@ try {
     provider("GROQ_API_KEY", "groq", async () => { googleOnlyCalls.push("groq"); return { text: "must not run", provider: "groq" }; })
   ] });
   await assert.rejects(googleOnly.generate("chemical test"));
-  assert.deepEqual(googleOnlyCalls, ["gemini"], "chemical AI must never fall back to OpenAI or Groq");
+  assert.deepEqual(googleOnlyCalls, ["gemini"], "an explicitly Gemini-only provider selection must not use other providers");
 
   const calls = [];
   const providers = [
@@ -421,7 +425,7 @@ try {
   assert.equal(groqRecovered.provider, "groq");
   assert.deepEqual(groqRescueCalls, ["openai-1", "openai-2", "openai-3", "groq-1", "groq-2"], "all configured OpenAI keys should be tried before Groq, which can rotate to its second key on a key-specific 429");
 
-  assert.ok(index.includes("chemical.answer(chemicalAI, chemicalInput") && index.includes("}), chemicalFallbackAI);"), "automatic group chemical questions must receive the same OpenAI/Groq rescue path as /chemical");
+
 
   const credentialCalls = [];
   const credentialProviders = [

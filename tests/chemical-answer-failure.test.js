@@ -11,35 +11,51 @@ const chemical = require("../modules/chemical-assistant");
       throw error;
     }
   };
-  const fallback = await chemical.answer(failingAI, "عايز تركيبة صابون سائل", error => errors.push(error));
-  assert.equal(fallback, chemical.SAFE_FALLBACK, "provider failure should return the safe fallback");
-  assert.equal(errors.length, 1, "provider failure should invoke the diagnostics callback exactly once");
+  const unavailable = await chemical.answer(
+    failingAI,
+    "عايز تركيبة صابون سائل",
+    error => errors.push(error)
+  );
+  assert.match(unavailable, /مشغولة أو غير متاحة مؤقتًا/);
+  assert.equal(errors.length, 1, "provider failure should invoke diagnostics exactly once");
   assert.match(errors[0].message, /503/);
 
-  const fallbackOptions = [];
-  const fallbackAI = {
+  const primaryOptions = [];
+  const primaryAI = {
     async generate(prompt, options) {
-      fallbackOptions.push({ prompt, options });
-      return { text: "إجابة احتياطية عملية", provider: "openai" };
+      primaryOptions.push({ prompt, options });
+      assert.match(prompt, /أسماء الخامات المتداولة في سوق المنظفات المصري/);
+      assert.equal(options.webSearch, false);
+      assert.equal(options.timeoutMs, 3500);
+      assert.equal(options.requestBudgetMs, 14000);
+      return { text: "تركيبة عملية مناسبة لصاحب المحل", provider: "openai" };
     }
   };
-  const recovered = await chemical.answer(failingAI, "مطلوب تركيبة جيل سائل لغسيل الملابس ذات جودة عالية", error => errors.push(error), fallbackAI);
-  assert.match(recovered, /إجابة احتياطية عملية/, "OpenAI should rescue the answer when Gemini is temporarily unavailable");
-  assert.match(recovered, /OpenAI/, "the fallback provider should be identified");
-  assert.equal(fallbackOptions.length, 1, "the OpenAI fallback should be called exactly once");
-  assert.equal(fallbackOptions[0].options.webSearch, false, "web search must not be mandatory on the rescue path");
-  assert.equal(fallbackOptions[0].options.timeoutMs, 3500, "each fallback key receives a short bounded timeout");
-  assert.equal(fallbackOptions[0].options.requestBudgetMs, 14000, "all fallback keys and providers share a bounded 14-second budget");
+  const recovered = await chemical.answer(
+    primaryAI,
+    "مطلوب تركيبة جيل سائل لغسيل الملابس ذات جودة عالية"
+  );
+  assert.match(recovered, /تقنيات OpenAI/);
+  assert.match(recovered, /تركيبة عملية مناسبة لصاحب المحل/);
+  assert.equal(primaryOptions.length, 1);
 
   const missingErrors = [];
-  const missingFallback = await chemical.answer(null, "عايز تركيبة صابون سائل", error => missingErrors.push(error));
-  assert.equal(missingFallback, chemical.SAFE_FALLBACK);
-  assert.equal(missingErrors.length, 1, "missing provider should be diagnosable");
+  const missingConfig = await chemical.answer(
+    null,
+    "عايز تركيبة صابون سائل",
+    error => missingErrors.push(error)
+  );
+  assert.equal(missingConfig, chemical.SERVICE_CONFIG_FALLBACK);
+  assert.equal(missingErrors.length, 1, "missing provider configuration should be diagnosable");
 
   const safetyErrors = [];
-  const warning = await chemical.answer(failingAI, "هل أخلط الكلور مع حمض الفلاش؟", error => safetyErrors.push(error));
+  const warning = await chemical.answer(
+    failingAI,
+    "هل أخلط الكلور مع حمض الفلاش؟",
+    error => safetyErrors.push(error)
+  );
   assert.match(warning, /لا تخلط/);
-  assert.equal(safetyErrors.length, 0, "safety gate should not call Gemini or report a provider failure");
+  assert.equal(safetyErrors.length, 0, "safety gate must stop before making a provider request");
 
   console.log("chemical answer failure diagnostics tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -67,9 +67,9 @@ try {
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
 const ai = createAI();
-// Gemini remains primary; OpenAI is reserved for a searched fallback when Gemini is temporarily unavailable.
+// Gemini remains primary; chemical rescue rotates OpenAI keys, then tries Groq within a shared time budget.
 const chemicalAI = createAI({ provider: "gemini" });
-const chemicalFallbackAI = createAI({ provider: "openai" });
+const chemicalFallbackAI = createAI({ provider: "openai", fallbackProviders: ["groq"] });
 let botUserId = null;
 let stopDeals = () => {};
 let stopCatalogs = () => {};
@@ -702,7 +702,7 @@ bot.on(["text", "photo"], async ctx => {
   // In approved groups, automatically answer likely chemistry questions once per incoming message.
   const chemicalInput = await chemical.resolveConversationInput(db.pool, ctx.message, text);
   if (ctx.message && ["group", "supergroup"].includes(m.chatType) && chemical.isChemicalQuestion(chemicalInput) && (await serviceSettings.isServiceEnabled(db.pool, "chemical", m.chatId))) {
-    const answer = await chemical.answer(chemicalAI, chemicalInput, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: chemicalInput, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
+    const answer = await chemical.answer(chemicalAI, chemicalInput, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: chemicalInput, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }), chemicalFallbackAI);
     const links = buildChemicalLinks(chemicalInput);
     const body = `🧪 المساعد الكيميائي\n\n${ctx.from?.username ? `@${ctx.from.username}\n` : ""}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
     const sent = await ctx.reply(body, { reply_to_message_id: m.messageId, parse_mode: "HTML", disable_web_page_preview: true });

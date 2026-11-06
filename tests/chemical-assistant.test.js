@@ -39,7 +39,7 @@ assert.equal(links.escapeHtml("<b>نص & تجربة</b>"), "&lt;b&gt;نص &amp; 
 console.log("chemical assistant routing, safety, and links tests: OK");
 
 const marketPrompt = chemistry.buildPrompt("عايز تركيبة جيل غسيل ملابس");
-assert.match(marketPrompt,/أسماء الخامات المتداولة في سوق المنظفات المصري/);
+assert.match(marketPrompt,/أسماء الخامات المتداولة في السوق المصري/);
 assert.match(marketPrompt,/تكسابون أو تكسابون N70/);
 assert.match(marketPrompt,/سلفونيك/);
 assert.match(marketPrompt,/صودا كاوية/);

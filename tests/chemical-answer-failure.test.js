@@ -23,7 +23,7 @@ const chemical = require("../modules/chemical-assistant");
       openaiCalls.push({ prompt, options });
       assert.match(prompt, /أسماء الخامات المتداولة في السوق المصري/);
       assert.equal(options.temperature, 0.3);
-      assert.equal(options.timeoutMs, 30000);
+      assert.equal(options.timeoutMs, 120000);
       return { text: "تركيبة مبدئية عملية", provider: "openai" };
     }
   }, "عايز تركيبة جيل غسيل ملابس");

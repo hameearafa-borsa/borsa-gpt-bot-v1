@@ -59,7 +59,8 @@ assert.ok(arabicDeals.every(item => !["مترو ماركت", "كازيون", "ب
     ["Metro Market", 0], ["Kazyon", 1], ["BIM", 1]
   ]);
   assert.ok(result.storeStats.every(item => item.ok), "zero offers is coverage information, not a transport failure");
-  assert.equal(result.sourceStats.filter(item => item.ok).length, 2);
+  assert.equal(result.sourceStats.filter(item => item.source.startsWith("snapflyer_filter_") && item.ok).length, 2);
+  assert.equal(result.sourceStats.filter(item => item.source.startsWith("snapflyer_store_")).length, 3);
 
   const verified = await verifyProductUrl("https://snapflyer.io/product/236503", {
     fetchImpl: async url => ({ status: 200, url: String(url) })

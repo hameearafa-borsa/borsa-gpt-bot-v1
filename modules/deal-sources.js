@@ -286,7 +286,7 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
       const diagnostics = extractionDiagnostics(html, sourceName, deals, counters);
       if (sourceName === "carrefour") {
         const responseUrl = response.url ? new URL(response.url) : null;
-        const pageTitle = html.match(/<title\\b[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || "";
+        const pageTitle = html.match(/<title\b[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "";
         diagnostics.responseProfile = {
           contentType: response.headers?.get?.("content-type") || null,
           responseHost: responseUrl?.hostname || null,
@@ -294,9 +294,9 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
           htmlBytes: Buffer.byteLength(html, "utf8"),
           pageTitle: htmlText(pageTitle).slice(0, 120) || null,
           htmlTagCounts: {
-            article: (html.match(/<article\\b/gi) || []).length,
-            div: (html.match(/<div\\b/gi) || []).length,
-            script: (html.match(/<script\\b/gi) || []).length,
+            article: (html.match(/<article\b/gi) || []).length,
+            div: (html.match(/<div\b/gi) || []).length,
+            script: (html.match(/<script\b/gi) || []).length,
             productLike: (html.match(/product|sku|price|offer|promotion/gi) || []).length
           }
         };

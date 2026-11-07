@@ -40,7 +40,7 @@ const arabicMerchantFixture = `
 const arabicDeals = extractSnapFlyerFilteredOffers(arabicMerchantFixture, filter, "https://snapflyer.io/eg/downtown/products?category=cleaning&lang=en&type=laundry-detergent");
 assert.equal(arabicDeals.length, 3, "Arabic retailer names must not cause valid SnapFlyer offers to lose their merchant");
 assert.deepEqual(arabicDeals.map(item => item.merchant), ["Metro Market", "Kazyon", "BIM"]);
-assert.ok(arabicDeals.every(item => !/^(مترو ماركت|كازيون|بيم)\\b/.test(item.title)), "merchant names must be removed from product titles");
+assert.ok(arabicDeals.every(item => !["مترو ماركت", "كازيون", "بيم"].some(name => item.title.startsWith(name))), "merchant names must be removed from product titles");
 
 (async () => {
   const calls = [];

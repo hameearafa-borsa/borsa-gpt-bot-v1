@@ -419,6 +419,22 @@ for (const edition of [editionAmazon, editionOther]) {
  assert.equal(blockedPage.ok, true);
  assert.equal(blockedPage.pageSignal, "captcha_or_block_page",
    "HTTP 200 challenge pages should be distinguished from ordinary empty search results");
+
+ const carrefourProfile = await fetchSearch("carrefour", "", {
+   fetchImpl: async () => ({
+     ok: true,
+     status: 200,
+     url: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers",
+     headers: { get: name => name.toLowerCase() === "content-type" ? "text/html; charset=utf-8" : null },
+     text: async () => "<html><head><title>Welcome | Carrefour Egypt</title></head><body><main><div class='app-shell'>Home</div></main></body></html>"
+   })
+ });
+ assert.equal(carrefourProfile.ok, true);
+ assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.contentType, "text/html; charset=utf-8");
+ assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.pageTitle, "Welcome | Carrefour Egypt");
+ assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.responseHost, "www.carrefouregypt.com");
+ assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.htmlTagCounts.productLike, 0,
+   "Carrefour diagnostics should fingerprint a shell page without exposing response HTML");
 const amazonOnly = await collectDealCandidates({
    edition: "amazon",
    fetchImpl: async url => {

@@ -44,6 +44,18 @@ const noonDivCards = extractCards(noonDivFixture, "noon");
 assert.equal(noonDivCards.length, 1, "Noon product cards rendered as divs should be extracted");
 assert.equal(noonDivCards[0].price, 119.5);
 
+const bilingualProductFixture = `<script type="application/ld+json">${JSON.stringify({
+  "@type": "Product",
+  name: "Persil Laundry Detergent 3 kg",
+  title: "مسحوق برسيل للغسالات 3 كيلو",
+  url: "https://www.jumia.com.eg/persil-bilingual-product",
+  offers: { price: "175", priceCurrency: "EGP" }
+})}</script>`;
+const bilingualProductCards = extractCards(bilingualProductFixture, "jumia");
+assert.equal(bilingualProductCards.length, 1, "bilingual structured product data should still produce one validated offer");
+assert.equal(bilingualProductCards[0].title, "مسحوق برسيل للغسالات 3 كيلو",
+  "when a relevant Arabic product title exists, prefer it over an English structured name");
+
 const noonHydrationFixture = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
   props: { pageProps: { products: [
     { name: "مسحوق برسيل للغسالات 3 كيلو", slug: "/egypt-ar/product/PERSIL123", price: { value: "175.00", currency: "EGP" }, oldPrice: 210 }

@@ -22,6 +22,14 @@ function categoryOf(title) {
   return "detergent";
 }
 function htmlText(value) { return String(value || "").replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#x27;|&#39;/gi,"'").replace(/\s+/g," ").trim(); }
+function productTitle(product) {
+  const fields = ["name", "title", "displayName", "productName", "alternateName", "name_ar", "title_ar"];
+  const candidates = fields.map(key => htmlText(product?.[key])).filter(value => value.length >= 4);
+  const relevantArabic = candidates.find(value =>
+    /[\u0600-\u06FF]/.test(value) && INCLUDE.test(value) && !EXCLUDE.test(value)
+  );
+  return (relevantArabic || candidates[0] || "").slice(0, 180);
+}
 function money(value) {
   const s = toAsciiDigits(String(value || "")).replace(/,/g, "");
   const n = Number((s.match(/\d+(?:\.\d+)?/) || [])[0]);
@@ -81,7 +89,7 @@ function extractStructuredCards(html, sourceName, query = "", counters = null) {
   for (const product of products) {
     const stats = counters?.json;
     if (stats) stats.candidates++;
-    const title = htmlText(product.name || product.title || product.displayName || product.productName || "");
+    const title = productTitle(product);
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, product.url || product.productUrl || product.canonicalUrl || product.slug || product.urlKey); } continue; }
     const offers = product.offers || product.offer || {};
     const rawUrl = product.url || product.productUrl || product.canonicalUrl ||

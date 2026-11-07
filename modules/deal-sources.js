@@ -171,11 +171,27 @@ function extractCards(html, sourceName, query = "", counters = null) {
     const titleMatch = chunk.match(/<h[23][^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/h[23]>/i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*(?:data-qa|data-testid)=["'][^"']*product[-_ ]?name[^"']*["'][^>]*>([\s\S]*?)<\//i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\s\S]*?)<\//i);
+    const noonTitleCandidates = sourceName === "noon"
+      ? [...chunk.matchAll(/<(h[23]|a|img)\\b([^>]*)>([\\s\\S]*?)<\\/\\1>/gi)].flatMap(match => {
+          const attributes = match[2] || "";
+          const values = [match[3]];
+          for (const attribute of ["aria-label", "title", "alt"]) {
+            const found = attributes.match(new RegExp("\\\\b" + attribute + "=[\\\\"']([^\\\\"']+)[\\\\"']", "i"));
+            if (found) values.push(found[1]);
+          }
+          return values;
+        })
+      : [];
     const title = sourceName === "amazon"
       ? amazonCardTitle(chunk) || selectProductTitle([titleMatch?.[1]])
-      : selectProductTitle([titleMatch?.[1]]);
+      : sourceName === "noon"
+        ? selectProductTitle([...noonTitleCandidates, titleMatch?.[1]])
+        : selectProductTitle([titleMatch?.[1]]);
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, ""); } continue; }
-    const href = chunk.match(/<a[^>]+href=["']([^"']+)["']/i)?.[1];
+    const anchorHrefs = [...chunk.matchAll(/<a\\b[^>]*href=["']([^"']+)["'][^>]*>/gi)].map(match => match[1]);
+    const href = sourceName === "noon"
+      ? anchorHrefs.find(value => /\\/(?:egypt-ar\\/)?(?:product|p)\\//i.test(value) || /\\/product[-_/]/i.test(value)) || anchorHrefs[0]
+      : anchorHrefs[0];
     const url = safeProductUrl(href || "", sourceName);
     if (!url) { if (stats) { stats.rejectedUrl++; addRejectionSample(stats, "url", title, href || ""); } continue; }
     const priceMatch = sourceName === "amazon"

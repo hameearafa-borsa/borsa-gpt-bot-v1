@@ -196,9 +196,9 @@ assert.equal(isNewsletterWindow(new Date("2026-10-12T13:59:00.000Z")),false);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T14:00:00.000Z")),true);
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:00:00.000Z")),"amazon"); // 5 PM Cairo
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:00:00.000Z")),"other_sites"); // 6 PM Cairo
-assert.equal(newsletterKindAt(new Date("2026-10-12T08:15:00.000Z")), "catalogs", "10:15 AM Cairo should publish the catalog-offer edition");
-assert.equal(newsletterKindAt(new Date("2026-10-12T08:19:00.000Z")), "catalogs", "catalog edition should tolerate four minutes of scheduler jitter");
-assert.equal(newsletterKindAt(new Date("2026-10-12T08:20:00.000Z")), null, "catalog edition must close after five minutes");
+assert.equal(newsletterKindAt(new Date("2026-10-12T07:15:00.000Z")), "catalogs", "10:15 AM Cairo should publish the catalog-offer edition");
+assert.equal(newsletterKindAt(new Date("2026-10-12T07:19:00.000Z")), "catalogs", "catalog edition should tolerate four minutes of scheduler jitter");
+assert.equal(newsletterKindAt(new Date("2026-10-12T07:20:00.000Z")), null, "catalog edition must close after five minutes");
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:04:00.000Z")),"other_sites", "allow brief startup/timer jitter after 6 PM");
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:05:00.000Z")),null, "close the scheduled window after five minutes");
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:45:00.000Z")),null, "a late boot must not publish the 6 PM newsletter at 6:45 PM");
@@ -610,7 +610,7 @@ const amazonOnly = await collectDealCandidates({
    pool: publicationPool,
    telegram: { sendMessage: async (chatId, message) => { catalogMessages.push({ chatId, message }); return { message_id: 9902 }; } },
    chatIds: [-1001234567890],
-   now: new Date("2026-10-12T08:15:00.000Z"), // 10:15 AM Cairo
+   now: new Date("2026-10-12T07:15:00.000Z"), // 10:15 AM Cairo
    fetcher: async ({ edition }) => {
      catalogFetchEdition = edition;
      return { deals: catalogOffers, errors: [{ source: "snapflyer_filter_bleach", reason: "timeout" }], sourceStats: [{ source: "snapflyer_store_metro_market", ok: true, stage: "validated", extractedCount: 1 }], sourceCount: 9 };

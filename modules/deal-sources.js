@@ -30,12 +30,26 @@ function money(value) {
 function safeProductUrl(raw, sourceName) {
   try {
     if (!SOURCES[sourceName] || !String(raw || "").trim()) return null;
-    const u = new URL(raw, `https://${SOURCES[sourceName].host}`);
+    const normalizedRaw = String(raw).trim().replace(/&amp;/gi, "&");
+    const u = new URL(normalizedRaw, `https://${SOURCES[sourceName].host}`);
     if (u.protocol !== "https:" || u.hostname !== SOURCES[sourceName].host || u.username || u.password || (u.port && u.port !== "443") || u.pathname === "/") return null;
     u.hash = "";
-    // Strip tracking parameters; preserve only the path and essential product identifier.
-    if (sourceName === "amazon" && /\/dp\/[A-Z0-9]{10}/i.test(u.pathname)) u.search = "";
-    else if (sourceName === "jumia" || sourceName === "noon") u.search = "";
+    // Amazon sponsored search links wrap the real product path in a URL parameter.
+    // Resolve the ASIN and store a canonical product URL instead of volatile tracking links.
+    if (sourceName === "amazon") {
+      const directAsin = u.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i)?.[1];
+      const wrappedTarget = u.searchParams.get("url") || u.searchParams.get("path") || "";
+      let target = wrappedTarget;
+      for (let i = 0; i < 2 && target; i++) {
+        try { target = decodeURIComponent(target); } catch { break; }
+      }
+      const wrappedAsin = target.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i)?.[1];
+      const asin = directAsin || wrappedAsin;
+      if (asin) return `https://www.amazon.eg/dp/${asin.toUpperCase()}`;
+      if (/\/sspa\/click\/?$/i.test(u.pathname)) return null;
+    }
+    // Strip tracking parameters from other supported retailer product URLs.
+    if (sourceName === "jumia" || sourceName === "noon") u.search = "";
     return u.toString();
   } catch { return null; }
 }
@@ -283,7 +297,7 @@ async function mapWithConcurrency(items, limit, worker) {
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
   return results;
 }
-async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], edition = "all", fetchImpl, snapFlyerFetcher = collectSnapFlyerFilteredOffers, snapFlyerOptions = {} } = {}) {
+async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل برسيل اريال تايد", "مناديل ورقية فاين كلينكس", "شامبو صابون دوف نيفيا بانتين"], otherQueries = ["مسحوق غسيل منظف", "مناديل ورقية", "شامبو صابون كريم"], edition = "all", fetchImpl, snapFlyerFetcher = collectSnapFlyerFilteredOffers, snapFlyerOptions = {} } = {}) {
   const tasks = [];
   // Each newsletter queries only the stores it can publish. This avoids
   // paying for Amazon results during the other-store edition and vice versa.

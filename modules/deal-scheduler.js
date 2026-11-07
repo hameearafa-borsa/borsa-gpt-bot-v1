@@ -135,6 +135,79 @@ async function persistDeals(pool, deals) {
   }
   return saved;
 }
+async function enqueueObservedDeals(pool, deals, source = "amazon", chatIds = []) {
+  const saved = await persistDeals(pool, deals);
+  const targets = [...new Set((chatIds || []).map(Number).filter(Number.isSafeInteger))];
+  let queued = 0;
+  for (const deal of deals || []) {
+    const valid = validateDeal(deal);
+    if (!valid.ok) continue;
+    for (const chatId of targets) {
+      await pool.query(
+        `INSERT INTO deal_publication_queue(fingerprint,chat_id,source,status,first_queued_at,last_observed_at,updated_at)
+         VALUES($1,$2,$3,'queued',NOW(),NOW(),NOW())
+         ON CONFLICT(fingerprint,chat_id) DO UPDATE
+         SET first_queued_at=CASE
+               WHEN deal_publication_queue.status='published'
+                AND deal_publication_queue.last_observed_at < NOW() - INTERVAL '7 days'
+               THEN NOW() ELSE deal_publication_queue.first_queued_at END,
+             last_observed_at=NOW(),updated_at=NOW(),
+             status=CASE
+               WHEN deal_publication_queue.status='published'
+                AND deal_publication_queue.last_observed_at >= NOW() - INTERVAL '7 days'
+               THEN 'published'
+               ELSE 'queued'
+             END`,
+        [valid.fingerprint, chatId, source]
+      );
+      queued++;
+    }
+  }
+  return { saved, queued };
+}
+async function loadQueuedDeals(pool, source = "amazon", chatId, limit = 15) {
+  const result = await pool.query(
+    `SELECT o.merchant,o.title,o.url,o.category,o.price,o.old_price,o.discount_pct,
+            o.fingerprint,o.product_fingerprint,q.first_queued_at,q.last_observed_at
+     FROM deal_publication_queue q
+     JOIN deal_observations o ON o.fingerprint=q.fingerprint
+     WHERE q.source=$1 AND q.chat_id=$2 AND q.status='queued'
+     ORDER BY q.first_queued_at ASC,q.fingerprint ASC
+     LIMIT $3`,
+    [source, chatId, limit]
+  );
+  return result.rows || [];
+}
+async function markQueuedDealsPublished(pool, deals, chatId) {
+  const fingerprints = [...new Set((deals || []).map(deal => deal.fingerprint).filter(Boolean))];
+  if (!fingerprints.length) return 0;
+  const result = await pool.query(
+    `UPDATE deal_publication_queue
+     SET status='published',published_at=NOW(),updated_at=NOW()
+     WHERE fingerprint=ANY($1::text[]) AND chat_id=$2 AND status='queued'`,
+    [fingerprints, chatId]
+  );
+  return result.rowCount || 0;
+}
+async function reconcilePublishedQueue(pool, chatId, itemCount) {
+  const limit = Math.max(0, Number(itemCount) || 0);
+  if (!limit) return 0;
+  const result = await pool.query(
+    `WITH queued AS (
+       SELECT fingerprint
+       FROM deal_publication_queue
+       WHERE source='amazon' AND chat_id=$1 AND status='queued'
+       ORDER BY first_queued_at ASC,fingerprint ASC
+       LIMIT $2
+     )
+     UPDATE deal_publication_queue q
+     SET status='published',published_at=COALESCE(q.published_at,NOW()),updated_at=NOW()
+     FROM queued
+     WHERE q.fingerprint=queued.fingerprint AND q.chat_id=$1 AND q.status='queued'`,
+    [chatId, limit]
+  );
+  return result.rowCount || 0;
+}
 async function resolveDealChatIds({ pool, chatId, chatIds }) {
   if (Array.isArray(chatIds)) return [...new Set(chatIds.map(Number).filter(Number.isSafeInteger))];
   // Explicit chatId is retained for tests and intentional single-group runs.
@@ -154,10 +227,20 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
   const key = batchKey(now);
   const existing = await pool.query(
-    "SELECT channel_kind,status,chat_id FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
+    "SELECT channel_kind,status,chat_id,item_count FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
     [key, kind, targetChatIds]
   );
-  const reservedChats = new Set(existing.rows.filter(row => row.channel_kind === kind).map(row => Number(row.chat_id)));
+  if (kind === "amazon") {
+    // A prior Telegram send may have succeeded while the queue-status update failed.
+    // The published batch record is the durable confirmation; reconcile its FIFO items
+    // instead of sending the same newsletter again.
+    for (const row of existing.rows) {
+      if (row.channel_kind === "amazon" && row.status === "published") {
+        await reconcilePublishedQueue(pool, Number(row.chat_id), row.item_count);
+      }
+    }
+  }
+  const reservedChats = new Set(existing.rows.filter(row => row.channel_kind === kind && row.status !== "failed").map(row => Number(row.chat_id)));
   const publishedChats = new Set(existing.rows.filter(row => row.channel_kind === kind && row.status === "published").map(row => Number(row.chat_id)));
   const unreservedTargets = targetChatIds.filter(id => !reservedChats.has(id));
   if (!unreservedTargets.length) {
@@ -170,17 +253,41 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
 
   // Collect and verify once per edition, regardless of the number of target groups.
   const gathered = await fetcher({ edition: kind });
-  if (!gathered.deals?.length) {
+  if (!gathered.deals?.length && kind !== "amazon") {
     await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null };
   }
-  const verified = await verify(gathered.deals);
-  const recent = await filterRecentDeals(pool, verified, 7);
-  if (!recent.length) return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
-  const items = selectNewsletterDeals(recent, kind);
+  const verified = await verify(gathered.deals || []);
+  const itemsByChat = new Map();
+  let recent = [];
+  let items = [];
+  if (kind === "amazon") {
+    // Persist every validated observation and enqueue it per destination before Telegram is called.
+    // Failed sends leave the queue rows untouched for the next scheduled attempt.
+    try {
+      await enqueueObservedDeals(pool, verified, "amazon", targetChatIds);
+    } catch (error) {
+      await onError(error, { stage: "persist_deals", batchKind: kind, batchKey: key });
+      return { skipped: true, reason: "persist_failed", sourceErrors: gathered.errors || [] };
+    }
+    for (const targetId of unreservedTargets) {
+      const queued = await loadQueuedDeals(pool, "amazon", targetId, 15);
+      itemsByChat.set(targetId, queued);
+      recent.push(...queued);
+    }
+    recent = [...new Map(recent.map(deal => [deal.fingerprint, deal])).values()];
+    items = [...new Map([...itemsByChat.values()].flat().map(deal => [deal.fingerprint, deal])).values()];
+  } else {
+    recent = await filterRecentDeals(pool, verified, 7);
+    items = selectNewsletterDeals(recent, kind);
+    for (const targetId of unreservedTargets) itemsByChat.set(targetId, items);
+  }
   if (!items.length) {
-    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
-    return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
+    if (kind === "amazon" && !gathered.deals?.length) {
+      await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
+      return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [] };
+    }
+    return { skipped: true, reason: kind === "amazon" ? "amazon_queue_empty" : "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
   }
   const title = kind === "amazon"
     ? "عروض أمازون للمنظفات والورقيات والعناية"
@@ -194,15 +301,18 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
 
   const published = [];
   for (const targetId of unreservedTargets) {
-    const reservation = await pool.query(
-      "INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status) VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind,chat_id) DO NOTHING RETURNING id",
-      [key, kind, targetId, formattedItems.length]
-    );
-    if (!reservation.rowCount) {
-      // A prepared/failed reservation may represent an ambiguous Telegram outcome.
-      // Never auto-repeat it; a human can inspect and repair the record if needed.
+    const targetItems = itemsByChat.get(targetId) || [];
+    const formatted = formatNewsletterMessage(targetItems, title);
+    const formattedItems = formatted.items;
+    if (!formattedItems.length) {
+      await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: kind, batchKey: key, chatId: targetId });
       continue;
     }
+    const reservation = await pool.query(
+      "INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status) VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind,chat_id) DO UPDATE SET item_count=EXCLUDED.item_count,status='prepared',message_id=NULL,published_at=NULL WHERE deal_publications.status='failed' RETURNING id",
+      [key, kind, targetId, formattedItems.length]
+    );
+    if (!reservation.rowCount) continue;
     let msg;
     try {
       msg = await telegram.sendMessage(targetId, formatted.text, { disable_web_page_preview: true });
@@ -211,19 +321,23 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
       await onError(error, { stage: "publish", batchKind: kind, batchKey: key, chatId: targetId });
       continue;
     }
-
     published.push({ kind, count: formattedItems.length, messageId: msg.message_id, chatId: targetId });
     try {
       await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id, reservation.rows[0].id]);
     } catch (error) {
       await onError(error, { stage: "publication_record", batchKind: kind, batchKey: key, messageId: msg.message_id, chatId: targetId });
     }
+    if (kind === "amazon") {
+      try {
+        await markQueuedDealsPublished(pool, formattedItems, targetId);
+      } catch (error) {
+        await onError(error, { stage: "mark_queue_published", batchKind: kind, batchKey: key, messageId: msg.message_id, chatId: targetId });
+      }
+    }
   }
-
-  // Persist each observed offer once after at least one Telegram send was confirmed.
-  if (published.length) {
+  if (kind !== "amazon" && published.length) {
     try {
-      await persistDeals(pool, formattedItems);
+      await persistDeals(pool, itemsByChat.get(published[0].chatId) || []);
     } catch (error) {
       await onError(error, { stage: "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) });
     }
@@ -302,4 +416,4 @@ function shouldResetDealBackoff(previousKind, currentKind) {
   return Boolean(previousKind && currentKind && previousKind !== currentKind);
 }
 
-module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, startDealScheduler };
+module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, enqueueObservedDeals, loadQueuedDeals, markQueuedDealsPublished, reconcilePublishedQueue, publishDailyDeals, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, startDealScheduler };

@@ -173,14 +173,14 @@ function extractCards(html, sourceName, query = "", counters = null) {
       chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\s\S]*?)<\//i);
     const noonTitleCandidates = [];
     if (sourceName === "noon") {
-      for (const match of chunk.matchAll(/<(h2|h3|a)\\b([^>]*)>([\\s\\S]*?)<\\/\\1>/gi)) {
+      for (const match of chunk.matchAll(/<(h2|h3|a)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) {
         noonTitleCandidates.push(match[3]);
-        for (const attribute of (match[2] || "").matchAll(/\\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) {
+        for (const attribute of (match[2] || "").matchAll(/\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) {
           noonTitleCandidates.push(attribute[1]);
         }
       }
-      for (const match of chunk.matchAll(/<img\\b([^>]*)>/gi)) {
-        for (const attribute of (match[1] || "").matchAll(/\\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) {
+      for (const match of chunk.matchAll(/<img\b([^>]*)>/gi)) {
+        for (const attribute of (match[1] || "").matchAll(/\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) {
           noonTitleCandidates.push(attribute[1]);
         }
       }
@@ -191,9 +191,9 @@ function extractCards(html, sourceName, query = "", counters = null) {
         ? selectProductTitle([...noonTitleCandidates, titleMatch?.[1]])
         : selectProductTitle([titleMatch?.[1]]);
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, ""); } continue; }
-    const anchorHrefs = [...chunk.matchAll(/<a\\b[^>]*href=["']([^"']+)["'][^>]*>/gi)].map(match => match[1]);
+    const anchorHrefs = [...chunk.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)].map(match => match[1]);
     const href = sourceName === "noon"
-      ? anchorHrefs.find(value => /\\/(?:egypt-ar\\/)?(?:product|p)\\//i.test(value) || /\\/product[-_/]/i.test(value)) || anchorHrefs[0]
+      ? anchorHrefs.find(value => /\/(?:egypt-ar\/)?(?:product|p)\//i.test(value) || /\/product[-_/]/i.test(value)) || anchorHrefs[0]
       : anchorHrefs[0];
     const url = safeProductUrl(href || "", sourceName);
     if (!url) { if (stats) { stats.rejectedUrl++; addRejectionSample(stats, "url", title, href || ""); } continue; }

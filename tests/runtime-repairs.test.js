@@ -75,6 +75,21 @@ assert.equal(priceAppears("السعر 505.31 جنيه", 99999), false);
   assert.equal(amazon.length, 1);
   assert.equal(amazon[0].price, 250);
   assert.equal(amazon[0].url, "https://www.amazon.eg/dp/B0ABCDEF12");
+  const englishProducts = [
+    ["Persil Laundry Detergent 3kg", "detergent"],
+    ["Fine Facial Tissues 6 Pack", "paper"],
+    ["Nivea Body Lotion 400ml", "personal_care"]
+  ];
+  for (const [title, expectedCategory] of englishProducts) {
+    const asin = expectedCategory === "detergent" ? "B0PERSIL001" : expectedCategory === "paper" ? "B0FINE00001" : "B0NIVEA0001";
+    const html = `<div data-component-type="s-search-result" data-asin="${asin}"><h2><a href="/dp/${asin}"><span>${title}</span></a></h2><span class="a-offscreen">199.00 EGP</span></div>`;
+    const extracted = extractCards(html, "amazon", "cleaning and personal care");
+    assert.equal(extracted.length, 1, `English product should be accepted: ${title}`);
+    assert.equal(extracted[0].category, expectedCategory, `English product category should be identified: ${title}`);
+  }
+  const unrelatedHtml = '<div data-component-type="s-search-result" data-asin="B0PHONE0001"><h2><a href="/dp/B0PHONE0001"><span>Samsung Galaxy Smartphone 256GB</span></a></h2><span class="a-offscreen">199.00 EGP</span></div>';
+  assert.equal(extractCards(unrelatedHtml, "amazon", "cleaning and personal care").length, 0,
+    "unrelated electronics must remain excluded");
   await close();
   console.log("runtime repair tests: OK");
 })().catch((error) => { console.error(error); process.exit(1); });

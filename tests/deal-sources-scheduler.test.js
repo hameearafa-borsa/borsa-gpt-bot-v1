@@ -205,7 +205,7 @@ assert.equal(newsletterKindAt(new Date("2026-10-12T15:45:00.000Z")),null, "a lat
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:05:00.000Z")),null, "close the Amazon window after five minutes");
 assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),null); // no third newsletter
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
-  Array.from({length: 6}, (_,i) => ({
+  Array.from({length: 10}, (_,i) => ({
     merchant: prefix, title: `${prefix} ${category} product ${i}`,
     url: `https://${host}/product-${category}-${i}`, price: 10+i,
     old_price: 15+i, discount_pct: 20, category
@@ -215,11 +215,11 @@ const editionAmazon = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazo
 const editionOther = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia")], "other_sites");
 assert.equal(editionAmazon.length, 15, "Amazon edition caps at five items in each of three categories");
 assert.ok(editionAmazon.every(d => new URL(d.url).hostname === "www.amazon.eg"));
-assert.equal(editionOther.length, 15, "other-store edition balances independently, not crowded out by Amazon");
+assert.equal(editionOther.length, 24, "other-store edition expands to eight offers per category without Amazon crowding it out");
 assert.ok(editionOther.every(d => new URL(d.url).hostname === "www.jumia.com.eg"));
 for (const edition of [editionAmazon, editionOther]) {
   for (const category of ["detergent","paper","personal_care"]) {
-    assert.ok(edition.filter(d => d.category === category).length <= 5);
+    assert.ok(edition.filter(d => d.category === category).length <= (edition === editionAmazon ? 5 : 8));
   }
 }
 

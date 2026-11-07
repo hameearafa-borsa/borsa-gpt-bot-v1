@@ -33,6 +33,7 @@ const MIGRATION_FILES = Object.freeze([
   "025_catalog_ocr_pages.sql",
   "026_service_settings.sql",
   "032_deal_publication_queue.sql",
+  "033_deal_observed_price_history.sql",
 ]);
 
 // A single transaction prevents a failed migration from leaving a partially

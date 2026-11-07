@@ -49,6 +49,12 @@ function formatNewsletterMessage(deals, title, maxLength = 3900) {
     if (d.merchant) block.push(`🏪 المتجر: ${String(d.merchant).slice(0, 80)}`);
     block.push(`💰 السعر: ${Number(d.price).toFixed(2)} جنيه`);
     if (Number(d.old_price) > Number(d.price)) block.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه`);
+    const previousObserved = Number(d.previous_observed_price);
+    if (Number.isFinite(previousObserved) && previousObserved > 0 && previousObserved !== Number(d.price)) {
+      const direction = Number(d.price) < previousObserved ? "📉 أقل" : "📈 أعلى";
+      const change = Number.isFinite(Number(d.price_change_pct)) ? ` (${Math.abs(Number(d.price_change_pct)).toFixed(2)}%)` : "";
+      block.push(`${direction} من آخر رصد: ${previousObserved.toFixed(2)} جنيه${change}`);
+    }
     block.push(`🔗 ${String(d.url || "")}`);
     const candidate = render([...blocks, block]);
     if (candidate.length > maxLength) continue;

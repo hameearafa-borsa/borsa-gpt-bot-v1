@@ -127,9 +127,21 @@ async function persistDeals(pool, deals) {
   let saved = 0;
   for (const d of deals) {
     const valid = validateDeal(d); if (!valid.ok) continue;
-    await pool.query(`INSERT INTO deal_observations(merchant,title,url,category,price,old_price,discount_pct,fingerprint,product_fingerprint,observed_at)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW())
-      ON CONFLICT(fingerprint) DO UPDATE SET observed_at=NOW(), price=EXCLUDED.price, old_price=EXCLUDED.old_price, discount_pct=EXCLUDED.discount_pct, product_fingerprint=EXCLUDED.product_fingerprint`,
+    await pool.query(`INSERT INTO deal_observations(merchant,title,url,category,price,old_price,discount_pct,fingerprint,product_fingerprint,observed_at,previous_observed_price,price_change_pct)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,NOW(),
+        (SELECT price FROM deal_observations
+         WHERE product_fingerprint=$9 AND price<>$5
+         ORDER BY observed_at DESC,id DESC LIMIT 1),
+        (SELECT ROUND((($5-prior.price)/prior.price)*100,2)
+         FROM (SELECT price FROM deal_observations
+               WHERE product_fingerprint=$9 AND price<>$5
+               ORDER BY observed_at DESC,id DESC LIMIT 1) prior
+         WHERE prior.price>0))
+      ON CONFLICT(fingerprint) DO UPDATE SET observed_at=NOW(), price=EXCLUDED.price,
+        old_price=EXCLUDED.old_price, discount_pct=EXCLUDED.discount_pct,
+        product_fingerprint=EXCLUDED.product_fingerprint,
+        previous_observed_price=EXCLUDED.previous_observed_price,
+        price_change_pct=EXCLUDED.price_change_pct`,
       [d.merchant,d.title,d.url,d.category,d.price,d.old_price || null,d.discount_pct || 0,dealFingerprint(d),dealProductFingerprint(d)]);
     saved++;
   }
@@ -168,6 +180,7 @@ async function enqueueObservedDeals(pool, deals, source = "amazon", chatIds = []
 async function loadQueuedDeals(pool, source = "amazon", chatId, limit = 15) {
   const result = await pool.query(
     `SELECT o.merchant,o.title,o.url,o.category,o.price,o.old_price,o.discount_pct,
+            o.previous_observed_price,o.price_change_pct,
             o.fingerprint,o.product_fingerprint,q.first_queued_at,q.last_observed_at
      FROM deal_publication_queue q
      JOIN deal_observations o ON o.fingerprint=q.fingerprint

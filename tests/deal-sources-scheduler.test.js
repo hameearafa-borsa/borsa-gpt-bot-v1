@@ -426,7 +426,7 @@ for (const edition of [editionAmazon, editionOther]) {
      status: 200,
      url: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers",
      headers: { get: name => name.toLowerCase() === "content-type" ? "text/html; charset=utf-8" : null },
-     text: async () => "<html><head><title>Welcome | Carrefour Egypt</title></head><body><main><div class='app-shell'>Offers</div></main></body></html>"
+     text: async () => "<html><head><title>Welcome | Carrefour Egypt</title></head><body><main><div class='app-shell'>Home</div></main></body></html>"
    })
  });
  assert.equal(carrefourProfile.ok, true);

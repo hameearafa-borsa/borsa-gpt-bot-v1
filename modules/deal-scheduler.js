@@ -36,7 +36,12 @@ function selectNewsletterDeals(recent, kind) {
     if (kind === "catalogs") return isCatalogStore(d);
     return !isAmazon(d);
   });
-  const balanced = distributeDeals(editionPool);
+  // The catalog and other-store editions now use the wider 8-per-category selection;
+  // keep Amazon's existing 5-per-category limit unchanged.
+  const target = kind === "amazon"
+    ? { detergent: 5, paper: 5, personal_care: 5 }
+    : { detergent: 8, paper: 8, personal_care: 8 };
+  const balanced = distributeDeals(editionPool, target);
   return [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
 }
 

@@ -308,10 +308,12 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل ب�
     otherQueries.forEach((q, queryIndex) => { for (const source of ["jumia", "noon"]) tasks.push({ source, query: q, queryIndex }); });
     tasks.push({ source: "carrefour", query: "", queryIndex: 0 });
   }
-  if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
+  if (!["all", "amazon", "other_sites", "catalogs"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
   const deals = [], errors = [], sourceStats = [];
   let snapFlyerSourceCount = 0;
+  let snapFlyerMissingMerchantCount = 0;
+  let snapFlyerStoreStats = [];
   const storeCounters = new Map();
   const seen = new Set();
   for (let index = 0; index < results.length; index++) {
@@ -349,10 +351,12 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل ب�
       if (!seen.has(key)) { seen.add(key); deals.push(d); }
     }
   }
-  if (edition === "other_sites" || edition === "all") {
+  if (edition === "other_sites" || edition === "all" || edition === "catalogs") {
     try {
       const catalogResult = await snapFlyerFetcher(snapFlyerOptions);
       snapFlyerSourceCount = Number.isInteger(catalogResult.sourceCount) && catalogResult.sourceCount > 0 ? catalogResult.sourceCount : 0;
+      snapFlyerMissingMerchantCount = Number(catalogResult.missingMerchantCount || 0);
+      snapFlyerStoreStats = Array.isArray(catalogResult.storeStats) ? catalogResult.storeStats : [];
       for (const deal of catalogResult.deals || []) {
         const key = String(deal.url) + "|" + String(deal.title) + "|" + String(deal.price);
         if (!seen.has(key)) { seen.add(key); deals.push(deal); }
@@ -371,6 +375,11 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل ب�
     }
   }
   for (const task of tasks) if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
-  return { deals, errors, sourceStats, sourceSummary: [...storeCounters.values()], sourceCount: tasks.length + snapFlyerSourceCount };
+  return {
+    deals, errors, sourceStats, sourceSummary: [...storeCounters.values()],
+    storeStats: snapFlyerStoreStats,
+    missingMerchantCount: snapFlyerMissingMerchantCount,
+    sourceCount: tasks.length + snapFlyerSourceCount
+  };
 }
 module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, createExtractionCounters, getScraperKeys, fetchSearch, collectDealCandidates };

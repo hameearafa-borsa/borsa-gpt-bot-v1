@@ -33,6 +33,15 @@ assert.ok(deals.some(item => item.title.includes("Ariel") && item.merchant === "
 assert.ok(deals.some(item => item.title.includes("Ariel") && item.merchant === null), "missing merchant must not reject a valid offer");
 assert.ok(!deals.some(item => /Apples|Smart TV|Persil/.test(item.title)));
 
+const arabicMerchantFixture = `
+<a href="/eg/downtown/products/191720">SnapFlyer مترو ماركت برسيل جل غسيل 2 لتر 185 جنيه</a>
+<a href="/eg/downtown/products/191721">SnapFlyer كازيون مسحوق بــاهي للغسالات 5 كيلو 220 جنيه</a>
+<a href="/eg/downtown/products/191722">SnapFlyer بيم منعم ملابس كومفورت 1 لتر 95 جنيه</a>`;
+const arabicDeals = extractSnapFlyerFilteredOffers(arabicMerchantFixture, filter, "https://snapflyer.io/eg/downtown/products?category=cleaning&lang=en&type=laundry-detergent");
+assert.equal(arabicDeals.length, 3, "Arabic retailer names must not cause valid SnapFlyer offers to lose their merchant");
+assert.deepEqual(arabicDeals.map(item => item.merchant), ["Metro Market", "Kazyon", "BIM"]);
+assert.ok(arabicDeals.every(item => !["مترو ماركت", "كازيون", "بيم"].some(name => item.title.startsWith(name))), "merchant names must be removed from product titles");
+
 (async () => {
   const calls = [];
   const result = await collectSnapFlyerFilteredOffers({
@@ -45,7 +54,13 @@ assert.ok(!deals.some(item => /Apples|Smart TV|Persil/.test(item.title)));
   assert.equal(calls.length, 2);
   assert.equal(result.sourceCount, 2);
   assert.equal(result.deals.length, 4);
-  assert.equal(result.sourceStats.filter(item => item.ok).length, 2);
+  assert.equal(result.missingMerchantCount, 1, "unknown merchant labels should be counted rather than silently disappearing");
+  assert.deepEqual(result.storeStats.map(item => [item.merchant, item.extractedCount]), [
+    ["Metro Market", 0], ["Kazyon", 1], ["BIM", 1]
+  ]);
+  assert.ok(result.storeStats.every(item => item.ok), "zero offers is coverage information, not a transport failure");
+  assert.equal(result.sourceStats.filter(item => item.source.startsWith("snapflyer_filter_") && item.ok).length, 2);
+  assert.equal(result.sourceStats.filter(item => item.source.startsWith("snapflyer_store_")).length, 3);
 
   const verified = await verifyProductUrl("https://snapflyer.io/product/236503", {
     fetchImpl: async url => ({ status: 200, url: String(url) })

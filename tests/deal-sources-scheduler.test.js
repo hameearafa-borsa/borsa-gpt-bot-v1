@@ -196,13 +196,16 @@ assert.equal(isNewsletterWindow(new Date("2026-10-12T13:59:00.000Z")),false);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T14:00:00.000Z")),true);
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:00:00.000Z")),"amazon"); // 5 PM Cairo
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:00:00.000Z")),"other_sites"); // 6 PM Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-12T07:15:00.000Z")), "catalogs", "10:15 AM Cairo should publish the catalog-offer edition");
+assert.equal(newsletterKindAt(new Date("2026-10-12T07:19:00.000Z")), "catalogs", "catalog edition should tolerate four minutes of scheduler jitter");
+assert.equal(newsletterKindAt(new Date("2026-10-12T07:20:00.000Z")), null, "catalog edition must close after five minutes");
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:04:00.000Z")),"other_sites", "allow brief startup/timer jitter after 6 PM");
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:05:00.000Z")),null, "close the scheduled window after five minutes");
 assert.equal(newsletterKindAt(new Date("2026-10-12T15:45:00.000Z")),null, "a late boot must not publish the 6 PM newsletter at 6:45 PM");
 assert.equal(newsletterKindAt(new Date("2026-10-12T14:05:00.000Z")),null, "close the Amazon window after five minutes");
 assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),null); // no third newsletter
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
-  Array.from({length: 6}, (_,i) => ({
+  Array.from({length: 10}, (_,i) => ({
     merchant: prefix, title: `${prefix} ${category} product ${i}`,
     url: `https://${host}/product-${category}-${i}`, price: 10+i,
     old_price: 15+i, discount_pct: 20, category
@@ -212,11 +215,11 @@ const editionAmazon = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazo
 const editionOther = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia")], "other_sites");
 assert.equal(editionAmazon.length, 15, "Amazon edition caps at five items in each of three categories");
 assert.ok(editionAmazon.every(d => new URL(d.url).hostname === "www.amazon.eg"));
-assert.equal(editionOther.length, 15, "other-store edition balances independently, not crowded out by Amazon");
+assert.equal(editionOther.length, 24, "other-store edition expands to eight offers per category without Amazon crowding it out");
 assert.ok(editionOther.every(d => new URL(d.url).hostname === "www.jumia.com.eg"));
 for (const edition of [editionAmazon, editionOther]) {
   for (const category of ["detergent","paper","personal_care"]) {
-    assert.ok(edition.filter(d => d.category === category).length <= 5);
+    assert.ok(edition.filter(d => d.category === category).length <= (edition === editionAmazon ? 5 : 8));
   }
 }
 
@@ -425,6 +428,28 @@ const amazonOnly = await collectDealCandidates({
    "شامبو صابون دوف نيفيا بانتين"
  ]), "Amazon should use three category-focused searches without increasing ScraperAPI request count");
 
+ let catalogEditionFetched = 0;
+ let catalogEditionSource = null;
+ const catalogOnly = await collectDealCandidates({
+   edition: "catalogs",
+   fetchImpl: async () => { throw new Error("catalog edition must not call ScraperAPI retailers"); },
+   snapFlyerFetcher: async () => {
+     catalogEditionFetched++;
+     return {
+       deals: [{ merchant: "Metro Market", title: "منظف أطباق", price: 35, category: "detergent", url: "https://snapflyer.io/product/191730" }],
+       errors: [],
+       sourceStats: [{ source: "snapflyer_store_metro_market", ok: true, stage: "validated", extractedCount: 1 }],
+       storeStats: [{ source: "snapflyer_store_metro_market", merchant: "Metro Market", ok: true, stage: "validated", extractedCount: 1 }],
+       sourceCount: 3
+     };
+   }
+ });
+ catalogEditionSource = catalogOnly.sourceStats[0]?.source;
+ assert.equal(catalogEditionFetched, 1);
+ assert.equal(catalogOnly.sourceCount, 3, "catalog edition should collect only the shared SnapFlyer store source set");
+ assert.equal(catalogOnly.deals.length, 1);
+ assert.equal(catalogEditionSource, "snapflyer_store_metro_market");
+
  const otherTargets = [];
  const otherOnly = await collectDealCandidates({
    edition: "other_sites",
@@ -570,6 +595,54 @@ const amazonOnly = await collectDealCandidates({
  assert.equal(persistedOffers.length, 4,
    "only the four selected non-Amazon offers should be persisted after successful delivery");
  assert.deepEqual(publicationErrors, []);
+
+ // The morning catalog-offer edition reuses SnapFlyer but publishes only Metro, Kazyon and BIM.
+ const catalogMessages = [];
+ const catalogErrors = [];
+ const catalogOffers = [
+   { merchant: "Kazyon", title: "مسحوق تايد للغسالات 5 كيلو", price: 220, category: "detergent", url: "https://snapflyer.io/product/191731" },
+   { merchant: "Metro Market", title: "منظف أطباق أوكسي 2.5 لتر", price: 115, category: "detergent", url: "https://snapflyer.io/product/191732" },
+   { merchant: "BIM", title: "منعم ملابس كومفورت 1 لتر", price: 95, category: "detergent", url: "https://snapflyer.io/product/191733" },
+   { merchant: "Carrefour Egypt", title: "مسحوق برسيل 3 كيلو", price: 180, category: "detergent", url: "https://www.carrefouregypt.com/mafegy/ar/p/persil" }
+ ];
+ let catalogFetchEdition = null;
+ const catalogResult = await publishDailyDeals({
+   pool: publicationPool,
+   telegram: { sendMessage: async (chatId, message) => { catalogMessages.push({ chatId, message }); return { message_id: 9902 }; } },
+   chatIds: [-1001234567890],
+   now: new Date("2026-10-12T07:15:00.000Z"), // 10:15 AM Cairo
+   fetcher: async ({ edition }) => {
+     catalogFetchEdition = edition;
+     return {
+       deals: catalogOffers,
+       errors: [{ source: "snapflyer_filter_bleach", reason: "timeout" }],
+       sourceStats: [{ source: "snapflyer_store_metro_market", ok: true, stage: "validated", extractedCount: 1 }],
+       storeStats: [
+         { source: "snapflyer_store_metro_market", merchant: "Metro Market", ok: true, stage: "validated", extractedCount: 1 },
+         { source: "snapflyer_store_kazyon", merchant: "Kazyon", ok: true, stage: "no_store_offers", extractedCount: 0 }
+       ],
+       missingMerchantCount: 1,
+       sourceCount: 9
+     };
+   },
+   verify: async deals => deals.map(deal => ({ ...deal, verified_url: true })),
+   onError: async (error, details) => catalogErrors.push({ message: String(error?.message || error), details })
+ });
+ assert.equal(catalogFetchEdition, "catalogs");
+ assert.equal(catalogResult.kind, "catalogs");
+ assert.equal(catalogMessages.length, 1);
+ assert.ok(catalogMessages[0].message.includes("عروض كتالوجات مترو وكازيون وبيم"));
+ assert.ok(catalogMessages[0].message.includes("Kazyon"));
+ assert.ok(catalogMessages[0].message.includes("Metro Market"));
+ assert.ok(catalogMessages[0].message.includes("BIM"));
+ assert.ok(!catalogMessages[0].message.includes("Carrefour Egypt"), "catalog edition must exclude retailers outside Metro, Kazyon and BIM");
+ assert.ok(catalogErrors.some(item => item.details?.stage === "fetch" && item.details?.partialResultsAvailable === true),
+   "a partial source failure must be reported even when other offers are publishable");
+ const catalogDiagnostic = catalogErrors.find(item => item.details?.stage === "fetch");
+ assert.ok(catalogDiagnostic.details.errors.some(item => item.source === "snapflyer_store_kazyon" && item.reason === "no_store_offers"),
+   "a store with no extracted offers must appear in the coverage diagnostic");
+ assert.ok(catalogDiagnostic.details.errors.some(item => item.source === "snapflyer_unknown_merchant"),
+   "unrecognized SnapFlyer merchant labels must be reported");
 
  if (oldKey1 === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = oldKey1;
  if (oldKey2 === undefined) delete process.env.SCRAPER_API_KEY_2; else process.env.SCRAPER_API_KEY_2 = oldKey2;

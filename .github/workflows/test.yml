@@ -7,6 +7,7 @@ on:
       - termux-arm64-sharp-test-2026-10-21
       - chemical-assistant-gemini-reply-once
       - fix/arabic-price-list-shaping-2026-11-01
+      - fix/amazon-bilingual-category-filter-2026-11-07
   push:
     branches:
       - owner-approved-group-access

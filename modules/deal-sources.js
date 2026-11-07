@@ -308,7 +308,7 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل ب�
     otherQueries.forEach((q, queryIndex) => { for (const source of ["jumia", "noon"]) tasks.push({ source, query: q, queryIndex }); });
     tasks.push({ source: "carrefour", query: "", queryIndex: 0 });
   }
-  if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
+  if (!["all", "amazon", "other_sites", "catalogs"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   const results = await mapWithConcurrency(tasks, MAX_CONCURRENT_SCRAPER_REQUESTS, task => fetchSearch(task.source, task.query, { fetchImpl }));
   const deals = [], errors = [], sourceStats = [];
   let snapFlyerSourceCount = 0;
@@ -349,7 +349,7 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل ب�
       if (!seen.has(key)) { seen.add(key); deals.push(d); }
     }
   }
-  if (edition === "other_sites" || edition === "all") {
+  if (edition === "other_sites" || edition === "all" || edition === "catalogs") {
     try {
       const catalogResult = await snapFlyerFetcher(snapFlyerOptions);
       snapFlyerSourceCount = Number.isInteger(catalogResult.sourceCount) && catalogResult.sourceCount > 0 ? catalogResult.sourceCount : 0;

@@ -23,6 +23,7 @@ assert.equal(chemistry.isChemicalQuestion("/chemical"), false);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /اختر حلًا واحدًا متوازنًا/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /لا تستخدم الجداول نهائيًا/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /كل خامة في بند مستقل/);
+assert.doesNotMatch(chemistry.buildPrompt("عايز تركيبة صابون"), /بعد الجدول/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /unknown-mixture/);
 assert.match(chemistry.buildPrompt("عايز تركيبة صابون"), /bleach-acid-warning/);
 assert.ok(chemistry.safetyGate("هل أخلط الكلور مع حمض الفلاش؟"));

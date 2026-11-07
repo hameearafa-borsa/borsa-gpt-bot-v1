@@ -49,7 +49,7 @@ assert.match(marketPrompt,/كمبرلان/);
 assert.match(marketPrompt,/تيلوز/);
 assert.match(marketPrompt,/لا تسأل المستخدم أولًا عن قائمة الخامات الموجودة لديه/);
 assert.match(marketPrompt,/اسم الخامة المتداول/);
-assert.match(marketPrompt,/سهـل القراءة والنسخ/);
+assert.match(marketPrompt,/سهل القراءة والنسخ/);
 assert.match(marketPrompt,/الكمية بالكيلوجرام/);
 assert.match(marketPrompt,/المجموع 100%/);
 assert.match(marketPrompt,/TDS\/SDS/);

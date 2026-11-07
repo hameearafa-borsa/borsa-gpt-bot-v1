@@ -69,14 +69,14 @@ function categoryOf(title) {
 }
 
 function parseMerchantAndTitle(rawText) {
-  let text = String(rawText || "").replace(/^Snap\\s*Flyer\\s*/i, "").trim();
+  let text = String(rawText || "").replace(/^Snap\s*Flyer\s*/i, "").trim();
   let merchant = null;
   for (const item of MERCHANT_ALIASES) {
     if (!text.toLocaleLowerCase("en").startsWith(item.alias.toLocaleLowerCase("en"))) continue;
     const remainder = text.slice(item.alias.length);
-    if (remainder && !/^[\\s|•·—–-]/.test(remainder)) continue;
+    if (remainder && !/^[\s|•·—–-]/.test(remainder)) continue;
     merchant = item.canonical;
-    text = remainder.replace(/^[\\s|•·—–-]+/, "").trim();
+    text = remainder.replace(/^[\s|•·—–-]+/, "").trim();
     break;
   }
   return { merchant, title: text };

@@ -15,6 +15,7 @@ function newsletterKindAt(date = new Date()) {
   // Run only in the first five minutes after the scheduled hour. This tolerates
   // startup/timer jitter but prevents a late boot (e.g. 18:45) from launching
   // a newsletter at an arbitrary time. The database reservation still prevents duplicates.
+  if (minute >= 15 && minute < 20 && hour === 10) return "catalogs";
   if (minute >= 0 && minute < 5 && hour === 17) return "amazon";
   if (minute >= 0 && minute < 5 && hour === 18) return "other_sites";
   return null;
@@ -27,8 +28,14 @@ function selectNewsletterDeals(recent, kind) {
       return host === "www.amazon.eg" || host === "amazon.eg";
     } catch { return false; }
   };
-  // Balance each edition independently so Amazon cannot crowd out the 6 PM edition.
-  const editionPool = recent.filter(d => kind === "amazon" ? isAmazon(d) : !isAmazon(d));
+  // Keep each edition focused: catalog offers are only from Metro, Kazyon and BIM;
+  // the 6 PM edition may use all non-Amazon retailers and shared SnapFlyer results.
+  const isCatalogStore = deal => /^(?:metro market|مترو ماركت|مترو|kazyon|كازيون|bim|بيم)$/i.test(String(deal.merchant || "").trim());
+  const editionPool = recent.filter(d => {
+    if (kind === "amazon") return isAmazon(d);
+    if (kind === "catalogs") return isCatalogStore(d);
+    return !isAmazon(d);
+  });
   const balanced = distributeDeals(editionPool);
   return [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
 }
@@ -231,13 +238,14 @@ async function resolveDealChatIds({ pool, chatId, chatIds }) {
 
 async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = collectDealCandidates, verify = verifyDeals, now = new Date(), onError = async () => {} }) {
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
-  if (!(await isServiceEnabled(pool, "deals"))) return { skipped: true, reason: "service_disabled" };
-  const requestedChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
-  const targetChatIds = [];
-  for (const id of requestedChatIds) if (await isServiceEnabled(pool, "deals", id)) targetChatIds.push(id);
-  if (!targetChatIds.length) return { skipped: true, reason: "no_active_authorized_groups" };
   const kind = newsletterKindAt(now);
   if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
+  const serviceKey = kind === "catalogs" ? "catalogs" : "deals";
+  if (!(await isServiceEnabled(pool, serviceKey))) return { skipped: true, reason: "service_disabled" };
+  const requestedChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
+  const targetChatIds = [];
+  for (const id of requestedChatIds) if (await isServiceEnabled(pool, serviceKey, id)) targetChatIds.push(id);
+  if (!targetChatIds.length) return { skipped: true, reason: "no_active_authorized_groups" };
   const key = batchKey(now);
   const existing = await pool.query(
     "SELECT channel_kind,status,chat_id,item_count FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
@@ -266,6 +274,22 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
 
   // Collect and verify once per edition, regardless of the number of target groups.
   const gathered = await fetcher({ edition: kind });
+  if (gathered.deals?.length && (gathered.errors || []).length) {
+    const distinctErrors = [...new Map(gathered.errors.map(item => [
+      String(item.source || "unknown") + "|" + String(item.reason || "unknown"),
+      { source: String(item.source || "unknown"), reason: String(item.reason || "unknown") }
+    ])).values()];
+    await onError(new Error("Some deal sources failed or returned no products"), {
+      stage: "fetch",
+      errors: distinctErrors,
+      sourceStats: gathered.sourceStats || [],
+      sourceSummary: gathered.sourceSummary || [],
+      sourceCount: gathered.sourceCount ?? null,
+      batchKind: kind,
+      batchKey: key,
+      partialResultsAvailable: true
+    });
+  }
   if (!gathered.deals?.length && kind !== "amazon") {
     await onError(new Error("No validated deal candidates; newsletter not published"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", sourceErrors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null };
@@ -304,7 +328,9 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   }
   const title = kind === "amazon"
     ? "عروض أمازون للمنظفات والورقيات والعناية"
-    : "عروض المتاجر الأخرى المختارة";
+    : kind === "catalogs"
+      ? "عروض كتالوجات مترو وكازيون وبيم"
+      : "عروض المتاجر الأخرى المختارة";
   const formatted = formatNewsletterMessage(items, title);
   const formattedItems = formatted.items;
   if (!formattedItems.length) {

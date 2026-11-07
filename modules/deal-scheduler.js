@@ -245,11 +245,18 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   if (!pool || !telegram) return { skipped: true, reason: "database_or_telegram_missing" };
   const kind = newsletterKindAt(now);
   if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
-  const serviceKey = kind === "catalogs" ? "catalogs" : "deals";
-  if (!(await isServiceEnabled(pool, serviceKey))) return { skipped: true, reason: "service_disabled" };
+  const serviceEnabled = kind === "catalogs"
+    ? await isServiceEnabled(pool, "catalogs")
+    : await isServiceEnabled(pool, "deals");
+  if (!serviceEnabled) return { skipped: true, reason: "service_disabled" };
   const requestedChatIds = await resolveDealChatIds({ pool, chatId, chatIds });
   const targetChatIds = [];
-  for (const id of requestedChatIds) if (await isServiceEnabled(pool, serviceKey, id)) targetChatIds.push(id);
+  for (const id of requestedChatIds) {
+    const enabled = kind === "catalogs"
+      ? await isServiceEnabled(pool, "catalogs", id)
+      : await isServiceEnabled(pool, "deals", id);
+    if (enabled) targetChatIds.push(id);
+  }
   if (!targetChatIds.length) return { skipped: true, reason: "no_active_authorized_groups" };
   const key = batchKey(now);
   const existing = await pool.query(

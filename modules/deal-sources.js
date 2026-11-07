@@ -168,9 +168,9 @@ function extractCards(html, sourceName, query = "", counters = null) {
   for (const chunk of chunks) {
     const stats = counters?.html;
     if (stats) stats.candidates++;
-    const titleMatch = chunk.match(/<h[23][^>]*>[\\s\\S]*?<span[^>]*>([\\s\\S]*?)<\\/span>[\\s\\S]*?<\\/h[23]>/i) ||
-      chunk.match(/<(?:h[23]|span|div)[^>]*(?:data-qa|data-testid)=["'][^"']*product[-_ ]?name[^"']*["'][^>]*>([\\s\\S]*?)<\\//i) ||
-      chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\\s\\S]*?)<\\//i);
+    const titleMatch = chunk.match(/<h[23][^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/h[23]>/i) ||
+      chunk.match(/<(?:h[23]|span|div)[^>]*(?:data-qa|data-testid)=["'][^"']*product[-_ ]?name[^"']*["'][^>]*>([\s\S]*?)<\//i) ||
+      chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\s\S]*?)<\//i);
     const title = sourceName === "amazon"
       ? amazonCardTitle(chunk) || selectProductTitle([titleMatch?.[1]])
       : selectProductTitle([titleMatch?.[1]]);

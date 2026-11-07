@@ -27,6 +27,7 @@ const priceReview = require("./modules/price-review");
 const priceReviewRecovery = require("./modules/price-review-recovery");
 const { saveMerchant } = require("./modules/merchant-intelligence");
 const chemical = require("./modules/chemical-assistant");
+const { splitTelegramText } = require("./core/telegram-text");
 const deals = require("./modules/deals");
 const adminPanel = require("./modules/admin-panel");
 const serviceSettings = require("./core/service-settings");
@@ -124,8 +125,20 @@ async function replyWithChemicalAnswer(ctx, question, sourceMessageId) {
     const answer = await chemical.answer(chemicalAI, question, error => log({ module: "chemical-assistant", stage: `${error?.aiProvider || "provider_unknown"}_request`, severity: "error", status: "safe_fallback", input: question, details: { provider: error?.aiProvider || "unknown", message: error?.message || "AI provider request failed" } }));
     const links = buildChemicalLinks(question);
     const mention = ctx.from?.username ? `@${ctx.from.username}\n` : "";
-    const body = `🧪 المساعد الكيميائي\n\n${mention}${require("./core/links").escapeHtml(answer)}${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
-    await ctx.telegram.editMessageText(chatId, progress.message_id, undefined, body, { parse_mode: "HTML", disable_web_page_preview: true });
+    const prefix = `🧪 المساعد الكيميائي\n\n${mention}`;
+    const suffix = `${renderChemicalLinks(links) ? `\n\n${renderChemicalLinks(links)}` : ""}\n\nأهل الخبرة في الجروب، نرحب بمشاركاتكم وتجاربكم الفنية المرتبطة بالسؤال.`;
+    // Leave headroom below Telegram's 4096-character limit for the heading,
+    // username, final links/footer, and HTML entities.
+    const answerBudget = Math.max(500, 3900 - prefix.length - suffix.length);
+    const chunks = splitTelegramText(answer, answerBudget);
+    for (let i = 0; i < chunks.length; i++) {
+      const body = `${prefix}${require("./core/links").escapeHtml(chunks[i])}${i === chunks.length - 1 ? suffix : "\n\n(يتبع في الرسالة التالية)" }`;
+      if (i === 0) {
+        await ctx.telegram.editMessageText(chatId, progress.message_id, undefined, body, { parse_mode: "HTML", disable_web_page_preview: true });
+      } else {
+        await ctx.telegram.sendMessage(chatId, body, { parse_mode: "HTML", disable_web_page_preview: true, reply_to_message_id: progress.message_id });
+      }
+    }
   };
   void run().catch(async error => {
     await sendLog({ module: "chemical-assistant", stage: "background_response", severity: "error", status: "failed", input: question, details: { message: redactString(error?.message || "chemical background response failed") } }).catch(() => {});

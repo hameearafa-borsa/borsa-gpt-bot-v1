@@ -132,7 +132,7 @@ async function replyWithChemicalAnswer(ctx, question, sourceMessageId) {
     const answerBudget = Math.max(500, 3900 - prefix.length - suffix.length);
     const chunks = splitTelegramText(answer, answerBudget);
     for (let i = 0; i < chunks.length; i++) {
-      const body = `${prefix}${require("./core/links").escapeHtml(chunks[i])}${i === chunks.length - 1 ? suffix : "\\n\\n(يتبع في الرسالة التالية)" }`;
+      const body = `${prefix}${require("./core/links").escapeHtml(chunks[i])}${i === chunks.length - 1 ? suffix : "\n\n(يتبع في الرسالة التالية)" }`;
       if (i === 0) {
         await ctx.telegram.editMessageText(chatId, progress.message_id, undefined, body, { parse_mode: "HTML", disable_web_page_preview: true });
       } else {

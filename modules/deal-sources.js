@@ -32,11 +32,11 @@ function selectProductTitle(candidates) {
 }
 function amazonCardTitle(chunk) {
   const candidates = [];
-  const heading = chunk.match(/<h[23]\\b[^>]*>([\\s\\S]*?)<\\/h[23]>/i);
+  const heading = chunk.match(/<h[23]\b[^>]*>([\s\S]*?)<\/h[23]>/i);
   if (heading) candidates.push(heading[1]);
-  for (const element of chunk.matchAll(/<(?:h2|h3|a|img)\\b([^>]*)>/gi)) {
+  for (const element of chunk.matchAll(/<(?:h2|h3|a|img)\b([^>]*)>/gi)) {
     for (const attribute of ["aria-label", "title", "alt"]) {
-      const match = element[1].match(new RegExp("\\\\b" + attribute + "=[\\\"']([^\\\"']+)[\\\"']", "i"));
+      const match = element[1].match(new RegExp("\\b" + attribute + "=[\"']([^\"']+)[\"']", "i"));
       if (match) candidates.push(match[1]);
     }
   }

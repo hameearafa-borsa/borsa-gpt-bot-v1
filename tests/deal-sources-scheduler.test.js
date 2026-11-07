@@ -426,12 +426,12 @@ for (const edition of [editionAmazon, editionOther]) {
      status: 200,
      url: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers",
      headers: { get: name => name.toLowerCase() === "content-type" ? "text/html; charset=utf-8" : null },
-     text: async () => "<html><head><title>Offers | Carrefour Egypt</title></head><body><main><div class='app-shell'>Offers</div></main></body></html>"
+     text: async () => "<html><head><title>Welcome | Carrefour Egypt</title></head><body><main><div class='app-shell'>Offers</div></main></body></html>"
    })
  });
  assert.equal(carrefourProfile.ok, true);
  assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.contentType, "text/html; charset=utf-8");
- assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.pageTitle, "Offers | Carrefour Egypt");
+ assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.pageTitle, "Welcome | Carrefour Egypt");
  assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.responseHost, "www.carrefouregypt.com");
  assert.equal(carrefourProfile.extractionDiagnostics.responseProfile.htmlTagCounts.productLike, 0,
    "Carrefour diagnostics should fingerprint a shell page without exposing response HTML");

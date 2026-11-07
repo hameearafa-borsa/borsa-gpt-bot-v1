@@ -8,6 +8,7 @@ on:
       - chemical-assistant-gemini-reply-once
       - fix/arabic-price-list-shaping-2026-11-01
       - fix/amazon-bilingual-category-filter-2026-11-07
+      - fix/amazon-persist-before-publish-2026-11-07
   push:
     branches:
       - owner-approved-group-access
@@ -57,6 +58,8 @@ jobs:
         run: node tests/group-approval-postgres.integration.test.js
       - name: Run PostgreSQL price observation integration test
         run: node tests/price-observation-postgres.integration.test.js
+      - name: Run PostgreSQL deal price history integration test
+        run: node tests/deal-price-history-postgres.integration.test.js
       - name: Run PostgreSQL Unilever price-list persistence integration test
         run: node tests/price-list-reference-postgres.integration.test.js
       - name: Build production Alpine Docker image

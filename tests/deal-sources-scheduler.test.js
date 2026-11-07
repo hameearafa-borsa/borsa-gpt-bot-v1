@@ -9,6 +9,16 @@ assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), nul
 assert.equal(safeProductUrl("", "amazon"), null);
 assert.equal(safeProductUrl("https://www.amazon.eg:8443/dp/B0ABCDEF12", "amazon"), null);
 assert.equal(safeProductUrl("https://www.amazon.eg/", "amazon"), null);
+assert.equal(
+  safeProductUrl("https://www.amazon.eg/sspa/click?url=%2Ffoo%2Fdp%2FB0HL6J6R1X%2Fref%3Dsr_1_22&amp;spc=tracking", "amazon"),
+  "https://www.amazon.eg/dp/B0HL6J6R1X",
+  "Amazon sponsored redirect URLs should resolve to a stable direct product URL"
+);
+assert.equal(
+  safeProductUrl("https://www.amazon.eg/sspa/click?url=%2Ffoo%2Fsearch", "amazon"),
+  null,
+  "Amazon sponsored redirects without a product ASIN should be rejected"
+);
 assert.equal(categoryOf("مناديل فاين"), "paper");
 assert.equal(categoryOf("شامبو نيفيا"), "personal_care");
 assert.equal(categoryOf("مسحوق غسيل"), "detergent");
@@ -408,6 +418,12 @@ const amazonOnly = await collectDealCandidates({
  assert.equal(amazonTargets.length, 3);
  assert.ok(amazonTargets.every(url => new URL(url).hostname.includes("amazon")),
    "Amazon edition must not spend scraper requests on other stores");
+ const amazonSearchTerms = amazonTargets.map(target => new URL(target).searchParams.get("k"));
+ assert.deepEqual(new Set(amazonSearchTerms), new Set([
+   "مسحوق غسيل برسيل اريال تايد",
+   "مناديل ورقية فاين كلينكس",
+   "شامبو صابون دوف نيفيا بانتين"
+ ]), "Amazon should use three category-focused searches without increasing ScraperAPI request count");
 
  const otherTargets = [];
  const otherOnly = await collectDealCandidates({
@@ -491,7 +507,7 @@ const amazonOnly = await collectDealCandidates({
      const normalized = String(sql).replace(/\s+/g, " ").trim();
      publicationQueries.push({ sql: normalized, values });
      if (normalized.includes("FROM service_settings")) return { rows: [], rowCount: 0 };
-     if (normalized.startsWith("SELECT channel_kind,status,chat_id FROM deal_publications")) {
+     if (normalized.startsWith("SELECT channel_kind,status,chat_id")) {
        return { rows: [], rowCount: 0 };
      }
      if (normalized.startsWith("SELECT 1 FROM deal_observations")) {

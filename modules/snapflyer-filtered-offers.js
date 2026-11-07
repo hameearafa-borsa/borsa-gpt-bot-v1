@@ -17,12 +17,31 @@ const FILTERS = Object.freeze([
   { key: "personal-care", category: "personal-care", type: null }
 ]);
 
-const MERCHANT_NAMES = Object.freeze([
-  "Abdullah Al Othaim Markets Egypt", "El Fergany Hyper Market", "Metro Market",
-  "Panda Market Egypt", "LuLu Hypermarket Egypt", "Beit El Gomla",
-  "Awlad Ragab", "Kheir Zaman", "Hyper One", "Fathallah", "Spinneys",
-  "Carrefour", "Kazyon", "BIM", "Seoudi Market", "Raneen", "El Hawary"
-].sort((a, b) => b.length - a.length));
+const MERCHANT_ALIASES = Object.freeze([
+  { canonical: "Abdullah Al Othaim Markets Egypt", aliases: ["Abdullah Al Othaim Markets Egypt", "العثيم"] },
+  { canonical: "El Fergany Hyper Market", aliases: ["El Fergany Hyper Market", "الفرجاني"] },
+  { canonical: "Metro Market", aliases: ["Metro Market", "مترو ماركت", "مترو"] },
+  { canonical: "Panda Market Egypt", aliases: ["Panda Market Egypt", "Panda Market", "باندا"] },
+  { canonical: "LuLu Hypermarket Egypt", aliases: ["LuLu Hypermarket Egypt", "LuLu Hypermarket", "لولو"] },
+  { canonical: "Beit El Gomla", aliases: ["Beit El Gomla", "بيت الجملة"] },
+  { canonical: "Awlad Ragab", aliases: ["Awlad Ragab", "أولاد رجب", "اولاد رجب"] },
+  { canonical: "Kheir Zaman", aliases: ["Kheir Zaman", "خير زمان"] },
+  { canonical: "Hyper One", aliases: ["Hyper One", "هايبر وان"] },
+  { canonical: "Fathallah", aliases: ["Fathallah", "فتح الله"] },
+  { canonical: "Spinneys", aliases: ["Spinneys", "سبينيس"] },
+  { canonical: "Carrefour", aliases: ["Carrefour", "كارفور"] },
+  { canonical: "Kazyon", aliases: ["Kazyon", "كازيون"] },
+  { canonical: "BIM", aliases: ["BIM", "بيم"] },
+  { canonical: "Seoudi Market", aliases: ["Seoudi Market", "السعودي"] },
+  { canonical: "Raneen", aliases: ["Raneen", "رنين"] },
+  { canonical: "El Hawary", aliases: ["El Hawary", "الهواري"] }
+].flatMap(item => item.aliases.map(alias => ({ canonical: item.canonical, alias })))
+  .sort((a, b) => b.alias.length - a.alias.length));
+const TRACKED_CATALOG_MERCHANTS = Object.freeze([
+  { key: "metro_market", name: "Metro Market" },
+  { key: "kazyon", name: "Kazyon" },
+  { key: "bim", name: "BIM" }
+]);
 
 const PRICE_RE = /(\d{1,6}(?:,\d{3})*(?:\.\d{1,2})?)\s*(?:EGP\b|جنيه|ج\s*\.?\s*م\.?)/i;
 const DISCOUNT_RE = /-\s*(\d{1,2}(?:\.\d+)?)\s*%/;
@@ -50,14 +69,15 @@ function categoryOf(title) {
 }
 
 function parseMerchantAndTitle(rawText) {
-  let text = String(rawText || "").replace(/^Snap\s*Flyer\s*/i, "").trim();
+  let text = String(rawText || "").replace(/^Snap\\s*Flyer\\s*/i, "").trim();
   let merchant = null;
-  for (const name of MERCHANT_NAMES) {
-    if (text.toLocaleLowerCase("en").startsWith(name.toLocaleLowerCase("en"))) {
-      merchant = name;
-      text = text.slice(name.length).trim();
-      break;
-    }
+  for (const item of MERCHANT_ALIASES) {
+    if (!text.toLocaleLowerCase("en").startsWith(item.alias.toLocaleLowerCase("en"))) continue;
+    const remainder = text.slice(item.alias.length);
+    if (remainder && !/^[\\s|•·—–-]/.test(remainder)) continue;
+    merchant = item.canonical;
+    text = remainder.replace(/^[\\s|•·—–-]+/, "").trim();
+    break;
   }
   return { merchant, title: text };
 }
@@ -159,7 +179,18 @@ async function collectSnapFlyerFilteredOffers({ fetchPage = fetchStorePage, filt
     });
   }
   const unique = [...new Map(deals.map(deal => [deal.url + "|" + deal.title + "|" + deal.price, deal])).values()];
-  return { deals: unique, errors, sourceStats, sourceCount: filters.length };
+  const storeStats = TRACKED_CATALOG_MERCHANTS.map(store => {
+    const extractedCount = unique.filter(deal => deal.merchant === store.name).length;
+    return {
+      source: "snapflyer_store_" + store.key,
+      merchant: store.name,
+      ok: true,
+      stage: extractedCount ? "validated" : "no_store_offers",
+      extractedCount
+    };
+  });
+  const missingMerchantCount = unique.filter(deal => !deal.merchant).length;
+  return { deals: unique, errors, sourceStats: [...sourceStats, ...storeStats], storeStats, missingMerchantCount, sourceCount: filters.length };
 }
 
 module.exports = {

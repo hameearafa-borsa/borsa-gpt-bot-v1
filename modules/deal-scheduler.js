@@ -286,8 +286,17 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
 
   // Collect and verify once per edition, regardless of the number of target groups.
   const gathered = await fetcher({ edition: kind });
-  if (gathered.deals?.length && (gathered.errors || []).length) {
-    const distinctErrors = [...new Map(gathered.errors.map(item => [
+  const diagnosticIssues = [...(gathered.errors || [])];
+  for (const stat of gathered.storeStats || []) {
+    if (stat.stage === "no_store_offers") {
+      diagnosticIssues.push({ source: stat.source, reason: "no_store_offers" });
+    }
+  }
+  if (Number(gathered.missingMerchantCount || 0) > 0) {
+    diagnosticIssues.push({ source: "snapflyer_unknown_merchant", reason: "merchant_not_recognized" });
+  }
+  if (gathered.deals?.length && diagnosticIssues.length) {
+    const distinctErrors = [...new Map(diagnosticIssues.map(item => [
       String(item.source || "unknown") + "|" + String(item.reason || "unknown"),
       { source: String(item.source || "unknown"), reason: String(item.reason || "unknown") }
     ])).values()];
@@ -296,6 +305,8 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
       errors: distinctErrors,
       sourceStats: gathered.sourceStats || [],
       sourceSummary: gathered.sourceSummary || [],
+      storeStats: gathered.storeStats || [],
+      missingMerchantCount: Number(gathered.missingMerchantCount || 0),
       sourceCount: gathered.sourceCount ?? null,
       batchKind: kind,
       batchKey: key,

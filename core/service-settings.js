@@ -8,7 +8,8 @@ const SERVICES = Object.freeze([
   { key: "deals", label: "نشرات العروض", scope: "both" },
   { key: "catalogs", label: "نشرات الكتالوجات", scope: "both" },
   { key: "weather", label: "الطقس والنشرة الجوية", scope: "both" },
-  { key: "economic", label: "النشرة الاقتصادية", scope: "both" }
+  { key: "economic", label: "النشرة الاقتصادية", scope: "both" },
+  { key: "prayers", label: "تنبيهات مواقيت الصلاة", scope: "both" }
 ]);
 const SERVICE_KEYS = new Set(SERVICES.map(item => item.key));
 

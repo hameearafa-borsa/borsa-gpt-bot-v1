@@ -125,6 +125,15 @@ assert.equal(amazonCardDeals.length, 2, "Amazon nested result cards should survi
 assert.equal(amazonCardDeals[0].price, 129);
 assert.equal(amazonCardDeals[1].price, 45);
 assert.ok(amazonCardDeals.every(deal => deal.url.startsWith("https://www.amazon.eg/dp/")));
+const amazonDescriptiveTitleFixture = `<div data-component-type="s-search-result" data-asin="B0ABCDEF18"><h2 aria-label="Persil Automatic Laundry Detergent Powder 2.5 kg"><a href="/dp/B0ABCDEF18"><span>Persil</span></a></h2><img alt="Persil Automatic Laundry Detergent Powder 2.5 kg"><span class="a-offscreen">161.00 EGP</span></div>`;
+const amazonDescriptiveTitle = extractCards(amazonDescriptiveTitleFixture, "amazon");
+assert.equal(amazonDescriptiveTitle.length, 1, "Amazon brand-only heading should use its descriptive accessible product label");
+assert.match(amazonDescriptiveTitle[0].title, /Automatic Laundry Detergent Powder 2.5 kg/i);
+const amazonBrandOnlyFixture = `<div data-component-type="s-search-result" data-asin="B0ABCDEF19"><h2><a href="/dp/B0ABCDEF19"><span>Persil</span></a></h2><span class="a-offscreen">161.00 EGP</span></div>`;
+assert.equal(extractCards(amazonBrandOnlyFixture, "amazon").length, 0, "Amazon must not publish a brand-only title when no product name is available");
+const formattedAmazon = formatNewsletterMessage([{title:"Persil Detergent 2 kg",merchant:"Amazon.eg",price:161,url:"https://www.amazon.eg/sspa/click?url=%2Fdp%2FB088QHD1LW%2Fref%3Dsr_1"}], "Amazon");
+assert.match(formattedAmazon.text, /<a href="https:\/\/www\.amazon\.eg\/dp\/B088QHD1LW">فتح العرض<\/a>/);
+assert.ok(!formattedAmazon.text.includes("sspa/click"), "Amazon newsletter should not expose sponsored redirect URLs");
 
 const noonStructuredFixture = `<script type="application/ld+json">{"@context":"https://schema.org","@type":"Product","name":"شامبو نيفيا للعناية بالشعر","url":"https://www.noon.com/egypt-ar/product/N1234567","offers":{"@type":"Offer","price":"145","priceCurrency":"EGP"}}</script>`;
 const noonStructuredCards = extractCards(noonStructuredFixture, "noon", "نيفيا");
@@ -577,6 +586,8 @@ const amazonOnly = await collectDealCandidates({
  assert.equal(publicationResult.kind, "other_sites");
  assert.equal(publicationMessages.length, 1, "one authorized group should receive one newsletter message");
  assert.equal(publicationMessages[0].chatId, -1001234567890);
+ assert.equal(publicationMessages[0].options.parse_mode, "HTML",
+   "deal newsletters must enable Telegram HTML so compact offer links are clickable");
  assert.ok(publicationMessages[0].message.includes("عروض المتاجر الأخرى المختارة"));
  assert.ok(publicationMessages[0].message.includes("كازيون"));
  assert.ok(publicationMessages[0].message.includes("مترو ماركت"));

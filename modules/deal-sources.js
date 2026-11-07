@@ -22,6 +22,26 @@ function categoryOf(title) {
   return "detergent";
 }
 function htmlText(value) { return String(value || "").replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#x27;|&#39;/gi,"'").replace(/\s+/g," ").trim(); }
+function isBrandOnlyTitle(value) {
+  return /^(?:persil|ariel|tide|omo|comfort|downy|clorox|fairy|pril|dettol|dove|lux|pantene|pampers|molfix|fine|kleenex|nivea|برسيل|اريال|آريال|تايد|اومو|أومو|كومفورت|داوني|كلوركس|فيري|بريل|ديتول|دوف|لوكس|بانتين|بامبرز|مولفكس|فاين|نيفيا)$/i.test(String(value || "").trim());
+}
+function selectProductTitle(candidates) {
+  const cleaned = (candidates || []).map(value => htmlText(value).slice(0, 500)).filter(Boolean);
+  const descriptive = cleaned.find(value => !isBrandOnlyTitle(value) && value.length >= 8 && INCLUDE.test(value) && !EXCLUDE.test(value));
+  return (descriptive || cleaned.find(value => !isBrandOnlyTitle(value) && INCLUDE.test(value) && !EXCLUDE.test(value)) || "").slice(0, 180);
+}
+function amazonCardTitle(chunk) {
+  const candidates = [];
+  const heading = chunk.match(/<h[23]\b[^>]*>([\s\S]*?)<\/h[23]>/i);
+  if (heading) candidates.push(heading[1]);
+  for (const element of chunk.matchAll(/<(?:h2|h3|a|img)\b([^>]*)>/gi)) {
+    for (const attribute of ["aria-label", "title", "alt"]) {
+      const match = element[1].match(new RegExp("\\b" + attribute + "=[\"']([^\"']+)[\"']", "i"));
+      if (match) candidates.push(match[1]);
+    }
+  }
+  return selectProductTitle(candidates);
+}
 function money(value) {
   const s = toAsciiDigits(String(value || "")).replace(/,/g, "");
   const n = Number((s.match(/\d+(?:\.\d+)?/) || [])[0]);
@@ -95,7 +115,7 @@ function extractStructuredCards(html, sourceName, query = "", counters = null) {
   for (const product of products) {
     const stats = counters?.json;
     if (stats) stats.candidates++;
-    const title = htmlText(product.name || product.title || product.displayName || product.productName || "");
+    const title = selectProductTitle([product.name, product.title, product.displayName, product.productName, product.description]);
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, product.url || product.productUrl || product.canonicalUrl || product.slug || product.urlKey); } continue; }
     const offers = product.offers || product.offer || {};
     const rawUrl = product.url || product.productUrl || product.canonicalUrl ||
@@ -151,7 +171,9 @@ function extractCards(html, sourceName, query = "", counters = null) {
     const titleMatch = chunk.match(/<h[23][^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/h[23]>/i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*(?:data-qa|data-testid)=["'][^"']*product[-_ ]?name[^"']*["'][^>]*>([\s\S]*?)<\//i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\s\S]*?)<\//i);
-    const title = htmlText(titleMatch?.[1] || "");
+    const title = sourceName === "amazon"
+      ? amazonCardTitle(chunk) || selectProductTitle([titleMatch?.[1]])
+      : selectProductTitle([titleMatch?.[1]]);
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, ""); } continue; }
     const href = chunk.match(/<a[^>]+href=["']([^"']+)["']/i)?.[1];
     const url = safeProductUrl(href || "", sourceName);

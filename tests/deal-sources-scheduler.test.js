@@ -613,7 +613,17 @@ const amazonOnly = await collectDealCandidates({
    now: new Date("2026-10-12T07:15:00.000Z"), // 10:15 AM Cairo
    fetcher: async ({ edition }) => {
      catalogFetchEdition = edition;
-     return { deals: catalogOffers, errors: [{ source: "snapflyer_filter_bleach", reason: "timeout" }], sourceStats: [{ source: "snapflyer_store_metro_market", ok: true, stage: "validated", extractedCount: 1 }], sourceCount: 9 };
+     return {
+       deals: catalogOffers,
+       errors: [{ source: "snapflyer_filter_bleach", reason: "timeout" }],
+       sourceStats: [{ source: "snapflyer_store_metro_market", ok: true, stage: "validated", extractedCount: 1 }],
+       storeStats: [
+         { source: "snapflyer_store_metro_market", merchant: "Metro Market", ok: true, stage: "validated", extractedCount: 1 },
+         { source: "snapflyer_store_kazyon", merchant: "Kazyon", ok: true, stage: "no_store_offers", extractedCount: 0 }
+       ],
+       missingMerchantCount: 1,
+       sourceCount: 9
+     };
    },
    verify: async deals => deals.map(deal => ({ ...deal, verified_url: true })),
    onError: async (error, details) => catalogErrors.push({ message: String(error?.message || error), details })
@@ -628,6 +638,11 @@ const amazonOnly = await collectDealCandidates({
  assert.ok(!catalogMessages[0].message.includes("Carrefour Egypt"), "catalog edition must exclude retailers outside Metro, Kazyon and BIM");
  assert.ok(catalogErrors.some(item => item.details?.stage === "fetch" && item.details?.partialResultsAvailable === true),
    "a partial source failure must be reported even when other offers are publishable");
+ const catalogDiagnostic = catalogErrors.find(item => item.details?.stage === "fetch");
+ assert.ok(catalogDiagnostic.details.errors.some(item => item.source === "snapflyer_store_kazyon" && item.reason === "no_store_offers"),
+   "a store with no extracted offers must appear in the coverage diagnostic");
+ assert.ok(catalogDiagnostic.details.errors.some(item => item.source === "snapflyer_unknown_merchant"),
+   "unrecognized SnapFlyer merchant labels must be reported");
 
  if (oldKey1 === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = oldKey1;
  if (oldKey2 === undefined) delete process.env.SCRAPER_API_KEY_2; else process.env.SCRAPER_API_KEY_2 = oldKey2;

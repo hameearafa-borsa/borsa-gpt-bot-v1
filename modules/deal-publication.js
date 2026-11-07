@@ -46,12 +46,12 @@ function compactAmazonUrl(raw) {
     const normalized = String(raw || "").replace(/&amp;/gi, "&");
     const url = new URL(normalized);
     if (!["www.amazon.eg", "amazon.eg"].includes(url.hostname.toLowerCase()) || url.protocol !== "https:") return normalized;
-    const direct = url.pathname.match(/\\/(?:dp|gp\\/product)\\/([A-Z0-9]{10})(?:\\/|$)/i)?.[1];
+    const direct = url.pathname.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i)?.[1];
     let target = url.searchParams.get("url") || url.searchParams.get("path") || "";
     for (let i = 0; i < 2 && target; i++) { try { target = decodeURIComponent(target); } catch { break; } }
-    const wrapped = target.match(/\\/(?:dp|gp\\/product)\\/([A-Z0-9]{10})(?:\\/|$)/i)?.[1];
+    const wrapped = target.match(/\/(?:dp|gp\/product)\/([A-Z0-9]{10})(?:\/|$)/i)?.[1];
     const asin = direct || wrapped;
-    return asin ? `https://www.amazon.eg/dp/${asin.toUpperCase()}` : normalized;
+    return asin ? "https://www.amazon.eg/dp/" + asin.toUpperCase() : normalized;
   } catch { return String(raw || ""); }
 }
 function formatNewsletterMessage(deals, title, maxLength = 3900) {

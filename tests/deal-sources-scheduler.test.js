@@ -586,6 +586,8 @@ const amazonOnly = await collectDealCandidates({
  assert.equal(publicationResult.kind, "other_sites");
  assert.equal(publicationMessages.length, 1, "one authorized group should receive one newsletter message");
  assert.equal(publicationMessages[0].chatId, -1001234567890);
+ assert.equal(publicationMessages[0].options.parse_mode, "HTML",
+   "deal newsletters must enable Telegram HTML so compact offer links are clickable");
  assert.ok(publicationMessages[0].message.includes("عروض المتاجر الأخرى المختارة"));
  assert.ok(publicationMessages[0].message.includes("كازيون"));
  assert.ok(publicationMessages[0].message.includes("مترو ماركت"));

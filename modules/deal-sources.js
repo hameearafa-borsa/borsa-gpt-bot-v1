@@ -30,7 +30,7 @@ function productTitle(product) {
 }
 function selectProductTitle(values) {
   const candidates = values.map(htmlText).filter(value => value.length >= 4);
-  return candidates.find(value => /[\\u0600-\\u06FF]/.test(value) && INCLUDE.test(value) && !EXCLUDE.test(value)) ||
+  return candidates.find(value => /[\u0600-\u06FF]/.test(value) && INCLUDE.test(value) && !EXCLUDE.test(value)) ||
     candidates.find(value => INCLUDE.test(value) && !EXCLUDE.test(value)) || candidates[0] || "";
 }
 function money(value) {
@@ -155,7 +155,7 @@ function extractCards(html, sourceName, query = "", counters = null) {
         for (const attr of (match[2] || "").matchAll(/\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
       }
       for (const match of chunk.matchAll(/<img\b([^>]*)>/gi)) {
-        for (const attr of (match[1] || "").matchAll(/\\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
+        for (const attr of (match[1] || "").matchAll(/\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
       }
     }
     const title = sourceName === "noon" ? selectProductTitle([...noonCandidates, titleMatch?.[1]]) : htmlText(titleMatch?.[1] || "");

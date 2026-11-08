@@ -189,6 +189,22 @@ function makePipelinePool() {
   const sent = [];
   const telegram = { sendMessage: async (chatId, message) => { sent.push({ chatId, message }); } };
 
+  const disabledPool = makePipelinePool();
+  const disabledSent = [];
+  const disabledResult = await checkCatalogsOnce({
+    pool: disabledPool,
+    telegram: { sendMessage: async (_chatId, message) => disabledSent.push(message) },
+    chatId: -100123,
+    fetchPage,
+    publishNotices: false
+  });
+  assert.equal(disabledResult.checkedStores, Object.keys(CATALOG_STORES).length,
+    "disabling notices must preserve catalog discovery");
+  assert.equal(disabledResult.noticesDisabled, true);
+  assert.equal(disabledSent.length, 0, "disabled catalog notices must not send SnapFlyer links");
+  assert.ok([...disabledPool.rows.values()].some(row => row.status === "baseline"),
+    "catalog snapshots must still be persisted as a quiet baseline");
+
   // First observation is a quiet baseline, so it must not publish.
   const first = await checkCatalogsOnce({ pool, telegram, chatId: -100123, fetchPage });
   assert.equal(first.checkedStores, Object.keys(CATALOG_STORES).length);

@@ -202,7 +202,7 @@ function makePipelinePool() {
     "disabling notices must preserve catalog discovery");
   assert.equal(disabledResult.noticesDisabled, true);
   assert.equal(disabledSent.length, 0, "disabled catalog notices must not send SnapFlyer links");
-  assert.ok([...disabledPool.rows.values()].some(row => row.status === "baseline"),
+  assert.ok([...disabledPool.rows.values()].some(row => row.status === "ignored"),
     "catalog snapshots must still be persisted as a quiet baseline");
 
   // First observation is a quiet baseline, so it must not publish.

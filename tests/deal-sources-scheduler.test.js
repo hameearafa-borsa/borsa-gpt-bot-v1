@@ -326,6 +326,14 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  });
  assert.equal(removedUnsafeRedirect.length, 0, "unsafe redirects must still be rejected");
 
+ let jumiaLiveFetchCalls = 0;
+ const jumiaBlocked = await fetchSearch("jumia", "detergent", {
+   fetchImpl: async () => { jumiaLiveFetchCalls++; return { ok: true, status: 200, text: async () => "<html></html>" }; }
+ });
+ assert.equal(jumiaBlocked.ok, false);
+ assert.equal(jumiaBlocked.reason, "source_not_authorized");
+ assert.equal(jumiaLiveFetchCalls, 0, "Jumia must not be scraped without explicit authorization");
+
  const oldKey1 = process.env.SCRAPER_API_KEY;
  const oldKey2 = process.env.SCRAPER_API_KEY_2;
  process.env.SCRAPER_API_KEY = "test-account-one";

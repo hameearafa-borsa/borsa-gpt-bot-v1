@@ -22,6 +22,17 @@ function categoryOf(title) {
   return "detergent";
 }
 function htmlText(value) { return String(value || "").replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#x27;|&#39;/gi,"'").replace(/\s+/g," ").trim(); }
+function productTitle(product) {
+  const fields = ["name", "title", "displayName", "productName", "alternateName", "name_ar", "title_ar"];
+  const candidates = fields.map(key => htmlText(product?.[key])).filter(value => value.length >= 4);
+  const arabic = candidates.find(value => /[\\u0600-\\u06FF]/.test(value) && INCLUDE.test(value) && !EXCLUDE.test(value));
+  return (arabic || candidates.find(value => INCLUDE.test(value) && !EXCLUDE.test(value)) || candidates[0] || "").slice(0, 180);
+}
+function selectProductTitle(values) {
+  const candidates = values.map(htmlText).filter(value => value.length >= 4);
+  return candidates.find(value => /[\\u0600-\\u06FF]/.test(value) && INCLUDE.test(value) && !EXCLUDE.test(value)) ||
+    candidates.find(value => INCLUDE.test(value) && !EXCLUDE.test(value)) || candidates[0] || "";
+}
 function money(value) {
   const s = toAsciiDigits(String(value || "")).replace(/,/g, "");
   const n = Number((s.match(/\d+(?:\.\d+)?/) || [])[0]);
@@ -81,7 +92,7 @@ function extractStructuredCards(html, sourceName, query = "", counters = null) {
   for (const product of products) {
     const stats = counters?.json;
     if (stats) stats.candidates++;
-    const title = htmlText(product.name || product.title || product.displayName || product.productName || "");
+    const title = productTitle(product);
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, product.url || product.productUrl || product.canonicalUrl || product.slug || product.urlKey); } continue; }
     const offers = product.offers || product.offer || {};
     const rawUrl = product.url || product.productUrl || product.canonicalUrl ||
@@ -233,7 +244,9 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
   if (!keys.length) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
   const startIndex = nextScraperKeyIndex % keys.length;
   nextScraperKeyIndex = (nextScraperKeyIndex + 1) % keys.length;
-  const targetUrl = sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`;
+  const target = new URL(sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`);
+  if (sourceName === "amazon") target.searchParams.set("language", "ar_AE");
+  const targetUrl = target.href;
   const requestWithKey = async key => {
     const endpoint = new URL("https://api.scraperapi.com/");
     endpoint.searchParams.set("api_key", key);
@@ -290,14 +303,14 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   if (edition === "all" || edition === "amazon") {
     amazonQueries.forEach((q, queryIndex) => tasks.push({ source: "amazon", query: q, queryIndex }));
   }
-  if (edition === "all" || edition === "other_sites") {
-    otherQueries.forEach((q, queryIndex) => { for (const source of ["jumia", "noon"]) tasks.push({ source, query: q, queryIndex }); });
+  if (["all", "online_stores", "other_sites"].includes(edition)) {
+    otherQueries.forEach((q, queryIndex) => tasks.push({ source: "noon", query: q, queryIndex }));
     tasks.push({ source: "carrefour", query: "", queryIndex: 0 });
   }
-  if (!["all", "amazon", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
+  if (!["all", "amazon", "online_stores", "market_stores", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   // Start SnapFlyer collection alongside the retailer searches. Its bounded
   // category-page requests should not wait behind slow ScraperAPI responses.
-  const snapFlyerPromise = edition === "other_sites" || edition === "all"
+  const snapFlyerPromise = ["market_stores", "other_sites", "all"].includes(edition)
     ? Promise.resolve()
       .then(() => snapFlyerFetcher(snapFlyerOptions))
       .then(result => ({ result }), error => ({ error }))

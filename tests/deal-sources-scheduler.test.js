@@ -421,7 +421,7 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.ok(collected.sourceStats.every(stat => Number.isInteger(stat.queryIndex) && ["extraction_empty", "candidate_rejection", "validated"].includes(stat.stage)), "each query should expose a safe query index and parser stage");
  assert.ok(collected.sourceStats.every(stat => stat.ok && stat.extractedCount === 0 && stat.stage === "extraction_empty"),
    "successful HTTP responses with empty parser results must be distinguishable from request failures");
- assert.equal(collected.errors.length, 10, "empty extraction should be visible in diagnostics even when HTTP requests succeeded");
+ assert.equal(collected.errors.length, 7, "empty extraction should be visible for each successful source request");
  const amazonTargets = [];
  
  const blockedPage = await fetchSearch("amazon", "diagnostic test", {
@@ -608,7 +608,7 @@ const amazonOnly = await collectDealCandidates({
  assert.ok(!publicationMessages[0].message.includes("Amazon.eg"));
  assert.ok(!publicationMessages[0].message.includes("SnapFlyer"));
  assert.ok(!publicationMessages[0].message.includes("B0AMAZON123"),
-   "Amazon products must never leak into the 6 PM other-store newsletter");
+   "Amazon products must never leak into the online-stores newsletter");
  assert.equal(publicationResult.published.length, 1);
  assert.equal(publicationResult.published[0].messageId, 9901);
  assert.ok(publicationQueries.some(q => q.sql.startsWith("INSERT INTO deal_publications")),

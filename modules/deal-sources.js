@@ -253,6 +253,9 @@ function getScraperKeys() {
 async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = globalThis.fetch } = {}) {
   const source = SOURCES[sourceName];
   if (!source) throw new Error("unsupported_deal_source");
+  // Keep Jumia's legacy parser fixtures available, but block live automated
+  // collection until an explicitly authorized API/feed is available.
+  if (sourceName === "jumia") return { source: sourceName, ok: false, reason: "source_not_authorized", deals: [] };
   const keys = getScraperKeys();
   if (!keys.length) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
   const startIndex = nextScraperKeyIndex % keys.length;

@@ -801,7 +801,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|h
     else if (section === "reports") body = "📊 التقارير\n\nأحداث الحفظ والمراجعة والأخطاء تظهر في قناة السجل المشتركة.";
     else if (section === "health") body = "🩺 حالة الخدمات\n\nاتصال قاعدة البيانات: " + (db.pool ? "مهيأ" : "غير متاح") + "\nمزودو الذكاء: " + ((ai.providers || []).join("، ") || "لا يوجد") + "\nالإصدار: " + APP_VERSION;
     else body = "📄 التشخيص\n\nراجع قناة السجل للتقارير التشغيلية.";
-    await ctx.editMessageText(body, { reply_markup: adminPanel.actionKeyboard() });
+    await ctx.editMessageText(body, { reply_markup: section === "home" ? adminPanel.privatePanelKeyboard() : adminPanel.actionKeyboard() });
     await ctx.answerCbQuery().catch(() => {});
   } catch (error) {
     await ctx.answerCbQuery("تعذر تنفيذ الإجراء أو تحميل الإعدادات.", { show_alert: true }).catch(() => {});

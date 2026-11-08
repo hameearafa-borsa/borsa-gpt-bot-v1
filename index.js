@@ -978,6 +978,7 @@ installFatalProcessHandlers({
   stopCatalogs = startCatalogNewsletterScheduler({
     pool: db.pool,
     telegram: bot.telegram,
+    publishNotices: false,
     onError: async (error, details) => {
       const report = makeReport({ module: "catalog_newsletter", stage: details?.stage || "daily_check", severity: "ERROR", action: "catalog_newsletter", error, details });
       await emitReport({ bot, db, report });

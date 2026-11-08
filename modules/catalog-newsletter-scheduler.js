@@ -9,8 +9,8 @@ const { createImageOcr } = require("./image-ocr");
 const { isServiceEnabled } = require("../core/service-settings");
 
 const CAIRO_ZONE = "Africa/Cairo";
-const DAILY_HOUR = 10;
-const DAILY_MINUTE = 10;
+const DAILY_HOUR = 9;
+const DAILY_MINUTE = 0;
 const FETCH_TIMEOUT_MS = 12000;
 const MAX_HTML_BYTES = 2_000_000;
 

@@ -204,6 +204,8 @@ function makePipelinePool() {
   assert.equal(disabledSent.length, 0, "disabled catalog notices must not send SnapFlyer links");
   assert.ok([...disabledPool.rows.values()].some(row => row.status === "ignored"),
     "catalog snapshots must still be persisted as a quiet baseline");
+  assert.equal([...disabledPool.rows.values()].some(row => row.status === "pending"), false,
+    "disabled catalog notices must not leave a backlog for future publication");
 
   // First observation is a quiet baseline, so it must not publish.
   const first = await checkCatalogsOnce({ pool, telegram, chatId: -100123, fetchPage });

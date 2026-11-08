@@ -41,9 +41,7 @@ function selectNewsletterDeals(recent, kind) {
 
 const MARKET_STORE_GROUP_ONE = Object.freeze([
   "بيت الجملة", "هايبر وان", "سعودي ماركت", "مترو ماركت",
-  "فتح الله", "سبينس", "سبينيز", "كارفور",
-  "beit el gomla", "hyper one", "seoudi market", "metro market",
-  "fathallah", "spinneys", "carrefour"
+  "beit el gomla", "hyper one", "seoudi market", "metro market"
 ]);
 function marketStoreGroup(deal) {
   const merchant = String(deal.merchant || "").trim().toLocaleLowerCase("en");

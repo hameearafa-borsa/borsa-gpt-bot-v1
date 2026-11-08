@@ -187,7 +187,14 @@ async function checkCatalogsOnce({ pool, telegram, chatId, chatIds, fetchPage = 
   if (result.failed === Object.keys(CATALOG_STORES).length) return { ...result, skipped: true, reason: "all_sources_failed" };
 
   // Runtime can keep catalog discovery, snapshot history and OCR without sending SnapFlyer update notices.
-  if (!publishNotices) return { ...result, noticesDisabled: true };
+  // Retire queued notices as well, so re-enabling the feature later cannot send a backlog of stale links.
+  if (!publishNotices) {
+    const queuedNotices = await listPendingCatalogSnapshots(pool, 1000);
+    for (const snapshot of queuedNotices) {
+      await markCatalogSnapshot(pool, snapshot.id, "ignored", "Catalog update notices are disabled");
+    }
+    return { ...result, noticesDisabled: true, retiredNotices: queuedNotices.length };
+  }
 
   const pending = await listPendingCatalogSnapshots(pool, 100);
   const eligiblePending = [];

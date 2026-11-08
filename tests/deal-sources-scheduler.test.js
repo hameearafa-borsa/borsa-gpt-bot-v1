@@ -19,10 +19,9 @@ assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "message_too
   "unpublishable formatting results should be throttled");
 assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "already_published" }), false);
 assert.equal(shouldBackoffAfterDealAttempt({ published: [{ chatId: -100123 }] }), false);
-assert.equal(shouldResetDealBackoff("amazon", "other_sites"), true,
-  "a failed Amazon attempt must not suppress the 6 PM other-store edition");
-assert.equal(shouldResetDealBackoff("other_sites", "amazon"), true,
-  "a failed 6 PM attempt must not suppress the next Amazon edition");
+assert.equal(shouldResetDealBackoff("amazon", "online_stores"), true);
+assert.equal(shouldResetDealBackoff("online_stores", "market_stores"), true);
+assert.equal(shouldResetDealBackoff("market_stores", "amazon"), true);
 assert.equal(shouldResetDealBackoff("amazon", "amazon"), false);
 assert.equal(shouldResetDealBackoff("amazon", null), false,
   "outside the newsletter windows there is no active edition to reset to");
@@ -183,24 +182,19 @@ assert.ok(formattedNewsletter.text.includes('<a href="https://www.amazon.eg/dp/B
 assert.ok(!formattedNewsletter.text.includes("https://www.amazon.eg/dp/B0ABCDEF12\\n"),
   "the product URL must not appear as visible newsletter text");
 assert.ok(!formattedNewsletter.text.includes("x".repeat(100)), "an oversized URL must not be partially published");
-const sampleDate = new Date("2026-10-12T15:00:00.000Z");
+const sampleDate = new Date("2026-10-12T09:30:00.000Z");
 assert.equal(batchKey(sampleDate),"2026-10-12");
-assert.equal(isNewsletterWindow(new Date("2026-10-12T13:59:00.000Z")),false);
-assert.equal(isNewsletterWindow(new Date("2026-10-12T14:00:00.000Z")),true);
-assert.equal(newsletterKindAt(new Date("2026-10-12T14:00:00.000Z")),"amazon"); // 5 PM Cairo
-assert.equal(newsletterKindAt(new Date("2026-10-12T15:00:00.000Z")),null, "other-store edition must wait for the longer recovery window");
-assert.equal(newsletterKindAt(new Date("2026-10-12T15:29:00.000Z")),null, "do not start other-store scraping before 6:30 PM Cairo");
-assert.equal(newsletterKindAt(new Date("2026-10-12T15:30:00.000Z")),"other_sites", "start other-store recovery at 6:30 PM Cairo");
-assert.equal(newsletterKindAt(new Date("2026-10-12T15:34:00.000Z")),"other_sites", "allow timer jitter after the 6:30 PM start");
-assert.equal(newsletterKindAt(new Date("2026-10-12T16:29:00.000Z")),"other_sites", "keep the other-store edition eligible through 7:29 PM Cairo");
-assert.equal(newsletterKindAt(new Date("2026-10-12T16:30:00.000Z")),null, "close the recovery window at 7:30 PM Cairo");
-assert.equal(newsletterKindAt(new Date("2026-10-12T16:45:00.000Z")),null, "do not overlap the 8 PM price digest");
-assert.equal(newsletterKindAt(new Date("2026-10-12T14:05:00.000Z")),"amazon", "Amazon remains eligible after the original five-minute window");
-assert.equal(newsletterKindAt(new Date("2026-10-12T14:44:00.000Z")),"amazon", "Amazon recovery remains available through 5:44 PM Cairo");
-assert.equal(newsletterKindAt(new Date("2026-10-12T14:45:00.000Z")),null, "stop starting Amazon retries 15 minutes before the other-store edition");
-assert.equal(newsletterKindAt(new Date("2026-10-12T14:59:00.000Z")),null);
-assert.equal(isNewsletterWindow(new Date("2026-10-12T14:44:00.000Z")),true);
-assert.equal(newsletterKindAt(new Date("2026-10-12T16:00:00.000Z")),"other_sites", "keep the recovery window open at 7 PM Cairo");
+assert.equal(newsletterKindAt(new Date("2026-10-12T09:29:00.000Z")),null); // 12:29 Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-12T09:30:00.000Z")),"online_stores");
+assert.equal(newsletterKindAt(new Date("2026-10-12T10:29:00.000Z")),"online_stores");
+assert.equal(newsletterKindAt(new Date("2026-10-12T10:30:00.000Z")),null);
+assert.equal(newsletterKindAt(new Date("2026-10-12T11:00:00.000Z")),"market_stores");
+assert.equal(newsletterKindAt(new Date("2026-10-12T11:59:00.000Z")),"market_stores");
+assert.equal(newsletterKindAt(new Date("2026-10-12T12:00:00.000Z")),null);
+assert.equal(newsletterKindAt(new Date("2026-10-12T13:00:00.000Z")),"amazon");
+assert.equal(newsletterKindAt(new Date("2026-10-12T13:44:00.000Z")),"amazon");
+assert.equal(newsletterKindAt(new Date("2026-10-12T13:45:00.000Z")),null);
+assert.equal(isNewsletterWindow(new Date("2026-10-12T09:30:00.000Z")),true);
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
   Array.from({length: 12}, (_,i) => ({
     merchant: prefix, title: `${prefix} ${category} product ${i}`,
@@ -209,14 +203,21 @@ const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMa
   }))
 );
 const editionAmazon = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia")], "amazon");
-const editionOther = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia")], "other_sites");
-assert.equal(editionAmazon.length, 30, "Amazon edition targets ten items in each of three categories");
+const editionOnline = selectNewsletterDeals([
+  ...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia"),
+  ...makeDeals("www.noon.com","Noon"), ...makeDeals("www.carrefouregypt.com","Carrefour")
+], "online_stores");
+const editionMarket = selectNewsletterDeals(makeDeals("snapflyer.io","SnapFlyer"), "market_stores");
+assert.equal(editionAmazon.length, 30);
 assert.ok(editionAmazon.every(d => new URL(d.url).hostname === "www.amazon.eg"));
-assert.equal(editionOther.length, 15, "other-store edition keeps its existing fifteen-offer limit");
-assert.ok(editionOther.every(d => new URL(d.url).hostname === "www.jumia.com.eg"));
+assert.equal(editionOnline.length, 15);
+assert.ok(editionOnline.every(d => ["www.noon.com","www.carrefouregypt.com"].includes(new URL(d.url).hostname)));
+assert.equal(editionMarket.length, 15);
+assert.ok(editionMarket.every(d => new URL(d.url).hostname === "snapflyer.io"));
 for (const category of ["detergent","paper","personal_care"]) {
   assert.ok(editionAmazon.filter(d => d.category === category).length <= 10);
-  assert.ok(editionOther.filter(d => d.category === category).length <= 5);
+  assert.ok(editionOnline.filter(d => d.category === category).length <= 5);
+  assert.ok(editionMarket.filter(d => d.category === category).length <= 5);
 }
 
 const compensationDeals = [
@@ -390,11 +391,11 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
    // This test isolates ScraperAPI fan-out; SnapFlyer has its own fixture suite.
    snapFlyerFetcher: async () => ({ deals: [], errors: [], sourceStats: [], sourceCount: 0 })
  });
- assert.equal(requestCount, 10, "all source queries should still be attempted");
+ assert.equal(requestCount, 7, "all Amazon, Noon and Carrefour searches should be attempted");
  assert.ok(peakRequests <= 2, "ScraperAPI requests must be bounded to two concurrent requests");
- assert.equal(collected.sourceCount, 10);
- assert.equal(collected.sourceStats.length, 10, "each source request should report a safe extraction summary");
- assert.equal(collected.sourceSummary.length, 4, "store summaries should aggregate counters by retailer");
+ assert.equal(collected.sourceCount, 7);
+ assert.equal(collected.sourceStats.length, 7, "each source request should report a safe extraction summary");
+ assert.equal(collected.sourceSummary.length, 3, "store summaries should aggregate counters by retailer");
  assert.ok(collected.sourceSummary.every(summary => summary.queries > 0 && summary.transportFailures === 0),
    "per-store query totals should include every successful request");
  const failedQuerySummary = await collectDealCandidates({
@@ -433,16 +434,16 @@ const amazonOnly = await collectDealCandidates({
 
  const otherTargets = [];
  const otherOnly = await collectDealCandidates({
-   edition: "other_sites",
+   edition: "online_stores",
    fetchImpl: async url => {
      otherTargets.push(new URL(String(url)).searchParams.get("url"));
      return { ok: true, status: 200, text: async () => "<html></html>" };
    },
-   // Isolate the seven ScraperAPI searches; SnapFlyer has its own catalog tests.
+   // Isolate the four Noon and Carrefour searches; SnapFlyer has its own catalog tests.
    snapFlyerFetcher: async () => ({ deals: [], errors: [], sourceStats: [], sourceCount: 0 })
  });
- assert.equal(otherOnly.sourceCount, 7, "other-store edition should make seven non-Amazon ScraperAPI searches when catalog fetching is isolated");
- assert.equal(otherTargets.length, 7);
+ assert.equal(otherOnly.sourceCount, 4, "online-stores edition should make three Noon and one Carrefour search");
+ assert.equal(otherTargets.length, 4);
  assert.ok(otherTargets.every(url => !new URL(url).hostname.includes("amazon")),
    "other-store edition must not spend scraper requests on Amazon");
 
@@ -468,8 +469,8 @@ const amazonOnly = await collectDealCandidates({
    source: "snapflyer_catalog"
  };
  const otherEditionWithCatalog = await collectDealCandidates({
-   edition: "other_sites",
-   fetchImpl: async () => ({ ok: true, status: 200, text: async () => "<html></html>" }),
+   edition: "market_stores",
+   fetchImpl: async () => { throw new Error("market-stores edition must not call ScraperAPI"); },
    snapFlyerFetcher: async () => {
      otherCatalogCalls++;
      return {
@@ -485,7 +486,7 @@ const amazonOnly = await collectDealCandidates({
    }
  });
  assert.equal(otherCatalogCalls, 1, "other-store newsletter must fetch SnapFlyer catalogs exactly once");
- assert.equal(otherEditionWithCatalog.sourceCount, 10, "seven other-store searches plus three SnapFlyer stores must be counted");
+ assert.equal(otherEditionWithCatalog.sourceCount, 3, "market-stores edition must collect only the three SnapFlyer stores");
  assert.equal(otherEditionWithCatalog.deals.length, 2, "same catalog URL and price must not merge distinct product titles");
  assert.equal(otherEditionWithCatalog.sourceStats.filter(stat => String(stat.source).startsWith("snapflyer_")).length, 3);
  assert.ok(otherEditionWithCatalog.errors.some(error => error.source === "snapflyer_metro_market"),
@@ -529,9 +530,9 @@ const amazonOnly = await collectDealCandidates({
    }
  });
  assert.equal(allEditionCatalogCalls, 1, "combined collection mode must include SnapFlyer once");
- assert.equal(allEdition.sourceCount, 13, "combined mode must count three Amazon, seven other-store, and three catalog sources");
+ assert.equal(allEdition.sourceCount, 10, "combined mode must count three Amazon, four online-store, and three SnapFlyer sources");
 
- // End-to-end publication path for the 6 PM Cairo other-store edition.
+ // End-to-end publication path for the 12:30 PM Cairo online-stores edition.
  const publicationQueries = [];
  const publicationMessages = [];
  const publicationErrors = [];
@@ -564,7 +565,8 @@ const amazonOnly = await collectDealCandidates({
    { merchant: "كازيون", title: "تايد جل غسالات أوتوماتيك 2.35 لتر", price: 174.95, category: "detergent", url: "https://snapflyer.io/eg/downtown/offers/kazyon/1711", source: "snapflyer_catalog" },
    { merchant: "مترو ماركت", title: "منظف أطباق أوكسي 2.5 لتر", price: 114.95, category: "detergent", url: "https://snapflyer.io/eg/downtown/offers/metro-market/1532", source: "snapflyer_catalog" },
    { merchant: "Jumia", title: "مناديل فاين 200 منديل", price: 35, old_price: 42, category: "paper", url: "https://www.jumia.com.eg/fine-tissues-123" },
-   { merchant: "Noon", title: "شامبو دوف للعناية بالشعر", price: 119.5, category: "personal_care", url: "https://www.noon.com/egypt-ar/dove-shampoo-123" }
+   { merchant: "Noon", title: "شامبو دوف للعناية بالشعر", price: 119.5, category: "personal_care", url: "https://www.noon.com/egypt-ar/dove-shampoo-123" },
+   { merchant: "Carrefour", title: "منظف أرضيات متعدد الاستخدامات", price: 65, category: "detergent", url: "https://www.carrefouregypt.com/mafegy/ar/p/floor-cleaner-123" }
  ];
  let publicationEdition = null;
  const publicationResult = await publishDailyDeals({
@@ -574,25 +576,27 @@ const amazonOnly = await collectDealCandidates({
      return { message_id: 9901 };
    } },
    chatIds: [-1001234567890],
-   now: new Date("2026-10-12T15:30:00.000Z"), // 6:30 PM Cairo
+   now: new Date("2026-10-12T09:30:00.000Z"), // 12:30 PM Cairo
    fetcher: async ({ edition }) => {
      publicationEdition = edition;
-     return { deals: publicationDeals, errors: [], sourceStats: [], sourceCount: 13 };
+     return { deals: publicationDeals, errors: [], sourceStats: [], sourceCount: 4 };
    },
    verify: async deals => deals.map(deal => ({ ...deal, verified_url: true })),
    onError: async error => publicationErrors.push(String(error?.message || error)),
    onDiagnostics: async details => publicationDiagnostics.push(details)
  });
- assert.equal(publicationEdition, "other_sites", "6 PM publication must collect only the other-store edition");
- assert.equal(publicationResult.kind, "other_sites");
+ assert.equal(publicationEdition, "online_stores", "12:30 PM publication must collect only the online-stores edition");
+ assert.equal(publicationResult.kind, "online_stores");
  assert.equal(publicationMessages.length, 1, "one authorized group should receive one newsletter message");
  assert.equal(publicationMessages[0].chatId, -1001234567890);
- assert.ok(publicationMessages[0].message.includes("عروض المتاجر الأخرى المختارة"));
- assert.ok(publicationMessages[0].message.includes("كازيون"));
- assert.ok(publicationMessages[0].message.includes("مترو ماركت"));
- assert.ok(publicationMessages[0].message.includes("Jumia"));
+ assert.ok(publicationMessages[0].message.includes("عروض التسوق الإلكتروني"));
  assert.ok(publicationMessages[0].message.includes("Noon"));
+ assert.ok(publicationMessages[0].message.includes("Carrefour"));
+ assert.ok(!publicationMessages[0].message.includes("Jumia"));
+ assert.ok(!publicationMessages[0].message.includes("كازيون"));
+ assert.ok(!publicationMessages[0].message.includes("مترو ماركت"));
  assert.ok(!publicationMessages[0].message.includes("Amazon.eg"));
+ assert.ok(!publicationMessages[0].message.includes("SnapFlyer"));
  assert.ok(!publicationMessages[0].message.includes("B0AMAZON123"),
    "Amazon products must never leak into the 6 PM other-store newsletter");
  assert.equal(publicationResult.published.length, 1);
@@ -602,14 +606,14 @@ const amazonOnly = await collectDealCandidates({
  assert.ok(publicationQueries.some(q => q.sql.startsWith("UPDATE deal_publications SET status='published'")),
    "successful Telegram delivery must be recorded as published");
  const persistedOffers = publicationQueries.filter(q => q.sql.startsWith("INSERT INTO deal_observations"));
- assert.equal(persistedOffers.length, 4,
-   "only the four selected non-Amazon offers should be persisted after successful delivery");
+ assert.equal(persistedOffers.length, 2,
+   "only the Noon and Carrefour offers selected for this edition should be persisted");
  assert.deepEqual(publicationErrors, []);
  assert.deepEqual(publicationDiagnostics.map(item => item.stage), ["collected", "filtered"],
    "publication must emit collection and post-filter diagnostics");
- assert.equal(publicationDiagnostics[0].kind, "other_sites");
+ assert.equal(publicationDiagnostics[0].kind, "online_stores");
  assert.equal(publicationDiagnostics[0].gatheredCount, 5);
- assert.equal(publicationDiagnostics[1].selectedCount, 4);
+ assert.equal(publicationDiagnostics[1].selectedCount, 2);
  assert.equal(publicationDiagnostics[1].duplicateCooldownDays, 7);
 
  if (oldKey1 === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = oldKey1;

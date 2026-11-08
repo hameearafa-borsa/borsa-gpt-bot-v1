@@ -125,9 +125,13 @@ function startHttpServer({ bot, port, secret }) {
   const server = http.createServer(async (req, res) => {
     const pathname = String(req.url || "/").split("?")[0];
     if ((req.method === "GET" || req.method === "HEAD") && (pathname === "/" || pathname === "/health")) {
-      res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-      // HEAD must return the same status and headers as GET, but never a response body.
-      res.end(req.method === "HEAD" ? undefined : "borsa-gpt-bot ok");
+      const body = "borsa-gpt-bot ok";
+      res.writeHead(200, {
+        "content-type": "text/plain; charset=utf-8",
+        "content-length": Buffer.byteLength(body),
+      });
+      // HEAD returns GET's status and headers without sending the response body.
+      res.end(req.method === "HEAD" ? undefined : body);
       return;
     }
     if (!(req.method === "POST" && pathname === WEBHOOK_PATH)) {

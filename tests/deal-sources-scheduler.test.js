@@ -52,6 +52,16 @@ const noonHydrationCards = extractCards(noonHydrationFixture, "noon");
 assert.equal(noonHydrationCards.length, 1, "product data in JSON hydration state should be extracted without evaluating scripts");
 assert.equal(noonHydrationCards[0].price, 175);
 assert.equal(noonHydrationCards[0].old_price, 210);
+const noonArabicNameFixture = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
+  props: { pageProps: { products: [
+    { name: "Persil laundry detergent", name_ar: "مسحوق برسيل للغسالات 3 كيلو", slug: "/egypt-ar/product/PERSILAR123", price: { value: "175.00", currency: "EGP" } }
+  ] } }
+})}</script>`;
+const noonArabicNameCards = extractCards(noonArabicNameFixture, "noon");
+assert.equal(noonArabicNameCards.length, 1);
+assert.equal(noonArabicNameCards[0].title, "مسحوق برسيل للغسالات 3 كيلو",
+  "Arabic product-name fields must be preferred over English retailer names");
+
 const hydrationDiagnostics = extractionDiagnostics(noonHydrationFixture, "noon", noonHydrationCards);
 assert.equal(hydrationDiagnostics.structuredScriptsFound, 1);
 assert.equal(hydrationDiagnostics.structuredJsonParsed, 1);

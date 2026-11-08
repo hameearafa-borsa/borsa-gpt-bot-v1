@@ -1,7 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, createExtractionCounters, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
-const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, publishDailyDeals } = require("../modules/deal-scheduler");
+const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, selectMarketStoreGroups, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, publishDailyDeals } = require("../modules/deal-scheduler");
 const { formatNewsletterMessage, distributeDeals, AMAZON_TARGETS } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
@@ -12,6 +12,33 @@ assert.equal(safeProductUrl("https://www.amazon.eg/", "amazon"), null);
 assert.equal(categoryOf("مناديل فاين"), "paper");
 assert.equal(categoryOf("شامبو نيفيا"), "personal_care");
 assert.equal(categoryOf("مسحوق غسيل"), "detergent");
+
+// SnapFlyer is collected once, then partitioned by merchant into two
+// non-overlapping 15-offer newsletters with five offers per category.
+const snapflyerPartitionFixtures = [];
+for (const [merchant, prefix] of [["بيت الجملة", "A"], ["كازيون", "B"]]) {
+  for (const [category, label] of [["detergent", "مسحوق غسيل"], ["paper", "مناديل ورقية"], ["personal_care", "شامبو"]]) {
+    for (let i = 0; i < 5; i++) {
+      const id = prefix + category + i;
+      snapflyerPartitionFixtures.push({
+        merchant, title: label + " " + id, category, price: 20 + i,
+        url: "https://snapflyer.io/product/" + (100000 + snapflyerPartitionFixtures.length)
+      });
+    }
+  }
+}
+const [marketGroupOne, marketGroupTwo] = selectMarketStoreGroups(snapflyerPartitionFixtures);
+assert.equal(marketGroupOne.length, 15);
+assert.equal(marketGroupTwo.length, 15);
+assert.ok(marketGroupOne.every(deal => deal.merchant === "بيت الجملة"));
+assert.ok(marketGroupTwo.every(deal => deal.merchant === "كازيون"));
+assert.equal(new Set([...marketGroupOne, ...marketGroupTwo].map(deal => deal.url)).size, 30,
+  "the two SnapFlyer editions must not repeat any product link");
+for (const group of [marketGroupOne, marketGroupTwo]) {
+  assert.equal(group.filter(deal => deal.category === "detergent").length, 5);
+  assert.equal(group.filter(deal => deal.category === "paper").length, 5);
+  assert.equal(group.filter(deal => deal.category === "personal_care").length, 5);
+}
 assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "no_deals" }), true);
 assert.equal(shouldBackoffAfterDealAttempt({ skipped: true, reason: "all_recent_or_invalid" }), true,
   "recent duplicate-only results should not trigger another paid scrape every minute");

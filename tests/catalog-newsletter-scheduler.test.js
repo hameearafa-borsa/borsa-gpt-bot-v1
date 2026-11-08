@@ -188,6 +188,22 @@ function makePipelinePool() {
   const sent = [];
   const telegram = { sendMessage: async (chatId, message) => { sent.push({ chatId, message }); } };
 
+  // Disabling notices must preserve catalog discovery while creating no Telegram backlog.
+  const disabledPool = makePipelinePool();
+  const disabledSent = [];
+  const disabledResult = await checkCatalogsOnce({
+    pool: disabledPool,
+    telegram: { sendMessage: async (_chatId, message) => disabledSent.push(message) },
+    chatId: -100123,
+    fetchPage,
+    publishNotices: false
+  });
+  assert.equal(disabledResult.checkedStores, Object.keys(CATALOG_STORES).length);
+  assert.equal(disabledResult.noticesDisabled, true);
+  assert.equal(disabledSent.length, 0);
+  assert.ok([...disabledPool.rows.values()].some(row => row.status === "ignored"));
+  assert.equal([...disabledPool.rows.values()].some(row => row.status === "pending"), false);
+
   // First observation is a quiet baseline, so it must not publish.
   const first = await checkCatalogsOnce({ pool, telegram, chatId: -100123, fetchPage });
   assert.equal(first.checkedStores, Object.keys(CATALOG_STORES).length);

@@ -12,15 +12,10 @@ function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.y
 function newsletterKindAt(date = new Date()) {
   const p = cairoParts(date);
   const hour = Number(p.hour), minute = Number(p.minute);
-  // Amazon collection uses three paid searches. Keep its edition eligible
-  // from 5:00 through 5:44 PM for restart recovery.
-  // Other stores need seven ScraperAPI searches plus up to six sequential
-  // SnapFlyer page fetches. Start at 6:30 PM, leaving 45 minutes after the
-  // Amazon retry window, and keep a 60-minute recovery window. This ends
-  // 30 minutes before the 8 PM price digest.
-  if (hour === 17 && minute < 45) return "amazon";
-  if (hour === 18 && minute >= 30) return "other_sites";
-  if (hour === 19 && minute < 30) return "other_sites";
+  // Each source family has its own recovery window.
+  if ((hour === 12 && minute >= 30) || (hour === 13 && minute < 30)) return "online_stores";
+  if (hour === 14) return "market_stores";
+  if (hour === 16 && minute < 45) return "amazon";
   return null;
 }
 function isNewsletterWindow(date = new Date()) { return newsletterKindAt(date) !== null; }
@@ -31,8 +26,15 @@ function selectNewsletterDeals(recent, kind) {
       return host === "www.amazon.eg" || host === "amazon.eg";
     } catch { return false; }
   };
-  // Balance each edition independently so Amazon cannot crowd out the 6 PM edition.
-  const editionPool = recent.filter(d => kind === "amazon" ? isAmazon(d) : !isAmazon(d));
+  const hostOf = deal => { try { return new URL(deal.url).hostname.toLowerCase(); } catch { return ""; } };
+  const isOnlineStore = deal => ["www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com"].includes(hostOf(deal));
+  const isMarketStore = deal => hostOf(deal) === "snapflyer.io";
+  // Strict source allowlists prevent one edition from leaking into another.
+  const editionPool = recent.filter(d =>
+    kind === "amazon" ? isAmazon(d) :
+    kind === "online_stores" ? isOnlineStore(d) :
+    kind === "market_stores" ? isMarketStore(d) : false
+  );
   const balanced = distributeDeals(editionPool, kind === "amazon" ? AMAZON_TARGETS : TARGETS);
   return [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
 }
@@ -330,9 +332,11 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
   }
-  const title = kind === "amazon"
-    ? "عروض أمازون للمنظفات والورقيات والعناية"
-    : "عروض المتاجر الأخرى المختارة";
+  const title = ({
+    amazon: "عروض أمازون للمنظفات والورقيات والعناية",
+    online_stores: "عروض التسوق الإلكتروني",
+    market_stores: "عروض الأسواق والمتاجر"
+  })[kind] || "عروض المتاجر الأخرى المختارة";
 
   const published = [];
   for (const targetId of unreservedTargets) {

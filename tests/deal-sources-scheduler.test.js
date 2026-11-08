@@ -622,7 +622,7 @@ const amazonOnly = await collectDealCandidates({
  assert.deepEqual(publicationDiagnostics.map(item => item.stage), ["collected", "filtered"],
    "publication must emit collection and post-filter diagnostics");
  assert.equal(publicationDiagnostics[0].kind, "online_stores");
- assert.equal(publicationDiagnostics[0].gatheredCount, 5);
+ assert.equal(publicationDiagnostics[0].gatheredCount, 6);
  assert.equal(publicationDiagnostics[1].selectedCount, 2);
  assert.equal(publicationDiagnostics[1].duplicateCooldownDays, 7);
 

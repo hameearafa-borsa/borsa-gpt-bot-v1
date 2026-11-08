@@ -972,7 +972,7 @@ installFatalProcessHandlers({
       await emitReport({ bot, db, report });
     }
   });
-  console.log("[CATALOG_NEWSLETTER_SCHEDULER] Daily check scheduled for 10:10 Africa/Cairo; targets active approved groups.");
+  console.log("[CATALOG_NEWSLETTER_SCHEDULER] Daily check scheduled for 09:00 Africa/Cairo; targets active approved groups.");
   await ensureEconomicNewsletterSchema(db.pool);
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   stopEconomicNewsletter = startEconomicNewsletterScheduler({
@@ -983,7 +983,7 @@ installFatalProcessHandlers({
       await emitReport({ bot, db, report });
     }
   });
-  console.log("[ECONOMIC_NEWSLETTER_SCHEDULER] Daily bulletin scheduled for 10:30 Africa/Cairo; targets active approved groups.");
+  console.log("[ECONOMIC_NEWSLETTER_SCHEDULER] Daily bulletin scheduled for 10:00 Africa/Cairo; targets active approved groups.");
   await ensurePriceDigestSchema(db.pool);
   if (shutdownRequested) { await shutdown("STARTUP_CANCELLED"); return; }
   stopPriceDigest = startPriceDigestScheduler({

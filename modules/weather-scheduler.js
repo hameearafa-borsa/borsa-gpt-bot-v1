@@ -4,7 +4,7 @@ const { partsAt, dateKeyAt } = require("../core/cairo-time");
 const { getDailyWeatherReport } = require("./weather");
 const { isServiceEnabled } = require("../core/service-settings");
 
-const WEATHER_SLOTS = Object.freeze([{ hour: 11, minute: 0, key: "11" }, { hour: 20, minute: 0, key: "20" }]);
+const WEATHER_SLOTS = Object.freeze([{ hour: 11, minute: 0, key: "11" }, { hour: 21, minute: 0, key: "21" }]);
 const GRACE_MINUTES = 5;
 
 function currentWeatherSlot(now = new Date()) {
@@ -18,7 +18,7 @@ async function ensureWeatherSchedulerSchema(pool) {
   await pool.query(`CREATE TABLE IF NOT EXISTS weather_publications (
     id BIGSERIAL PRIMARY KEY,
     cairo_date DATE NOT NULL,
-    slot_key TEXT NOT NULL CHECK (slot_key IN ('11','20')),
+    slot_key TEXT NOT NULL CHECK (slot_key IN ('11','20','21')),
     chat_id BIGINT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('prepared','published','failed')),
     message_id BIGINT,
@@ -27,6 +27,8 @@ async function ensureWeatherSchedulerSchema(pool) {
     last_error TEXT,
     UNIQUE(cairo_date, slot_key, chat_id)
   )`);
+  await pool.query("ALTER TABLE weather_publications DROP CONSTRAINT IF EXISTS weather_publications_slot_key_check");
+  await pool.query("ALTER TABLE weather_publications ADD CONSTRAINT weather_publications_slot_key_check CHECK (slot_key IN ('11','20','21'))");
   await pool.query("CREATE INDEX IF NOT EXISTS idx_weather_publications_date ON weather_publications(cairo_date DESC, slot_key)");
 }
 

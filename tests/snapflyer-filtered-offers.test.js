@@ -9,7 +9,7 @@ const { verifyProductUrl } = require("../modules/deal-scheduler");
 assert.equal(FILTERS.some(item => item.key === "laundry-detergent"), true);
 assert.equal(
   filterUrl(FILTERS.find(item => item.key === "laundry-detergent")),
-  "https://snapflyer.io/eg/downtown/products?category=cleaning&type=laundry-detergent"
+  "https://snapflyer.io/eg/downtown/products?category=cleaning&type=laundry-detergent&lang=ar"
 );
 assert.equal(productUrl("https://snapflyer.io/product/236503", "https://snapflyer.io/eg/downtown/products"), "https://snapflyer.io/product/236503");
 assert.equal(productUrl("https://evil.example/product/236503", "https://snapflyer.io/eg/downtown/products"), null);

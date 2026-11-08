@@ -125,6 +125,7 @@ function filterUrl(filter) {
   const url = new URL("https://snapflyer.io/eg/downtown/products");
   url.searchParams.set("category", filter.category);
   if (filter.type) url.searchParams.set("type", filter.type);
+  url.searchParams.set("lang", "ar");
   return url.href;
 }
 

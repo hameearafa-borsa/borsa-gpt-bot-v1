@@ -22,7 +22,10 @@ function fakeForecast(url) {
   assert.equal(currentWeatherSlot(utcForCairo("2026-10-24T11:00")).key, "11");
   assert.equal(currentWeatherSlot(utcForCairo("2026-10-24T11:04")).key, "11");
   assert.equal(currentWeatherSlot(utcForCairo("2026-10-24T11:05")), null);
-  assert.equal(currentWeatherSlot(utcForCairo("2026-10-24T20:02")).key, "20");
+  assert.equal(currentWeatherSlot(utcForCairo("2026-10-24T20:59")), null);
+  assert.equal(currentWeatherSlot(utcForCairo("2026-10-24T21:00")).key, "21");
+  assert.equal(currentWeatherSlot(utcForCairo("2026-10-24T21:04")).key, "21");
+  assert.equal(currentWeatherSlot(utcForCairo("2026-10-24T21:05")), null);
   assert.equal(GRACE_MINUTES, 5);
 
   const report = await getDailyWeatherReport({ now: utcForCairo("2026-10-24T11:00"), fetchJson: async url => fakeForecast(url) });

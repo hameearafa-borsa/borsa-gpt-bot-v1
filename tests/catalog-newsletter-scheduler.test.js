@@ -4,29 +4,28 @@ const { DAILY_HOUR, DAILY_MINUTE, cairoClock, msUntilNextCheck, fetchStorePage, 
 const { newsletterKindAt } = require("../modules/deal-scheduler");
 const { currentWeatherSlot } = require("../modules/weather-scheduler");
 
-assert.equal(DAILY_HOUR, 10);
-assert.equal(DAILY_MINUTE, 10);
+assert.equal(DAILY_HOUR, 9);
+assert.equal(DAILY_MINUTE, 0);
 assert.equal(typeof cairoClock().hour, "number");
 
-// Catalog check has a 50-minute buffer before the existing 11:00 weather bulletin,
-// and is many hours away from the 17:00/18:00 deal newsletters.
-assert.equal(currentWeatherSlot(new Date("2026-10-25T07:10:00.000Z")), null); // 10:10 Cairo
+// The 9 AM catalog check has a two-hour buffer before the 11 AM weather bulletin.
+assert.equal(currentWeatherSlot(new Date("2026-10-25T06:00:00.000Z")), null); // 9:00 Cairo
 assert.equal(currentWeatherSlot(new Date("2026-10-25T08:00:00.000Z"))?.hour, 11); // 11:00 Cairo
-assert.equal(newsletterKindAt(new Date("2026-10-25T07:10:00.000Z")), null); // 10:10 Cairo
-assert.equal(newsletterKindAt(new Date("2026-10-25T14:00:00.000Z")), "amazon"); // 17:00 Cairo
-assert.equal(newsletterKindAt(new Date("2026-10-25T15:00:00.000Z")), null); // 18:00 Cairo, before the new window
-assert.equal(newsletterKindAt(new Date("2026-10-25T15:30:00.000Z")), "other_sites"); // 18:30 Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-25T06:00:00.000Z")), null); // 9:00 Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-25T13:00:00.000Z")), "amazon"); // 16:00 Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-25T14:00:00.000Z")), null); // 17:00 Cairo
+assert.equal(newsletterKindAt(new Date("2026-10-25T11:00:00.000Z")), "market_stores"); // 14:00 Cairo
 
-const before = new Date("2026-10-25T07:09:00.000Z"); // 10:09 Cairo
+const before = new Date("2026-10-25T05:59:00.000Z"); // 8:59 Cairo
 assert.equal(msUntilNextCheck(before), 60 * 1000);
-const after = new Date("2026-10-25T07:11:00.000Z"); // 10:11 Cairo
+const after = new Date("2026-10-25T06:01:00.000Z"); // 9:01 Cairo
 assert.equal(msUntilNextCheck(after), 24 * 60 * 60 * 1000 - 60 * 1000);
 
 // Egypt leaves daylight-saving time overnight on 29/30 October 2026.
-// The next local 10:10 is 24h59m later, not 23h59m later.
-const beforeCairoDstEnds = new Date("2026-10-29T07:11:00.000Z"); // 10:11 EEST
+// The next local 9:00 is 24h59m later, not 23h59m later.
+const beforeCairoDstEnds = new Date("2026-10-29T06:01:00.000Z"); // 9:01 EEST
 assert.equal(msUntilNextCheck(beforeCairoDstEnds), 24 * 60 * 60 * 1000 + 59 * 60 * 1000);
-const atNextCairoCheck = new Date("2026-10-30T08:10:00.000Z"); // 10:10 EET
+const atNextCairoCheck = new Date("2026-10-30T07:00:00.000Z"); // 9:00 EET
 assert.equal(msUntilNextCheck(atNextCairoCheck), 24 * 60 * 60 * 1000);
 
 (async () => {

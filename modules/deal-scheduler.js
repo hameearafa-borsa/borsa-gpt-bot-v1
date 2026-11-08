@@ -12,15 +12,10 @@ function batchKey(date = new Date()) { const p = cairoParts(date); return `${p.y
 function newsletterKindAt(date = new Date()) {
   const p = cairoParts(date);
   const hour = Number(p.hour), minute = Number(p.minute);
-  // Amazon collection uses three paid searches. Keep its edition eligible
-  // from 5:00 through 5:44 PM for restart recovery.
-  // Other stores need seven ScraperAPI searches plus up to six sequential
-  // SnapFlyer page fetches. Start at 6:30 PM, leaving 45 minutes after the
-  // Amazon retry window, and keep a 60-minute recovery window. This ends
-  // 30 minutes before the 8 PM price digest.
-  if (hour === 17 && minute < 45) return "amazon";
-  if (hour === 18 && minute >= 30) return "other_sites";
-  if (hour === 19 && minute < 30) return "other_sites";
+  // Each source family has its own recovery window.
+  if ((hour === 12 && minute >= 30) || (hour === 13 && minute < 30)) return "online_stores";
+  if (hour === 14) return "market_stores";
+  if (hour === 16 && minute < 45) return "amazon";
   return null;
 }
 function isNewsletterWindow(date = new Date()) { return newsletterKindAt(date) !== null; }
@@ -31,10 +26,39 @@ function selectNewsletterDeals(recent, kind) {
       return host === "www.amazon.eg" || host === "amazon.eg";
     } catch { return false; }
   };
-  // Balance each edition independently so Amazon cannot crowd out the 6 PM edition.
-  const editionPool = recent.filter(d => kind === "amazon" ? isAmazon(d) : !isAmazon(d));
+  const hostOf = deal => { try { return new URL(deal.url).hostname.toLowerCase(); } catch { return ""; } };
+  const isOnlineStore = deal => ["www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com"].includes(hostOf(deal));
+  const isMarketStore = deal => hostOf(deal) === "snapflyer.io";
+  // Strict source allowlists prevent one edition from leaking into another.
+  const editionPool = recent.filter(d =>
+    kind === "amazon" ? isAmazon(d) :
+    kind === "online_stores" ? isOnlineStore(d) :
+    kind === "market_stores" ? isMarketStore(d) : false
+  );
   const balanced = distributeDeals(editionPool, kind === "amazon" ? AMAZON_TARGETS : TARGETS);
   return [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
+}
+
+const MARKET_STORE_GROUP_ONE = Object.freeze([
+  "بيت الجملة", "هايبر وان", "سعودي ماركت", "مترو ماركت",
+  "beit el gomla", "hyper one", "seoudi market", "metro market"
+]);
+function marketStoreGroup(deal) {
+  const merchant = String(deal.merchant || "").trim().toLocaleLowerCase("en");
+  return MARKET_STORE_GROUP_ONE.some(name => merchant.includes(name.toLocaleLowerCase("en"))) ? 1 : 2;
+}
+function selectMarketStoreGroups(recent) {
+  const snapFlyer = recent.filter(deal => {
+    try { return new URL(deal.url).hostname.toLowerCase() === "snapflyer.io"; }
+    catch { return false; }
+  });
+  const first = snapFlyer.filter(deal => marketStoreGroup(deal) === 1);
+  const second = snapFlyer.filter(deal => marketStoreGroup(deal) === 2);
+  const balance = pool => {
+    const selected = distributeDeals(pool, TARGETS);
+    return [...selected.detergent, ...selected.paper, ...selected.personal_care];
+  };
+  return [balance(first), balance(second)];
 }
 
 async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000, maxRedirects = 5 } = {}) {
@@ -226,19 +250,23 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   const kind = newsletterKindAt(now);
   if (!kind) return { skipped: true, reason: "outside_newsletter_hours" };
   const key = batchKey(now);
+  const editionKinds = kind === "market_stores" ? ["market_stores", "market_stores_2"] : [kind];
   const existing = await pool.query(
-    "SELECT channel_kind,status,chat_id FROM deal_publications WHERE batch_key=$1 AND channel_kind=$2 AND chat_id = ANY($3::bigint[])",
-    [key, kind, targetChatIds]
+    "SELECT channel_kind,status,chat_id FROM deal_publications WHERE batch_key=$1 AND channel_kind = ANY($2::text[]) AND chat_id = ANY($3::bigint[])",
+    [key, editionKinds, targetChatIds]
   );
-  const reservedChats = new Set(existing.rows.filter(row => row.channel_kind === kind).map(row => Number(row.chat_id)));
-  const publishedChats = new Set(existing.rows.filter(row => row.channel_kind === kind && row.status === "published").map(row => Number(row.chat_id)));
-  const unreservedTargets = targetChatIds.filter(id => !reservedChats.has(id));
+  const reservedByKind = new Map(editionKinds.map(editionKind => [
+    editionKind,
+    new Set(existing.rows.filter(row => row.channel_kind === editionKind).map(row => Number(row.chat_id)))
+  ]));
+  const publishedByKind = new Map(editionKinds.map(editionKind => [
+    editionKind,
+    new Set(existing.rows.filter(row => row.channel_kind === editionKind && row.status === "published").map(row => Number(row.chat_id)))
+  ]));
+  const unreservedTargets = targetChatIds.filter(id => editionKinds.some(editionKind => !reservedByKind.get(editionKind).has(id)));
   if (!unreservedTargets.length) {
-    return {
-      skipped: true,
-      reason: targetChatIds.every(id => publishedChats.has(id)) ? "already_published" : "all_targets_already_reserved",
-      batchKey: key, kind
-    };
+    const allPublished = targetChatIds.every(id => editionKinds.every(editionKind => publishedByKind.get(editionKind).has(id)));
+    return { skipped: true, reason: allPublished ? "already_published" : "all_targets_already_reserved", batchKey: key, kind };
   }
 
   // Collect and verify once per edition, regardless of the number of target groups.
@@ -312,76 +340,98 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
     }
     return { skipped: true, reason: "all_recent_or_invalid", sourceErrors: gathered.errors || [] };
   }
-  const itemsByChat = new Map();
-  if (kind === "amazon") {
-    for (const targetId of unreservedTargets) itemsByChat.set(targetId, selectNewsletterDeals(recentByChat.get(targetId) || [], kind));
-  } else {
-    const commonItems = selectNewsletterDeals(recent, kind);
-    for (const targetId of unreservedTargets) itemsByChat.set(targetId, commonItems);
+  const editionPlans = kind === "market_stores"
+    ? [
+        { kind: "market_stores", title: "عروض الأسواق والمتاجر — المجموعة الأولى", groupIndex: 0 },
+        { kind: "market_stores_2", title: "عروض الأسواق والمتاجر — المجموعة الثانية", groupIndex: 1 }
+      ]
+    : [{
+        kind,
+        title: ({
+          amazon: "عروض أمازون للمنظفات والورقيات والعناية",
+          online_stores: "عروض التسوق الإلكتروني"
+        })[kind] || "عروض المتاجر الأخرى المختارة",
+        groupIndex: null
+      }];
+  const marketGroups = kind === "market_stores" ? selectMarketStoreGroups(recent) : null;
+  const itemsByEdition = new Map();
+  for (const plan of editionPlans) {
+    const byChat = new Map();
+    if (kind === "amazon") {
+      for (const targetId of unreservedTargets) byChat.set(targetId, selectNewsletterDeals(recentByChat.get(targetId) || [], kind));
+    } else {
+      const commonItems = kind === "market_stores"
+        ? marketGroups[plan.groupIndex]
+        : selectNewsletterDeals(recent, kind);
+      for (const targetId of unreservedTargets) byChat.set(targetId, commonItems);
+    }
+    itemsByEdition.set(plan.kind, byChat);
   }
-  const items = [...new Map([...itemsByChat.values()].flat().map(deal => [deal.fingerprint, deal])).values()];
+  const allSelectedItems = [...new Map(
+    [...itemsByEdition.values()].flatMap(byChat => [...byChat.values()]).flat().map(deal => [deal.fingerprint || deal.url + "|" + deal.title + "|" + deal.price, deal])
+  ).values()];
   await emitDiagnostics({
     ...diagnosticsBase, stage: "filtered", verifiedCount: verified.length,
-    recentCount: recent.length, selectedCount: items.length,
-    selectedByMerchant: Object.fromEntries([...new Set(items.map(item => String(item.merchant || "unknown")))].map(merchant => [merchant, items.filter(item => String(item.merchant || "unknown") === merchant).length])),
+    recentCount: recent.length, selectedCount: allSelectedItems.length,
+    selectedByMerchant: Object.fromEntries([...new Set(allSelectedItems.map(item => String(item.merchant || "unknown")))].map(merchant => [merchant, allSelectedItems.filter(item => String(item.merchant || "unknown") === merchant).length])),
+    ...(kind === "market_stores" ? {
+      marketStoreGroups: editionPlans.map(plan => ({
+        kind: plan.kind,
+        selectedCount: [...(itemsByEdition.get(plan.kind)?.values() || [])].flat().length,
+        merchants: [...new Set([...itemsByEdition.get(plan.kind).values()].flat().map(item => String(item.merchant || "unknown")))]
+      }))
+    } : {}),
     duplicateCooldownDays, elapsedMs: Date.now() - collectionStartedAt
   });
-  if (![...itemsByChat.values()].some(groupItems => groupItems.length)) {
-    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceSummary: gathered.sourceSummary || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
+  if (![...itemsByEdition.values()].some(byChat => [...byChat.values()].some(groupItems => groupItems.length))) {
+    await onError(new Error("No validated deal candidates for scheduled newsletter"), { stage: "fetch", errors: gathered.errors || [], sourceStats: gathered.sourceStats || [], sourceCount: gathered.sourceCount ?? null, batchKind: kind, batchKey: key });
     return { skipped: true, reason: "no_deals", kind, sourceErrors: gathered.errors || [] };
   }
-  const title = kind === "amazon"
-    ? "عروض أمازون للمنظفات والورقيات والعناية"
-    : "عروض المتاجر الأخرى المختارة";
 
   const published = [];
-  for (const targetId of unreservedTargets) {
-    const targetItems = itemsByChat.get(targetId) || [];
-    const formatted = formatNewsletterMessage(targetItems, title);
-    const formattedItems = formatted.items;
-    if (!formattedItems.length) {
-      await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: kind, batchKey: key, chatId: targetId });
-      continue;
-    }
-    const reservation = await pool.query(
-      "INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status) VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind,chat_id) DO NOTHING RETURNING id",
-      [key, kind, targetId, formattedItems.length]
-    );
-    if (!reservation.rowCount) {
-      // A prepared/failed reservation may represent an ambiguous Telegram outcome.
-      // Never auto-repeat it; a human can inspect and repair the record if needed.
-      continue;
-    }
-    let msg;
-    try {
-      msg = await telegram.sendMessage(targetId, formatted.text, { disable_web_page_preview: true, parse_mode: "HTML" });
-    } catch (error) {
-      await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(() => {});
-      await onError(error, { stage: "publish", batchKind: kind, batchKey: key, chatId: targetId });
-      continue;
-    }
-
-    published.push({ kind, count: formattedItems.length, messageId: msg.message_id, chatId: targetId });
-    try {
-      await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id, reservation.rows[0].id]);
-    } catch (error) {
-      await onError(error, { stage: "publication_record", batchKind: kind, batchKey: key, messageId: msg.message_id, chatId: targetId });
-    }
-    if (kind === "amazon") {
+  for (const plan of editionPlans) {
+    const reserved = reservedByKind.get(plan.kind);
+    for (const targetId of unreservedTargets) {
+      if (reserved.has(targetId)) continue;
+      const targetItems = itemsByEdition.get(plan.kind).get(targetId) || [];
+      const formatted = formatNewsletterMessage(targetItems, plan.title);
+      const formattedItems = formatted.items;
+      if (!formattedItems.length) {
+        await onError(new Error("No complete product blocks fit in the Telegram newsletter limit"), { stage: "format", batchKind: plan.kind, batchKey: key, chatId: targetId });
+        continue;
+      }
+      const reservation = await pool.query(
+        "INSERT INTO deal_publications(batch_key,channel_kind,chat_id,item_count,status) VALUES($1,$2,$3,$4,'prepared') ON CONFLICT(batch_key,channel_kind,chat_id) DO NOTHING RETURNING id",
+        [key, plan.kind, targetId, formattedItems.length]
+      );
+      if (!reservation.rowCount) continue;
+      let msg;
       try {
-        await updateQueuedDeals(pool, formattedItems, "published", targetId);
+        msg = await telegram.sendMessage(targetId, formatted.text, { disable_web_page_preview: true, parse_mode: "HTML" });
       } catch (error) {
-        await onError(error, { stage: "update_deal_queue", batchKind: kind, batchKey: key, messageIds: [msg.message_id], chatId: targetId });
+        await pool.query("UPDATE deal_publications SET status='failed' WHERE id=$1", [reservation.rows[0].id]).catch(() => {});
+        await onError(error, { stage: "publish", batchKind: plan.kind, batchKey: key, chatId: targetId });
+        continue;
+      }
+      published.push({ kind: plan.kind, count: formattedItems.length, messageId: msg.message_id, chatId: targetId });
+      try {
+        await pool.query("UPDATE deal_publications SET status='published',published_at=NOW(),message_id=$1 WHERE id=$2", [msg.message_id, reservation.rows[0].id]);
+      } catch (error) {
+        await onError(error, { stage: "publication_record", batchKind: plan.kind, batchKey: key, messageId: msg.message_id, chatId: targetId });
+      }
+      if (plan.kind === "amazon") {
+        try {
+          await updateQueuedDeals(pool, formattedItems, "published", targetId);
+        } catch (error) {
+          await onError(error, { stage: "update_deal_queue", batchKind: plan.kind, batchKey: key, messageIds: [msg.message_id], chatId: targetId });
+        }
       }
     }
   }
 
   if (kind !== "amazon" && published.length) {
-    try {
-      await persistDeals(pool, itemsByChat.get(published[0].chatId) || []);
-    } catch (error) {
-      await onError(error, { stage: "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) });
-    }
+    try { await persistDeals(pool, allSelectedItems); }
+    catch (error) { await onError(error, { stage: "persist_deals", batchKind: kind, batchKey: key, messageIds: published.map(item => item.messageId) }); }
   }
   return {
     batchKey: key, kind, verified: verified.length, recent: recent.length,
@@ -457,4 +507,4 @@ function shouldResetDealBackoff(previousKind, currentKind) {
   return Boolean(previousKind && currentKind && previousKind !== currentKind);
 }
 
-module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, verifyProductUrl, verifyDeals, persistDeals, enqueueObservedDeals, loadQueuedDeals, updateQueuedDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, startDealScheduler };
+module.exports = { cairoParts, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, selectMarketStoreGroups, verifyProductUrl, verifyDeals, persistDeals, enqueueObservedDeals, loadQueuedDeals, updateQueuedDeals, publishDailyDeals, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, startDealScheduler };

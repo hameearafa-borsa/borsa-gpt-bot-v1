@@ -3,7 +3,7 @@ const assert = require("node:assert/strict");
 const { publishDailyDeals, enqueueObservedDeals } = require("../modules/deal-scheduler");
 const { dealFingerprint, dealProductFingerprint } = require("../modules/deals");
 
-const date = new Date("2026-10-12T14:00:00.000Z"); // 5 PM in Cairo
+const date = new Date("2026-10-12T13:00:00.000Z"); // 4 PM in Cairo
 const candidates = [{
   merchant: "Amazon.eg",
   title: "مسحوق غسيل اختبار",
@@ -127,7 +127,7 @@ function makePool({ failPublishedUpdate = false, failObservation = false, failQu
     chatId: "-100123",
     fetcher: async () => { retryFetchCount++; return { deals: [] }; },
     verify: async deals => deals,
-    now: new Date("2026-10-13T14:00:00.000Z")
+    now: new Date("2026-10-13T13:00:00.000Z")
   });
   assert.equal(retryFetchCount, 1);
   assert.equal(retrySendCount, 1, "a pending queued offer must be published on a later edition");

@@ -22,6 +22,7 @@ const { ensureHttpServer } = require("../core/telegram-runtime");
     const headHealth = await request(port, "HEAD", "/health");
     assert.equal(headHealth.status, 200);
     assert.equal(headHealth.body, "");
+    assert.equal(headHealth.headers["content-length"], getHealth.headers["content-length"]);
 
     const missing = await request(port, "HEAD", "/not-found");
     assert.equal(missing.status, 404);
@@ -45,7 +46,7 @@ function request(port, method, path) {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", chunk => { body += chunk; });
-      res.on("end", () => resolve({ status: res.statusCode, body }));
+      res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body }));
     });
     req.on("error", reject);
     req.end();

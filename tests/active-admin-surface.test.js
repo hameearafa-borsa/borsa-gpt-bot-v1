@@ -7,6 +7,7 @@ assert.match(source, /bot\.action\(\/\^panel:\(home\|chemical\|prices\|lists\|me
 assert.match(source, /cmd === "panel" && m\.chatType === "private"/);
 assert.match(source, /const adminPanel = require\("\.\/modules\/admin-panel"\)/);
 assert.match(source, /const serviceSettings = require\("\.\/core\/service-settings"\)/);
+assert.match(source, /section === "home" \? adminPanel\.privatePanelKeyboard\(\) : adminPanel\.actionKeyboard\(\)/, "returning to the home panel must restore the service buttons");
 assert.match(source, /SELECT COUNT\(\*\)::int AS count FROM merchants/);
 assert.match(source, /cmd === "settings"/);
 assert.doesNotMatch(source, /panel:(protection|inactive)|cmd === "admin"|cmd === "antispam"|cmd === "schedule"|cmd === "warn"|cmd === "warnings"|cmd === "clearwarn"|cmd === "inactive"/);

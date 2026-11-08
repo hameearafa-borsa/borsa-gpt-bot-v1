@@ -6,7 +6,7 @@ const { isServiceEnabled } = require("../core/service-settings");
 
 const CAIRO_ZONE = "Africa/Cairo";
 const DAILY_HOUR = 10;
-const DAILY_MINUTE = 30;
+const DAILY_MINUTE = 0;
 const GRACE_MINUTES = 5;
 const FETCH_TIMEOUT_MS = 9000;
 const MAX_RESPONSE_BYTES = 2_000_000;

@@ -148,9 +148,22 @@ function extractCards(html, sourceName, query = "", counters = null) {
     const titleMatch = chunk.match(/<h[23][^>]*>[\s\S]*?<span[^>]*>([\s\S]*?)<\/span>[\s\S]*?<\/h[23]>/i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*(?:data-qa|data-testid)=["'][^"']*product[-_ ]?name[^"']*["'][^>]*>([\s\S]*?)<\//i) ||
       chunk.match(/<(?:h[23]|span|div)[^>]*class=["'][^"']*(?:name|title)[^"']*["'][^>]*>([\s\S]*?)<\//i);
-    const title = htmlText(titleMatch?.[1] || "");
+    const noonCandidates = [];
+    if (sourceName === "noon") {
+      for (const match of chunk.matchAll(/<(h2|h3|a)\\b([^>]*)>([\\s\\S]*?)<\\/\\1>/gi)) {
+        noonCandidates.push(match[3]);
+        for (const attr of (match[2] || "").matchAll(/\\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
+      }
+      for (const match of chunk.matchAll(/<img\\b([^>]*)>/gi)) {
+        for (const attr of (match[1] || "").matchAll(/\\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
+      }
+    }
+    const title = sourceName === "noon" ? selectProductTitle([...noonCandidates, titleMatch?.[1]]) : htmlText(titleMatch?.[1] || "");
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, ""); } continue; }
-    const href = chunk.match(/<a[^>]+href=["']([^"']+)["']/i)?.[1];
+    const anchorHrefs = [...chunk.matchAll(/<a\\b[^>]*href=["']([^"']+)["'][^>]*>/gi)].map(match => match[1]);
+    const href = sourceName === "noon"
+      ? anchorHrefs.find(value => /\\/(?:egypt-ar\\/)?(?:product|p)\\//i.test(value) || /\\/product[-_/]/i.test(value)) || anchorHrefs[0]
+      : anchorHrefs[0];
     const url = safeProductUrl(href || "", sourceName);
     if (!url) { if (stats) { stats.rejectedUrl++; addRejectionSample(stats, "url", title, href || ""); } continue; }
     const priceMatch = sourceName === "amazon"

@@ -6,7 +6,7 @@ const {
 } = require("../modules/economic-newsletter");
 
 (async () => {
-  const now = new Date("2026-10-26T07:31:00.000Z"); // 10:31 Africa/Cairo
+  const now = new Date("2026-10-26T07:01:00.000Z"); // 10:01 Africa/Cairo
   const brent = parseBrentPayload({ chart: { result: [{ meta: {
     currency: "USD", symbol: "BZ=F", regularMarketPrice: 111.7,
     regularMarketTime: Math.floor(Date.parse("2026-10-26T07:00:00.000Z") / 1000)
@@ -50,10 +50,10 @@ const {
   assert.ok(!message.includes("http"));
   assert.throws(() => formatEconomicBulletin({ brentUsd: 88.13, usdEgp: 0, goldPoundEgp: 50468, gold21Egp: 6305 }), /invalid/);
 
-  assert.equal(currentEconomicSlot(new Date("2026-10-26T07:29:00.000Z")), null);
+  assert.equal(currentEconomicSlot(new Date("2026-10-26T06:59:00.000Z")), null);
   assert.equal(currentEconomicSlot(now).key, "daily");
-  assert.equal(currentEconomicSlot(new Date("2026-10-26T07:34:00.000Z")).key, "daily");
-  assert.equal(currentEconomicSlot(new Date("2026-10-26T07:35:00.000Z")), null);
+  assert.equal(currentEconomicSlot(new Date("2026-10-26T07:04:00.000Z")).key, "daily");
+  assert.equal(currentEconomicSlot(new Date("2026-10-26T07:05:00.000Z")), null);
   assert.equal(GRACE_MINUTES, 5);
 
   const sent = [];

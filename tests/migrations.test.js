@@ -1,6 +1,7 @@
 "use strict";
 const assert = require("node:assert/strict");
 const path = require("node:path");
+const fs = require("node:fs");
 const { MIGRATION_FILES, MIGRATION_LOCK_KEY, runMigrations } = require("../core/migrations");
 
 async function successCase() {
@@ -27,6 +28,10 @@ async function successCase() {
   assert.ok(MIGRATION_FILES.includes("030_price_reference_package_type.sql"), "official catalog package type must be persisted for exact identity matching");
   assert.ok(MIGRATION_FILES.includes("031_deal_publication_queue.sql"), "unpublished deal observations must have a durable publication queue");
   assert.ok(MIGRATION_FILES.includes("032_deal_publication_channel_kinds.sql"), "current newsletter editions must be accepted by the publication channel constraint");
+  const publicationKindsSql = fs.readFileSync(path.join(__dirname, "..", "migrations", "032_deal_publication_channel_kinds.sql"), "utf8");
+  for (const kind of ["amazon", "catalogs", "other_sites", "best_deals", "online_stores", "market_stores", "market_stores_2"]) {
+    assert.match(publicationKindsSql, new RegExp("\\\\'" + kind + "\\\\'"), `publication channel constraint must preserve ${kind}`);
+  }
   assert.ok(MIGRATION_FILES.includes("026_service_settings.sql"), "persistent service settings migration must run");
   assert.deepEqual(result.files, [...MIGRATION_FILES]);
   assert.equal(calls[0], "BEGIN");

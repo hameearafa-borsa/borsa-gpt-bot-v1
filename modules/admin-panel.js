@@ -36,7 +36,7 @@ function settingsKeyboard(settings, scope, chatId = 0) {
   }));
   const rows = [];
   for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
-  rows.push([{ text: "⬅️ رجوع", callback_data: scope === "global" ? "panel:home" : scope === "admin-group" ? "panel:groups" : "group-settings:refresh" }]);
+  rows.push([{ text: scope === "group" ? "⬅️ رجوع للمحادثة" : "⬅️ رجوع", callback_data: scope === "global" ? "panel:home" : scope === "admin-group" ? "panel:groups" : "group-settings:close" }]);
   return { inline_keyboard: rows };
 }
 function groupsKeyboard(groups) {

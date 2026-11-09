@@ -10,8 +10,8 @@ assert.match(source, /const serviceSettings = require\("\.\/core\/service-settin
 assert.match(source, /section === "home" \? adminPanel\.privatePanelKeyboard\(\) : adminPanel\.actionKeyboard\(\)/, "returning to the home panel must restore the service buttons");
 assert.match(source, /SELECT COUNT\(\*\)::int AS count FROM merchants/);
 assert.match(source, /cmd === "settings"/);
-assert.match(source, /bot\\.action\\(\\/\\^group-settings:\\(refresh\\|close\\|toggle:\\[a-z\\]\\+\\)\\$\\//, "group settings must register the close callback");
-assert.match(source, /action === "close"[\\s\\S]*?editMessageReplyMarkup\\(\\{ inline_keyboard: \\[\\] \\}\\)/, "group settings back must close the keyboard and return to the conversation");
+assert.ok(source.includes("bot.action(/^group-settings:(refresh|close|toggle:[a-z]+)$/"), "group settings must register the close callback");
+assert.ok(source.includes('if (action === "close")') && source.includes("await ctx.editMessageReplyMarkup({ inline_keyboard: [] });"), "group settings back must close the keyboard and return to the conversation");
 assert.doesNotMatch(source, /panel:(protection|inactive)|cmd === "admin"|cmd === "antispam"|cmd === "schedule"|cmd === "warn"|cmd === "warnings"|cmd === "clearwarn"|cmd === "inactive"/);
 assert.doesNotMatch(source, /moderation_settings|moderation_events|PROTECTION_ENFORCE|recordActivity/);
 assert.match(source, /if \(cmd === "قائمة" \|\| cmd === "pricelist"\)/);

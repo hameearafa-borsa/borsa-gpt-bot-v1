@@ -715,7 +715,7 @@ bot.on(["text", "photo"], async ctx => {
 });
 
 
-bot.action(/^group-settings:(refresh|toggle:[a-z]+)$/, async ctx => {
+bot.action(/^group-settings:(refresh|close|toggle:[a-z]+)$/, async ctx => {
   const chatId = ctx.callbackQuery?.message?.chat?.id;
   if (!["group", "supergroup"].includes(ctx.callbackQuery?.message?.chat?.type) ||
       !(await isAuthorizedChat(chatId)) || !(await canManage(ctx.telegram, chatId, ctx.from?.id))) {
@@ -724,6 +724,11 @@ bot.action(/^group-settings:(refresh|toggle:[a-z]+)$/, async ctx => {
   }
   try {
     const action = ctx.match[1];
+    if (action === "close") {
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.answerCbQuery("تم إغلاق إعدادات الخدمات.").catch(() => {});
+      return;
+    }
     if (action.startsWith("toggle:")) {
       const key = action.slice(7);
       const current = await serviceSettings.getSettings(db.pool, "group", chatId);

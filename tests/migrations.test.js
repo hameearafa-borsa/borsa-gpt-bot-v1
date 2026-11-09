@@ -30,7 +30,7 @@ async function successCase() {
   assert.ok(MIGRATION_FILES.includes("032_deal_publication_channel_kinds.sql"), "current newsletter editions must be accepted by the publication channel constraint");
   const publicationKindsSql = fs.readFileSync(path.join(__dirname, "..", "migrations", "032_deal_publication_channel_kinds.sql"), "utf8");
   for (const kind of ["amazon", "catalogs", "other_sites", "best_deals", "online_stores", "market_stores", "market_stores_2"]) {
-    assert.match(publicationKindsSql, new RegExp("\\\\'" + kind + "\\\\'"), `publication channel constraint must preserve ${kind}`);
+    assert.ok(publicationKindsSql.includes("'" + kind + "'"), `publication channel constraint must preserve ${kind}`);
   }
   assert.ok(MIGRATION_FILES.includes("026_service_settings.sql"), "persistent service settings migration must run");
   assert.deepEqual(result.files, [...MIGRATION_FILES]);

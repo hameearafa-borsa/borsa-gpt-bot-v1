@@ -152,12 +152,12 @@ function extractCards(html, sourceName, query = "", counters = null) {
     if (sourceName === "noon") {
       // Collect visible text from complete tags, then inspect every opening tag
       // independently so nested h2/h3 attributes are not skipped by matchAll.
-      for (const match of chunk.matchAll(/<(h2|h3|a)\\b([^>]*)>([\\s\\S]*?)<\\/\\1>/gi)) noonCandidates.push(match[3]);
-      for (const match of chunk.matchAll(/<(?:h2|h3|a)\\b([^>]*)>/gi)) {
-        for (const attr of (match[1] || "").matchAll(/\\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
+      for (const match of chunk.matchAll(/<(h2|h3|a)\b([^>]*)>([\s\S]*?)<\/\1>/gi)) noonCandidates.push(match[3]);
+      for (const match of chunk.matchAll(/<(?:h2|h3|a)\b([^>]*)>/gi)) {
+        for (const attr of (match[1] || "").matchAll(/\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
       }
-      for (const match of chunk.matchAll(/<img\\b([^>]*)>/gi)) {
-        for (const attr of (match[1] || "").matchAll(/\\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
+      for (const match of chunk.matchAll(/<img\b([^>]*)>/gi)) {
+        for (const attr of (match[1] || "").matchAll(/\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
       }
     }
     const title = sourceName === "noon" ? selectProductTitle([...noonCandidates, titleMatch?.[1]]) : htmlText(titleMatch?.[1] || "");

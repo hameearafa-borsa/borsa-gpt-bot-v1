@@ -28,6 +28,13 @@ assert.throws(() => getWebhookConfig({ ...base, WEBHOOK_URL: "" }), /WEBHOOK_URL
     const health = await request(port, "GET", "/health");
     assert.equal(health.status, 200);
     assert.deepEqual(JSON.parse(health.body), { status: "ok", transport: "webhook" });
+
+    const head = await request(port, "HEAD", "/health");
+    assert.equal(head.status, 200);
+    assert.equal(head.body, "");
+    assert.equal(head.headers["content-type"], health.headers["content-type"]);
+    assert.equal(head.headers["content-length"], String(Buffer.byteLength(health.body)));
+
     const missing = await request(port, "POST", "/wrong");
     assert.equal(missing.status, 404);
     assert.equal(callbackCalls, 0);
@@ -37,13 +44,13 @@ assert.throws(() => getWebhookConfig({ ...base, WEBHOOK_URL: "" }), /WEBHOOK_URL
   } finally {
     await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
-  console.log("Webhook configuration and local HTTP routing tests: OK");
+  console.log("Webhook configuration, GET/HEAD health, and local HTTP routing tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });
 
 function request(port, method, path, body = "") {
   return new Promise((resolve, reject) => {
     const req = http.request({ host: "127.0.0.1", port, method, path, headers: body ? { "content-type": "application/json", "content-length": Buffer.byteLength(body) } : {} }, res => {
-      let data = ""; res.setEncoding("utf8"); res.on("data", chunk => data += chunk); res.on("end", () => resolve({ status: res.statusCode, body: data }));
+      let data = ""; res.setEncoding("utf8"); res.on("data", chunk => data += chunk); res.on("end", () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
     });
     req.on("error", reject); if (body) req.write(body); req.end();
   });

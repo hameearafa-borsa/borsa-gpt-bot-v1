@@ -39,9 +39,14 @@ function createWebhookServer(bot, config) {
       res.end("Bad Request");
       return;
     }
-    if (req.method === "GET" && pathname === "/health") {
-      res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-      res.end(JSON.stringify({ status: "ok", transport: "webhook" }));
+    if ((req.method === "GET" || req.method === "HEAD") && pathname === "/health") {
+      const body = JSON.stringify({ status: "ok", transport: "webhook" });
+      res.writeHead(200, {
+        "content-type": "application/json; charset=utf-8",
+        "content-length": Buffer.byteLength(body),
+        "cache-control": "no-store",
+      });
+      res.end(req.method === "HEAD" ? undefined : body);
       return;
     }
     if (req.method !== "POST" || pathname !== config.path) {

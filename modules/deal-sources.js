@@ -261,7 +261,8 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
   const startIndex = nextScraperKeyIndex % keys.length;
   nextScraperKeyIndex = (nextScraperKeyIndex + 1) % keys.length;
   const target = new URL(sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`);
-  if (sourceName === "amazon") target.searchParams.set("language", "ar_AE");
+  // Keep the retailer search URL in its known-working form. Arabic names are
+  // selected from product data during extraction, not by changing Amazon locale.
   const targetUrl = target.href;
   const requestWithKey = async key => {
     const endpoint = new URL("https://api.scraperapi.com/");

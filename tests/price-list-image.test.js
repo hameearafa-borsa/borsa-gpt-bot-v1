@@ -22,7 +22,6 @@ assert.equal(extractPackageLabel("بامبرز ماكسي مقاس 1 - 3 شنط�
 assert.equal(extractPackageLabel("ماكينة ناست حصائر 48 ماكينة - 48 قطعة - 406.56"), "48 قطعة");
 (async () => {
   await assert.rejects(() => renderPriceListImage({ company: "شركة", items: [{ product: "أ", package_sale_price: 10 }] }), /three_valid_products/);
-  await assert.rejects(() => renderPriceListImage({ company: "شركة", items: Array.from({length: 101}, (_, i) => ({ product: `منتج ${i}`, package_sale_price: 10 })) }), /exceeds_100_products/);
   const originalLoad = Module._load;
   let capturedSvg = "";
   try {
@@ -91,6 +90,14 @@ assert.equal(extractPackageLabel("ماكينة ناست حصائر 48 ماكين
       company: "شركة اختبار",
       items: Array.from({ length: 100 }, (_, i) => ({ product: `منتج ${i + 1}`, package_sale_price: 20 }))
     }), "exactly 100 valid products should be allowed");
+    const largeCatalogImages = await renderPriceListImages({
+      company: "شركة اختبار",
+      items: Array.from({ length: 101 }, (_, i) => ({ product: `منتج ${i + 1}`, package_sale_price: 20 }))
+    });
+    assert.equal(largeCatalogImages.length, 5,
+      "101 valid products should automatically render as five pages instead of failing at the former 100-product guard");
+    assert.ok(capturedSvg.includes("صفحة 5 من 5"),
+      "the final page of a catalog larger than 100 products must retain the correct page count");
   } finally { Module._load = originalLoad; }
   console.log("price list image validation tests: OK");
 })().catch(error => { console.error(error); process.exitCode = 1; });

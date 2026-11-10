@@ -505,7 +505,7 @@ bot.on(["text", "photo"], async ctx => {
       await ctx.reply("لم أجد قائمة أسعار مكتملة بما يكفي. أرسل النص تحت /قائمة أو أرسل رابط رسالة سبق أن رآها البوت.");
       return;
     }
-    const parsedList = await extractList(ai, sourceText);
+    const parsedList = await extractList(ai, sourceText, { timeoutMs: 8000 });
     const rows = Array.isArray(parsedList.items) ? parsedList.items : deterministicList(sourceText);
     const accepted = rows.filter(r => r.decision === "accepted");
     if (db.pool) {

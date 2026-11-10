@@ -367,13 +367,23 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  process.env.SCRAPER_API_KEY_2 = "test-account-two";
  assert.deepEqual(getScraperKeys(), ["test-account-one", "test-account-two"]);
  const usedKeys = [];
+ const amazonSearchUrls = [];
  const fakeScraperFetch = async url => {
-   usedKeys.push(new URL(String(url)).searchParams.get("api_key"));
+   const endpoint = new URL(String(url));
+   usedKeys.push(endpoint.searchParams.get("api_key"));
+   amazonSearchUrls.push(endpoint.searchParams.get("url"));
    return { ok: true, status: 200, text: async () => "<html></html>" };
  };
  await fetchSearch("amazon", "test one", { fetchImpl: fakeScraperFetch });
  await fetchSearch("amazon", "test two", { fetchImpl: fakeScraperFetch });
  assert.deepEqual(usedKeys, ["test-account-one", "test-account-two"], "independent scraper keys should rotate between requests");
+ assert.deepEqual(amazonSearchUrls.map(raw => {
+   const target = new URL(raw);
+   return { host: target.hostname, query: target.searchParams.get("k"), language: target.searchParams.get("language") };
+ }), [
+   { host: "www.amazon.eg", query: "test one", language: null },
+   { host: "www.amazon.eg", query: "test two", language: null }
+ ], "Amazon requests must retain the known-working search URL without an unverified locale override");
  const authRetryKeys = [];
  const authRetry = await fetchSearch("amazon", "auth retry", {
    fetchImpl: async url => {

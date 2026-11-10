@@ -399,7 +399,8 @@ assert.equal(
   assert.equal(timedOutList.error, "price_list_ai_timeout", "the fallback must retain a specific timeout diagnostic");
 
   const protectedPearlList = await extractList(aiReturnsWrongNumbers, pearlOctober);
-  assert.equal(protectedPearlList.items.length, 1);
+  assert.equal(protectedPearlList.items.length, deterministicList(pearlOctober).length,
+    "a partial AI response must not discard other locally extracted rows from the full company catalog");
   assert.equal(protectedPearlList.items[0].package_sale_price, 505.31,
     "AI output must not overwrite the locally extracted package price");
   assert.equal(protectedPearlList.items[0].wholesale_carton_price, 487.40,

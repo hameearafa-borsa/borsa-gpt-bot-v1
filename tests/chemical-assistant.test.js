@@ -68,6 +68,16 @@ assert.match(chemistry.getProviderFallback(new Error("AI HTTP 400: invalid reque
   assert.match(serviceFailureAnswer, /لم يتم رفض سؤالك/);
 
   let fallbackCalls = 0;
+  const recoveredWithoutOpenAIKey = await chemistry.answer({
+    primaryProvider: null,
+    async generate() { throw new Error("لا يوجد مزود AI مضبوط"); }
+  }, validQuestion, null, {
+    primaryProvider: "groq",
+    async generate() { return { text: "إجابة احتياطية عند غياب مفتاح OpenAI", provider: "groq" }; }
+  });
+  assert.match(recoveredWithoutOpenAIKey, /تقنيات Groq/);
+  assert.match(recoveredWithoutOpenAIKey, /إجابة احتياطية عند غياب مفتاح OpenAI/);
+
   const recoveredByGroqFallback = await chemistry.answer({
     primaryProvider: "openai",
     async generate(_prompt, options) {

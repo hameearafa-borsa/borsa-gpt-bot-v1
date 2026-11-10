@@ -329,6 +329,15 @@ async function extractList(ai, text, { timeoutMs = 0 } = {}) {
       if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };
       return { ...item, decision: ["accepted", "review", "skipped"].includes(item.decision) ? item.decision : "review" };
     });
+    const aiUsableItems = parsed.items.filter(item =>
+      String(item.product || "").trim() &&
+      Number.isFinite(Number(item.package_sale_price)) &&
+      Number(item.package_sale_price) > 0 &&
+      item.decision !== "skipped"
+    );
+    if (aiUsableItems.length === 0) {
+      return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: "AI returned no usable price rows" };
+    }
     // AI output may be truncated for long catalogs. Never drop source rows that
     // the deterministic parser already extracted but the model did not return.
     const aiRawLines = new Set(parsed.items.map(item => String(item.raw_line || "").trim()).filter(Boolean));
@@ -338,15 +347,6 @@ async function extractList(ai, text, { timeoutMs = 0 } = {}) {
         parsed.items.push(localItem);
         aiRawLines.add(rawLine);
       }
-    }
-    const usableItems = parsed.items.filter(item =>
-      String(item.product || "").trim() &&
-      Number.isFinite(Number(item.package_sale_price)) &&
-      Number(item.package_sale_price) > 0 &&
-      item.decision !== "skipped"
-    );
-    if (usableItems.length === 0) {
-      return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: "AI returned no usable price rows" };
     }
     return { ...metadata, ...parsed, company: parsed.company || metadata.company || null, method: result.provider || "ai" };
   } catch (error) { return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: error.message }; }

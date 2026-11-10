@@ -25,7 +25,6 @@ function splitPages(rows, pageSize) {
 async function renderPriceListImages({ company, items, watermark = "بورصة المنظفات لأصحاب المحلات", month = null, priceType = null, pageSize = 25, logoPlacement = "both", logoPath = null, groupName = "بورصة المنظفات لأصحاب المحلات" }) {
   const rows = (Array.isArray(items) ? items : []).filter(x => x && String(x.product || x.product_label || "").trim() && Number.isFinite(Number(x.package_sale_price)) && Number(x.package_sale_price) > 0);
   if (rows.length < 3) throw new Error("price_list_image_requires_three_valid_products");
-  if (rows.length > 100) throw new Error("price_list_image_exceeds_100_products_split_list_first");
   const safePageSize = Math.max(6, Math.min(25, Math.trunc(Number(pageSize) || 25)));
   // Load lazily so parser/static tests can run before native dependencies are installed.
   let sharp;

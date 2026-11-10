@@ -23,7 +23,7 @@ function parseMessageLink(value) {
   return null;
 }
 function parseMessageLinks(value) {
-  const matches = String(value || "").match(/https?:\\/\\/(?:www\\.)?(?:t\\.me|telegram\\.me)\\/[^\\s]+/giu) || [];
+  const matches = String(value || "").match(/https?:\/\/(?:www\.)?(?:t\.me|telegram\.me)\/[^\s]+/giu) || [];
   const links = [];
   let invalidCount = 0;
   const seen = new Set();

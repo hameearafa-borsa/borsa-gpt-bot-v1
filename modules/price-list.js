@@ -280,7 +280,7 @@ function deterministicList(text) {
   }
   return out;
 }
-async function extractList(ai, text) {
+async function extractList(ai, text, { timeoutMs = 0 } = {}) {
   const localItems = deterministicList(text);
   const metadata = parseListMetadata(text);
   const acceptedLocal = localItems.filter(item => item.decision === "accepted");
@@ -291,7 +291,13 @@ async function extractList(ai, text) {
   }
   if (!ai?.generate) return { ...metadata, company: metadata.company || null, items: localItems, method: "deterministic" };
   try {
-    const result = await ai.generate(buildListPrompt(text), { temperature: 0 });
+    const request = ai.generate(buildListPrompt(text), { temperature: 0 });
+    const result = timeoutMs > 0
+      ? await Promise.race([request, new Promise((_, reject) => {
+          const timer = setTimeout(() => reject(new Error("price_list_ai_timeout")), timeoutMs);
+          timer.unref?.();
+        })])
+      : await request;
     const parsed = parseAIJson(result.text);
     // Guard AI output against missing identity and non-positive prices; preserve skipped rows for audit.
     parsed.items = parsed.items.map(item => {
@@ -323,14 +329,24 @@ async function extractList(ai, text) {
       if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };
       return { ...item, decision: ["accepted", "review", "skipped"].includes(item.decision) ? item.decision : "review" };
     });
-    const usableItems = parsed.items.filter(item =>
+    const aiUsableItems = parsed.items.filter(item =>
       String(item.product || "").trim() &&
       Number.isFinite(Number(item.package_sale_price)) &&
       Number(item.package_sale_price) > 0 &&
       item.decision !== "skipped"
     );
-    if (usableItems.length === 0) {
+    if (aiUsableItems.length === 0) {
       return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: "AI returned no usable price rows" };
+    }
+    // AI output may be truncated for long catalogs. Never drop source rows that
+    // the deterministic parser already extracted but the model did not return.
+    const aiRawLines = new Set(parsed.items.map(item => String(item.raw_line || "").trim()).filter(Boolean));
+    for (const localItem of localItems) {
+      const rawLine = String(localItem.raw_line || "").trim();
+      if (rawLine && !aiRawLines.has(rawLine)) {
+        parsed.items.push(localItem);
+        aiRawLines.add(rawLine);
+      }
     }
     return { ...metadata, ...parsed, company: parsed.company || metadata.company || null, method: result.provider || "ai" };
   } catch (error) { return { ...metadata, company: metadata.company || null, items: localItems, method: "fallback", error: error.message }; }

@@ -9,7 +9,7 @@ const { runMigrations } = require("./core/migrations");
 const { loadRegistry } = require("./core/product-registry");
 const { claimMessage, isBotMessage, isLogChat } = require("./core/message-gate");
 const { cacheMessage, getMessageByRef } = require("./core/message-cache");
-const { parseMessageLink, findCachedLinkedMessage } = require("./core/telegram-message-link");
+const { parseMessageLinks, findCachedLinkedMessage } = require("./core/telegram-message-link");
 const { log, makeReport, emitReport, redactString } = require("./core/diagnostics");
 const { buildChemicalLinks, renderChemicalLinks } = require("./core/links");
 const { formatTelegramStartupError } = require("./core/telegram-startup-error");
@@ -483,29 +483,34 @@ bot.on(["text", "photo"], async ctx => {
     if (!authorizedListOperator) { await ctx.reply("هذا الأمر متاح لمشرفي المجموعة ومالك البوت فقط."); return; }
     if (!(await serviceSettings.isServiceEnabled(db.pool, "lists", m.chatId))) { await ctx.reply("خدمة قوائم الشركات متوقفة لهذه المجموعة حاليًا."); return; }
     let sourceText = args;
-    const link = parseMessageLink(args);
-    if (link) {
-      const lookup = await findCachedLinkedMessage({
+    const parsedLinks = parseMessageLinks(args);
+    if (parsedLinks.invalidCount > 0 || parsedLinks.links.length > 2) {
+      await ctx.reply("أرسل رابط رسالة واحدًا أو رابطين صحيحين فقط بعد الأمر /قائمة.");
+      return;
+    }
+    if (parsedLinks.links.length) {
+      const lookups = await Promise.all(parsedLinks.links.map(link => findCachedLinkedMessage({
         pool: db.pool,
         telegram: ctx.telegram,
         link,
         getMessageByRef
-      });
-      const source = lookup.message;
-      if (!source) {
-        const reason = lookup.status === "chat_unavailable"
-          ? "لم أتمكن من الوصول إلى القناة أو المجموعة من خلال البوت."
-          : "الرابط صحيح، لكن الرسالة غير محفوظة في ذاكرة البوت السابقة.";
-        await ctx.reply(`🔎 ${reason}\nأعد توجيه الرسالة إلى هنا، أو أرسل نص القائمة بعد الأمر /قائمة.`);
+      })));
+      const missingIndex = lookups.findIndex(result => !result.message);
+      if (missingIndex >= 0) {
+        const reason = lookups[missingIndex].status === "chat_unavailable"
+          ? "لم أتمكن من الوصول إلى إحدى القنوات أو المجموعات من خلال البوت."
+          : "إحدى الرسائل المرتبطة غير محفوظة في ذاكرة البوت السابقة.";
+        await ctx.reply(`🔎 ${reason}\nأعد توجيه الرسالتين المطلوبتين إلى هنا، أو أرسل نص القائمة بعد الأمر /قائمة.`);
         return;
       }
-      sourceText = source.text || source.caption || "";
+      // Treat both linked posts as one source catalog before parsing, saving, and rendering.
+      sourceText = lookups.map(result => result.message.text || result.message.caption || "").filter(Boolean).join("\n");
     }
     if (!sourceText || !isListLike(sourceText)) {
       await ctx.reply("لم أجد قائمة أسعار مكتملة بما يكفي. أرسل النص تحت /قائمة أو أرسل رابط رسالة سبق أن رآها البوت.");
       return;
     }
-    const parsedList = await extractList(ai, sourceText);
+    const parsedList = await extractList(ai, sourceText, { timeoutMs: 8000 });
     const rows = Array.isArray(parsedList.items) ? parsedList.items : deterministicList(sourceText);
     const accepted = rows.filter(r => r.decision === "accepted");
     if (db.pool) {

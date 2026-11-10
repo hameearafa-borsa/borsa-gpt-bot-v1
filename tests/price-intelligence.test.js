@@ -391,8 +391,16 @@ assert.equal(
     "the /قائمة deterministic path must preserve the complete Unilever source list without an AI dependency");
   assert.equal(unileverRowsThroughCommand.method, "deterministic");
 
+  const slowListAI = { generate: () => new Promise(resolve => setTimeout(() => resolve({ provider: "slow-test", text: "{}" }), 100)) };
+  const startedAt = Date.now();
+  const timedOutList = await extractList(slowListAI, "قائمة غير مكتملة للاختبار", { timeoutMs: 5 });
+  assert.ok(Date.now() - startedAt < 80, "a slow AI provider must not hold /قائمة beyond its configured extraction budget");
+  assert.equal(timedOutList.method, "fallback", "a timed-out AI extraction must return deterministic review rows");
+  assert.equal(timedOutList.error, "price_list_ai_timeout", "the fallback must retain a specific timeout diagnostic");
+
   const protectedPearlList = await extractList(aiReturnsWrongNumbers, pearlOctober);
-  assert.equal(protectedPearlList.items.length, 1);
+  assert.equal(protectedPearlList.items.length, deterministicList(pearlOctober).length,
+    "a partial AI response must not discard other locally extracted rows from the full company catalog");
   assert.equal(protectedPearlList.items[0].package_sale_price, 505.31,
     "AI output must not overwrite the locally extracted package price");
   assert.equal(protectedPearlList.items[0].wholesale_carton_price, 487.40,

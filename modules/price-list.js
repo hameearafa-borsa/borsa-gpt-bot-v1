@@ -329,6 +329,16 @@ async function extractList(ai, text, { timeoutMs = 0 } = {}) {
       if (!product || !Number.isFinite(price) || price <= 0) return { ...item, decision: "skipped" };
       return { ...item, decision: ["accepted", "review", "skipped"].includes(item.decision) ? item.decision : "review" };
     });
+    // AI output may be truncated for long catalogs. Never drop source rows that
+    // the deterministic parser already extracted but the model did not return.
+    const aiRawLines = new Set(parsed.items.map(item => String(item.raw_line || "").trim()).filter(Boolean));
+    for (const localItem of localItems) {
+      const rawLine = String(localItem.raw_line || "").trim();
+      if (rawLine && !aiRawLines.has(rawLine)) {
+        parsed.items.push(localItem);
+        aiRawLines.add(rawLine);
+      }
+    }
     const usableItems = parsed.items.filter(item =>
       String(item.product || "").trim() &&
       Number.isFinite(Number(item.package_sale_price)) &&

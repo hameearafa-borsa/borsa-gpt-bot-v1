@@ -280,7 +280,7 @@ function deterministicList(text) {
   }
   return out;
 }
-async function extractList(ai, text) {
+async function extractList(ai, text, { timeoutMs = 0 } = {}) {
   const localItems = deterministicList(text);
   const metadata = parseListMetadata(text);
   const acceptedLocal = localItems.filter(item => item.decision === "accepted");
@@ -291,7 +291,13 @@ async function extractList(ai, text) {
   }
   if (!ai?.generate) return { ...metadata, company: metadata.company || null, items: localItems, method: "deterministic" };
   try {
-    const result = await ai.generate(buildListPrompt(text), { temperature: 0 });
+    const request = ai.generate(buildListPrompt(text), { temperature: 0 });
+    const result = timeoutMs > 0
+      ? await Promise.race([request, new Promise((_, reject) => {
+          const timer = setTimeout(() => reject(new Error("price_list_ai_timeout")), timeoutMs);
+          timer.unref?.();
+        })])
+      : await request;
     const parsed = parseAIJson(result.text);
     // Guard AI output against missing identity and non-positive prices; preserve skipped rows for audit.
     parsed.items = parsed.items.map(item => {

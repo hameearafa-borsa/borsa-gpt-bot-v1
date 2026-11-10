@@ -31,6 +31,7 @@ assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
 assert.ok(aiSource.includes("(isProviderWideFailure(e) && !rotateOpenAIKeyAfterTimeout) || (!retryable && !credentialError)"), "provider-wide failures should skip sibling keys except for bounded OpenAI timeout key rotation");
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
+assert.ok(aiSource.includes("أنت محرك ذكاء اصطناعي مساعد لبوت بورصة المنظفات"), "Groq system prompt must support general classification and price-list tasks, not only chemistry");
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
 assert.ok(index.includes('const ai = createAI({ provider: "groq", fallbackProviders: ["gemini"] })'), "general AI routes must use Groq with Gemini-only fallback");

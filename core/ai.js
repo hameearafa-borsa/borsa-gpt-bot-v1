@@ -80,7 +80,7 @@ function groqProvider(key, model) {
       model: selectedModel,
       temperature: options.temperature ?? 0,
       messages: [
-        { role: "system", content: "أنت المساعد الكيميائي لبوت بورصة المنظفات. أجب بالعربية الواضحة، لا تخترع نسبًا أو بيانات تجارية، واذكر مخاطر السلامة بوضوح." },
+        { role: "system", content: "أنت محرك ذكاء اصطناعي مساعد لبوت بورصة المنظفات. اتبع تعليمات الطلب بدقة، وأجب بالعربية الواضحة عند الحاجة. لا تخترع نسبًا أو بيانات تجارية، واذكر مخاطر السلامة بوضوح عندما يكون السؤال كيميائيًا." },
         { role: "user", content: String(prompt || "") }
       ]
     }, { authorization: `Bearer ${key}` }, Number(options.timeoutMs) || undefined);

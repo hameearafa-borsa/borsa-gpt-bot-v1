@@ -128,7 +128,7 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
   const gate = safetyGate(question);
   if (gate) return gate;
   if (!ai || typeof ai.generate !== "function") {
-    const error = new Error("Gemini AI provider is not configured");
+    const error = new Error("Chemical AI provider is not configured");
     if (typeof onError === "function") { try { onError(error); } catch {} }
     return SERVICE_CONFIG_FALLBACK;
   }
@@ -162,8 +162,8 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
           timeoutMs: 3500,
           requestBudgetMs: 14000
         });
-        if (!String(result?.text || "").trim()) throw new Error("OpenAI fallback returned an empty response");
-        console.info(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=succeeded`);
+        if (!String(result?.text || "").trim()) throw new Error(`${fallbackProvider} fallback returned an empty response`);
+        console.info(`[CHEMICAL_FALLBACK] primary=${primaryProvider} fallback=${fallbackProvider} outcome=succeeded`);
         return formatAnswer(result);
       } catch (fallbackError) {
         console.warn(`[CHEMICAL_FALLBACK] primary=${primaryProvider} fallback=${fallbackProvider} outcome=failed error=${String(fallbackError?.message || "provider_error").slice(0, 220)}`);

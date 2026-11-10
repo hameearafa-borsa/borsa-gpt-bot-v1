@@ -26,7 +26,7 @@ assert.ok(geminiSection.includes("new GoogleGenAI"));
 assert.ok(geminiSection.includes("retryOptions: { attempts: 1 }"), "the SDK retry layer must not multiply the app retry budget");
 assert.ok(!geminiSection.includes("temperature"), "Gemini 3.8 Flash request must omit temperature sampling parameter");
 assert.ok(!geminiSection.includes("generationConfig"), "Gemini request should omit deprecated sampling configuration");
-assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
+assert.ok(!aiSource.includes('AI_FALLBACK_ENABLED === "true"'), "legacy environment fallback must not widen routes or expose OpenAI keys");
 assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
 assert.ok(aiSource.includes("(isProviderWideFailure(e) && !rotateOpenAIKeyAfterTimeout) || (!retryable && !credentialError)"), "provider-wide failures should skip sibling keys except for bounded OpenAI timeout key rotation");

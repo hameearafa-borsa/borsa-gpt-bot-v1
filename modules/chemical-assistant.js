@@ -145,13 +145,14 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
   };
   const primaryProvider = String(ai.primaryProvider || "configured");
   const fallbackProvider = String(fallbackAI?.primaryProvider || "configured");
+  const primaryNotConfigured = !ai.primaryProvider;
   try {
     const result = await ai.generate(buildPrompt(question), {
       temperature: 0.3, webSearch: primaryProvider === "openai", googleSearch: primaryProvider === "gemini", requestBudgetMs: 15000
     });
     return formatAnswer(result);
   } catch (primaryError) {
-    if (fallbackAI && typeof fallbackAI.generate === "function" && isTemporaryProviderFailure(primaryError)) {
+    if (fallbackAI && typeof fallbackAI.generate === "function" && (primaryNotConfigured || isTemporaryProviderFailure(primaryError))) {
       console.warn(`[CHEMICAL_FALLBACK] primary=${primaryProvider} fallback=${fallbackProvider} outcome=starting reason=temporary_service_failure`);
       try {
         // Keep the emergency answer path fast: web search is optional for a

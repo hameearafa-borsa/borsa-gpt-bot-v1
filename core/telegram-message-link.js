@@ -22,6 +22,19 @@ function parseMessageLink(value) {
   }
   return null;
 }
+function parseMessageLinks(value) {
+  const matches = String(value || "").match(/https?:\\/\\/(?:www\\.)?(?:t\\.me|telegram\\.me)\\/[^\\s]+/giu) || [];
+  const links = [];
+  let invalidCount = 0;
+  const seen = new Set();
+  for (const raw of matches) {
+    const link = parseMessageLink(raw.replace(/[),.;،؛]+$/u, ""));
+    if (!link) { invalidCount++; continue; }
+    const key = link.chatId ? `${link.chatId}:${link.messageId}` : `${link.username}:${link.messageId}`;
+    if (!seen.has(key)) { seen.add(key); links.push(link); }
+  }
+  return { links, invalidCount };
+}
 async function findCachedLinkedMessage({ pool, telegram, link, getMessageByRef }) {
   if (!link || !pool || typeof getMessageByRef !== "function") return { status: "not_cached", message: null };
   let chatId = link.chatId || null;
@@ -37,4 +50,4 @@ async function findCachedLinkedMessage({ pool, telegram, link, getMessageByRef }
   const message = await getMessageByRef(pool, chatId, link.messageId);
   return { status: message ? "found" : "not_cached", message };
 }
-module.exports = { parseMessageLink, findCachedLinkedMessage };
+module.exports = { parseMessageLink, parseMessageLinks, findCachedLinkedMessage };

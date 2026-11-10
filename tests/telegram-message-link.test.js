@@ -1,6 +1,6 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { parseMessageLink, findCachedLinkedMessage } = require("../core/telegram-message-link");
+const { parseMessageLink, parseMessageLinks, findCachedLinkedMessage } = require("../core/telegram-message-link");
 assert.deepEqual(parseMessageLink("https://t.me/c/123456/789"), { chatId: -100123456, messageId: 789 });
 assert.deepEqual(parseMessageLink("https://t.me/example_channel/789"), { username: "@example_channel", messageId: 789 });
 assert.deepEqual(parseMessageLink("https://t.me/example_channel/789?single"), { username: "@example_channel", messageId: 789 });
@@ -9,6 +9,13 @@ assert.deepEqual(parseMessageLink("https://t.me/s/example_channel/789"), { usern
 assert.equal(parseMessageLink("https://t.me/not-a-message"), null);
 assert.equal(parseMessageLink("https://t.me/example_channel/999999999999999999999"), null);
 assert.equal(parseMessageLink("https://t.me/c/0/789"), null);
+const multipleLinks = parseMessageLinks("https://t.me/c/123456/789 https://t.me/example_channel/790");
+assert.equal(multipleLinks.invalidCount, 0);
+assert.equal(multipleLinks.links.length, 2, "two Telegram message links should be extracted from one /قائمة command");
+assert.deepEqual(parseMessageLinks("https://t.me/c/123456/789 https://t.me/c/123456/789").links,
+  [{ chatId: -100123456, messageId: 789 }], "duplicate message links must not duplicate catalog rows");
+assert.equal(parseMessageLinks("https://t.me/not-a-message").invalidCount, 1,
+  "invalid Telegram links must be reported rather than silently ignored");
 (async () => {
   const calls = [];
   const lookup = async (_pool, chatId, messageId) => { calls.push([chatId, messageId]); return { text: "قائمة أسعار" }; };

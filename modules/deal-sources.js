@@ -266,13 +266,13 @@ function extractionDiagnostics(html, sourceName, deals = [], counters = null) {
 }
 function safeHttpErrorDiagnostics(response, body, keys = []) {
   const headers = response?.headers;
-  let preview = String(body || "").replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
-    .replace(/<style[\\s\\S]*?<\\/style>/gi, " ")
+  let preview = String(body || "").replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
     .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/gi, " ")
-    .replace(/&amp;/gi, "&").replace(/\\s+/g, " ").trim();
+    .replace(/&amp;/gi, "&").replace(/\s+/g, " ").trim();
   for (const key of keys.filter(Boolean)) preview = preview.split(key).join("[REDACTED]");
-  preview = preview.replace(/([?&](?:api_key|apikey|token|key)=)[^&\\s]+/gi, "$1[REDACTED]")
-    .replace(/Bearer\\s+[A-Za-z0-9._~-]+/gi, "Bearer [REDACTED]")
+  preview = preview.replace(/([?&](?:api_key|apikey|token|key)=)[^&\s]+/gi, "$1[REDACTED]")
+    .replace(/Bearer\s+[A-Za-z0-9._~-]+/gi, "Bearer [REDACTED]")
     .slice(0, 360);
   const contentType = String(headers?.get?.("content-type") || "").slice(0, 100);
   const server = String(headers?.get?.("server") || "").slice(0, 100);

@@ -3,10 +3,10 @@ const assert = require("node:assert/strict");
 const { safeProductUrl, fetchSearch, collectDealCandidates } = require("../modules/deal-sources");
 const { verifyProductUrl, newsletterKindAt, selectNewsletterDeals, publishDailyDeals } = require("../modules/deal-scheduler");
 
-const fixture = `<html><body><div class="product-card"><a href="/products/metro-123"><h3 class="product-name">مسحوق برسيل للغسالات 3 كيلو</h3></a><span class="price">175.00 جنيه</span><span class="oldPrice">210.00 جنيه</span></div></body></html>`;
-assert.equal(safeProductUrl("/products/metro-123?utm_source=test", "metro"), "https://shop.metro-markets.com/products/metro-123");
-assert.equal(safeProductUrl("https://evil.example/products/metro-123", "metro"), null);
-assert.equal(safeProductUrl("http://shop.metro-markets.com/products/metro-123", "metro"), null);
+const fixture = `<html><body><div class="product-card card" data-id="123"><a href="/product/Persil-Automatic-Powder-3kg/123"><h5>Persil Automatic Powder 3kg</h5></a><div class="price"><p class="after">175.00 LE</p><p class="before">210.00 LE</p></div></div></body></html>`;
+assert.equal(safeProductUrl("/product/Persil-Automatic-Powder-3kg/123?utm_source=test", "metro"), "https://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123");
+assert.equal(safeProductUrl("https://evil.example/product/Persil-Automatic-Powder-3kg/123", "metro"), null);
+assert.equal(safeProductUrl("http://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123", "metro"), null);
 
 const beforeKey1 = process.env.SCRAPER_API_KEY;
 const beforeKey2 = process.env.SCRAPER_API_KEY_2;
@@ -27,10 +27,10 @@ delete process.env.SCRAPER_API_KEY_2;
   assert.equal(direct.ok, true, "Metro must fetch directly without ScraperAPI credentials");
   assert.equal(direct.deals.length, 1);
   assert.equal(direct.deals[0].merchant, "مترو ماركت");
-  assert.equal(direct.deals[0].title, "مسحوق برسيل للغسالات 3 كيلو");
+  assert.equal(direct.deals[0].title, "Persil Automatic Powder 3kg");
   assert.equal(direct.deals[0].price, 175);
   assert.equal(direct.deals[0].old_price, 210);
-  assert.equal(direct.deals[0].url, "https://shop.metro-markets.com/products/metro-123");
+  assert.equal(direct.deals[0].url, "https://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123");
 
   let snapFlyerCalls = 0;
   const collected = await collectDealCandidates({
@@ -55,14 +55,14 @@ delete process.env.SCRAPER_API_KEY_2;
   assert.equal(newsletterKindAt(new Date("2026-11-11T12:00:00.000Z")), "market_stores");
 
   const selected = selectNewsletterDeals([
-    { merchant: "مترو ماركت", title: "مسحوق برسيل 3 كيلو", category: "detergent", price: 175, url: "https://shop.metro-markets.com/products/metro-123" },
+    { merchant: "مترو ماركت", title: "مسحوق برسيل 3 كيلو", category: "detergent", price: 175, url: "https://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123" },
     { merchant: "Noon Egypt", title: "شامبو دوف", category: "personal_care", price: 100, url: "https://www.noon.com/egypt-ar/dove-123" },
     { merchant: "مترو ماركت", title: "مناديل فاين", category: "paper", price: 25, url: "https://shop.metro-markets.com/products/metro-456" }
   ], "metro_stores");
   assert.equal(selected.length, 2);
   assert.ok(selected.every(deal => new URL(deal.url).hostname === "shop.metro-markets.com"));
 
-  const verified = await verifyProductUrl("https://shop.metro-markets.com/products/metro-123", {
+  const verified = await verifyProductUrl("https://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123", {
     fetchImpl: async (url, options) => {
       assert.equal(options.method, "HEAD");
       return { status: 200, headers: { get: () => null } };
@@ -91,7 +91,7 @@ delete process.env.SCRAPER_API_KEY_2;
     fetcher: async ({ edition }) => {
       requestedEdition = edition;
       return { deals: [
-        { merchant: "مترو ماركت", title: "مسحوق برسيل للغسالات 3 كيلو", price: 175, old_price: 210, category: "detergent", url: "https://shop.metro-markets.com/products/metro-123" },
+        { merchant: "مترو ماركت", title: "Persil Automatic Powder 3kg", price: 175, old_price: 210, category: "detergent", url: "https://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123" },
         { merchant: "مترو ماركت", title: "مناديل فاين ورقية 200 منديل", price: 25, category: "paper", url: "https://shop.metro-markets.com/products/metro-456" }
       ], errors: [], sourceStats: [], sourceCount: 1 };
     },

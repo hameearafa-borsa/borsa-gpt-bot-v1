@@ -50,6 +50,9 @@ jobs:
         run: npm ci
       - name: Syntax check
         run: npm run check
+      - name: Direct public retailer fetch diagnostic (no credentials, no publication)
+        if: startsWith(github.head_ref, 'test/direct-retailer-fetch-')
+        run: node tests/deal-sources-direct-live.js
       - name: Run automated tests
         run: npm test
       - name: Live SnapFlyer filtered-offer fetch (isolated, no Telegram publication)

@@ -1,12 +1,15 @@
 "use strict";
 const assert = require("node:assert/strict");
-const { safeProductUrl, fetchSearch, collectDealCandidates } = require("../modules/deal-sources");
+const { safeProductUrl, fetchSearch, collectDealCandidates, extractCards, categoryOf } = require("../modules/deal-sources");
 const { verifyProductUrl, newsletterKindAt, selectNewsletterDeals, publishDailyDeals } = require("../modules/deal-scheduler");
 
 const fixture = `<html><body><div class="product-card card" data-id="123"><a href="/product/Persil-Automatic-Powder-3kg/123"><h5>Persil Automatic Powder 3kg</h5></a><div class="price"><p class="after">175.00 LE</p><p class="before">210.00 LE</p></div></div></body></html>`;
 assert.equal(safeProductUrl("/product/Persil-Automatic-Powder-3kg/123?utm_source=test", "metro"), "https://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123");
 assert.equal(safeProductUrl("https://evil.example/product/Persil-Automatic-Powder-3kg/123", "metro"), null);
 assert.equal(safeProductUrl("http://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123", "metro"), null);
+assert.equal(categoryOf("Fine Touch 2Ply Kitchen Towel"), "paper");
+const groceryFixture = `<div class="product-card"><a href="/product/Al-Doha-Fine-Flour/6565"><h5>Al Doha Fine Flour - 1Kg</h5></a><div class="price"><p class="after">32.99 LE</p></div></div>`;
+assert.equal(extractCards(groceryFixture, "metro").length, 0, "food products must not leak into detergent/paper/personal-care offers");
 
 const beforeKey1 = process.env.SCRAPER_API_KEY;
 const beforeKey2 = process.env.SCRAPER_API_KEY_2;

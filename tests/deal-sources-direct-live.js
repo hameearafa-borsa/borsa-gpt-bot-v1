@@ -1,5 +1,7 @@
 "use strict";
 
+const { extractCards } = require("../modules/deal-sources");
+
 // Anonymous, direct HTTP diagnostics for public retailer pages.
 // No ScraperAPI credentials, database, Telegram, or publishing are used.
 const targets = [
@@ -42,6 +44,7 @@ function summarizeHtml(html) {
       });
       const html = await response.text();
       const finalHost = (() => { try { return new URL(response.url).hostname; } catch { return ""; } })();
+      const metroDeals = target.source === "metro" ? extractCards(html, "metro", target.kind) : [];
       const row = {
         source: target.source,
         test: target.kind,
@@ -51,7 +54,14 @@ function summarizeHtml(html) {
         ok: response.ok,
         contentType: response.headers.get("content-type") || "",
         elapsedMs: Date.now() - startedAt,
-        ...summarizeHtml(html)
+        ...summarizeHtml(html),
+        ...(target.source === "metro" ? {
+          extractedProducts: metroDeals.length,
+          sampleProducts: metroDeals.slice(0, 5).map(deal => ({
+            merchant: deal.merchant, title: deal.title, price: deal.price,
+            oldPrice: deal.old_price, url: deal.url
+          }))
+        } : {})
       };
       results.push(row);
       console.log(JSON.stringify(row));

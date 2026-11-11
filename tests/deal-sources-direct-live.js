@@ -1,6 +1,7 @@
 "use strict";
 
 const { extractCards } = require("../modules/deal-sources");
+const { verifyProductUrl } = require("../modules/deal-scheduler");
 
 // Anonymous, direct HTTP diagnostics for public retailer pages.
 // No ScraperAPI credentials, database, Telegram, or publishing are used.
@@ -54,6 +55,16 @@ function summarizeHtml(html) {
       const html = await response.text();
       const finalHost = (() => { try { return new URL(response.url).hostname; } catch { return ""; } })();
       const metroDeals = target.source === "metro" ? extractCards(html, "metro", target.kind) : [];
+      const metroLinkChecks = target.source === "metro" && target.kind === "promotions"
+        ? await Promise.all(metroDeals.slice(0, 5).map(async deal => {
+          const checked = await verifyProductUrl(deal.url, { timeoutMs: 8000 });
+          return { title: deal.title, ok: checked.ok, status: checked.status || null, reason: checked.reason || null };
+        }))
+        : [];
+      const metroCategoryCounts = metroDeals.reduce((counts, deal) => {
+        counts[deal.category] = (counts[deal.category] || 0) + 1;
+        return counts;
+      }, {});
       const row = {
         source: target.source,
         test: target.kind,
@@ -66,10 +77,12 @@ function summarizeHtml(html) {
         ...summarizeHtml(html),
         ...(target.source === "metro" ? {
           extractedProducts: metroDeals.length,
+          categoryCounts: metroCategoryCounts,
           sampleProducts: metroDeals.slice(0, 5).map(deal => ({
-            merchant: deal.merchant, title: deal.title, price: deal.price,
+            merchant: deal.merchant, title: deal.title, category: deal.category, price: deal.price,
             oldPrice: deal.old_price, url: deal.url
           })),
+          productLinkChecks: metroLinkChecks,
           parserDiagnostics: require("../modules/deal-sources").extractionDiagnostics(html, "metro", metroDeals),
           markupSamples: metroMarkupSamples(html)
         } : {})

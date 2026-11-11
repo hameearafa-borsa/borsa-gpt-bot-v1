@@ -22,7 +22,6 @@ function categoryOf(title) {
   if (/صابون|شامبو|كريم|غسول|مرطب|دوف|لوكس|بانتين|عنايه|مكياج|تجميل|لوشن|سيروم|مزيل عرق|فازلين|نيفيا|soap|shampoo|body wash|hand wash|deodorant|toothpaste|dove|lux|pantene|nivea|vaseline|rexona|colgate|signal/i.test(s)) return "personal_care";
   return "detergent";
 }
-}
 function htmlText(value) { return String(value || "").replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#x27;|&#39;/gi,"'").replace(/\s+/g," ").trim(); }
 function productTitle(product) {
   const fields = ["name", "title", "displayName", "productName", "alternateName", "name_ar", "title_ar"];
@@ -244,6 +243,8 @@ function extractionDiagnostics(html, sourceName, deals = [], counters = null) {
   let htmlCardChunks = 0, htmlTitleMatches = 0;
   if (sourceName === "amazon") {
     htmlCardChunks = [...html.matchAll(/<div\b(?=[^>]*\bdata-component-type=["']s-search-result["'])[^>]*>/gi)].length;
+  } else if (sourceName === "metro") {
+    htmlCardChunks = [...html.matchAll(/<div\b(?=[^>]*class=["'][^"']*\bproduct-card\b[^"']*["'])[^>]*>/gi)].length;
   } else {
     const cardPattern = /<(?:article|div)\b(?=[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:\bprd\b|product(?:[-_ ]?(?:card|item|tile))?|item-product|productContainer)[^"']*["'])[^>]*>/gi;
     htmlCardChunks = [...html.matchAll(cardPattern)].length;

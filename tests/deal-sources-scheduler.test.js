@@ -397,6 +397,26 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.equal(authRetryKeys.length, 2, "credential retry must be bounded to one alternate request");
  assert.notEqual(authRetryKeys[0], authRetryKeys[1], "credential retry must use a different key");
 
+ const diagnosticKeys = [];
+ const diagnosticBody = "Access Denied for test-account-one; api_key=test-account-two";
+ const diagnosticFailure = await fetchSearch("amazon", "diagnostic failure", {
+   fetchImpl: async url => {
+     diagnosticKeys.push(new URL(String(url)).searchParams.get("api_key"));
+     return { ok: false, status: 403,
+       headers: { get: name => name === "content-type" ? "text/html; charset=utf-8" : name === "server" ? "cloudfront" : name === "x-amz-cf-id" ? "request-123" : null },
+       text: async () => diagnosticBody };
+   }
+ });
+ assert.equal(diagnosticFailure.ok, false);
+ assert.equal(diagnosticFailure.responseDiagnostics.attempts.length, 2);
+ assert.equal(diagnosticFailure.responseDiagnostics.attempts[0].signal, "retailer_or_edge_block");
+ assert.equal(diagnosticFailure.responseDiagnostics.attempts[0].server, "cloudfront");
+ assert.equal(diagnosticFailure.responseDiagnostics.attempts[0].requestId, "request-123");
+ assert.ok(!JSON.stringify(diagnosticFailure.responseDiagnostics).includes("test-account-one"));
+ assert.ok(!JSON.stringify(diagnosticFailure.responseDiagnostics).includes("test-account-two"));
+ assert.ok(JSON.stringify(diagnosticFailure.responseDiagnostics).includes("[REDACTED]"));
+ assert.equal(diagnosticKeys.length, 2, "diagnostics must retain the existing single alternate-key retry bound");
+
  const serverRetryKeys = [];
  const serverRetry = await fetchSearch("noon", "temporary upstream error", {
    fetchImpl: async url => {

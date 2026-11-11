@@ -12,6 +12,15 @@ const targets = [
   { source: "carrefour", kind: "official-offers", url: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers" }
 ];
 
+function metroMarkupSamples(html) {
+  const pattern = /<(?:article|div|li)\\b(?=[^>]*(?:class|data-qa|data-testid)=[\"'][^\"']*(?:product|prd)[^\"']*[\"'])[^>]*>/gi;
+  const starts = [...html.matchAll(pattern)];
+  return starts.slice(0, 3).map((match, index) => {
+    const next = starts[index + 1]?.index ?? match.index + 2600;
+    return html.slice(match.index, Math.min(next, match.index + 2600)).replace(/\\s+/g, " ").slice(0, 1800);
+  });
+}
+
 function summarizeHtml(html) {
   const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "")
     .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
@@ -60,7 +69,9 @@ function summarizeHtml(html) {
           sampleProducts: metroDeals.slice(0, 5).map(deal => ({
             merchant: deal.merchant, title: deal.title, price: deal.price,
             oldPrice: deal.old_price, url: deal.url
-          }))
+          })),
+          parserDiagnostics: require("../modules/deal-sources").extractionDiagnostics(html, "metro", metroDeals),
+          markupSamples: metroMarkupSamples(html)
         } : {})
       };
       results.push(row);

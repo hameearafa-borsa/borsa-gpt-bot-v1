@@ -13,6 +13,7 @@ function newsletterKindAt(date = new Date()) {
   const p = cairoParts(date);
   const hour = Number(p.hour), minute = Number(p.minute);
   // Each source family has its own recovery window.
+  if (hour === 11 && minute >= 30) return "metro_stores";
   if ((hour === 12 && minute >= 30) || (hour === 13 && minute < 30)) return "online_stores";
   if (hour === 14) return "market_stores";
   if (hour === 16 && minute < 45) return "amazon";
@@ -29,11 +30,13 @@ function selectNewsletterDeals(recent, kind) {
   const hostOf = deal => { try { return new URL(deal.url).hostname.toLowerCase(); } catch { return ""; } };
   const isOnlineStore = deal => ["www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com"].includes(hostOf(deal));
   const isMarketStore = deal => hostOf(deal) === "snapflyer.io";
+  const isMetroStore = deal => hostOf(deal) === "shop.metro-markets.com";
   // Strict source allowlists prevent one edition from leaking into another.
   const editionPool = recent.filter(d =>
     kind === "amazon" ? isAmazon(d) :
     kind === "online_stores" ? isOnlineStore(d) :
-    kind === "market_stores" ? isMarketStore(d) : false
+    kind === "market_stores" ? isMarketStore(d) :
+    kind === "metro_stores" ? isMetroStore(d) : false
   );
   const balanced = distributeDeals(editionPool, kind === "amazon" ? AMAZON_TARGETS : TARGETS);
   return [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
@@ -62,7 +65,7 @@ function selectMarketStoreGroups(recent) {
 }
 
 async function verifyProductUrl(raw, { fetchImpl = globalThis.fetch, timeoutMs = 7000, maxRedirects = 5 } = {}) {
-  const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com", "snapflyer.io"]);
+  const allowedHosts = new Set(["www.amazon.eg", "amazon.eg", "www.jumia.com.eg", "jumia.com.eg", "www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com", "shop.metro-markets.com", "snapflyer.io"]);
   const isAllowedSnapFlyerUrl = url =>
     url.hostname.toLowerCase() === "snapflyer.io" && (
       /^\/eg\/downtown\/offers\/(?:kazyon|bim|metro-market)\/\d+\/?$/i.test(url.pathname) ||
@@ -349,7 +352,8 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
         kind,
         title: ({
           amazon: "عروض أمازون للمنظفات والورقيات والعناية",
-          online_stores: "عروض التسوق الإلكتروني"
+          online_stores: "عروض التسوق الإلكتروني",
+          metro_stores: "عروض مترو ماركت"
         })[kind] || "عروض المتاجر الأخرى المختارة",
         groupIndex: null
       }];

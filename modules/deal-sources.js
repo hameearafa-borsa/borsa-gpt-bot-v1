@@ -346,7 +346,12 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
-      if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
+      if (!response.ok) {
+        let body = "";
+        try { body = await response.text(); } catch {}
+        return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`,
+          responseDiagnostics: safeHttpErrorDiagnostics(response, body, keys), deals: [] };
+      }
       const html = await response.text();
       const counters = createExtractionCounters();
       const deals = extractCards(html, sourceName, query, counters);

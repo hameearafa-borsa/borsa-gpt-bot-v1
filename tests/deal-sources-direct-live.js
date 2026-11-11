@@ -11,16 +11,16 @@ const targets = [
 ];
 
 function summarizeHtml(html) {
-  const title = (html.match(/<title[^>]*>([\\s\\S]*?)<\\/title>/i)?.[1] || "")
-    .replace(/<[^>]+>/g, " ").replace(/\\s+/g, " ").trim().slice(0, 160);
-  const jsonScripts = [...html.matchAll(/<script\\b([^>]*)>/gi)]
-    .filter(match => /application\\/(?:ld\\+json|json)/i.test(match[1]) ||
+  const title = (html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] || "")
+    .replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160);
+  const jsonScripts = [...html.matchAll(/<script\b([^>]*)>/gi)]
+    .filter(match => /application\/(?:ld\+json|json)/i.test(match[1]) ||
       /(?:__NEXT_DATA__|__NUXT__|INITIAL_STATE|APOLLO_STATE)/i.test(match[1])).length;
-  const productMarkers = (html.match(/product[-_ ]?(?:card|item|tile)|data-testid=["'][^"']*product|class=["'][^"']*\\bprd\\b/gi) || []).length;
-  const priceSignals = (html.match(/(?:EGP|LE|ج\\.?م|جنيه)\\s*[0-9٠-٩]|[0-9٠-٩][0-9٠-٩,.]*\\s*(?:EGP|LE|ج\\.?م|جنيه)/gi) || []).length;
-  const arabicCharacters = (html.match(/[\\u0600-\\u06FF]/g) || []).length;
+  const productMarkers = (html.match(/product[-_ ]?(?:card|item|tile)|data-testid=["'][^"']*product|class=["'][^"']*\bprd\b/gi) || []).length;
+  const priceSignals = (html.match(/(?:EGP|LE|ج\.?م|جنيه)\s*[0-9٠-٩]|[0-9٠-٩][0-9٠-٩,.]*\s*(?:EGP|LE|ج\.?م|جنيه)/gi) || []).length;
+  const arabicCharacters = (html.match(/[\u0600-\u06FF]/g) || []).length;
   const offerSignals = (html.match(/offer|promotion|deal|discount|عروض|خصم|تخفيض/gi) || []).length;
-  const productLinks = (html.match(/href=["'][^"']*(?:\\/product|\\/p\\/|\\/dp\\/)[^"']*["']/gi) || []).length;
+  const productLinks = (html.match(/href=["'][^"']*(?:\/product|\/p\/|\/dp\/)[^"']*["']/gi) || []).length;
   return { title, htmlBytes: Buffer.byteLength(html), arabicCharacters, jsonOrHydrationScripts: jsonScripts, productCardMarkers: productMarkers, priceSignals, offerSignals, productLinks };
 }
 
@@ -68,7 +68,7 @@ function summarizeHtml(html) {
       console.log(JSON.stringify(row));
     }
   }
-  console.log("\\nDIRECT FETCH SUMMARY");
+  console.log("\nDIRECT FETCH SUMMARY");
   console.log(JSON.stringify({
     timestamp: new Date().toISOString(),
     requests: results.length,

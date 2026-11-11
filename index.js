@@ -66,10 +66,11 @@ try {
 }
 
 const bot = new Telegraf(process.env.BOT_TOKEN, { handlerTimeout: 30000 });
-const ai = createAI();
-// Gemini remains primary; chemical rescue rotates OpenAI keys, then tries Groq within a shared time budget.
-const chemicalAI = createAI({ provider: "gemini" });
-const chemicalFallbackAI = createAI({ provider: "openai", fallbackProviders: ["groq"] });
+// General classification and optional price-list interpretation never receive OpenAI keys.
+const ai = createAI({ provider: "groq", fallbackProviders: ["gemini"] });
+// OpenAI credentials are reserved exclusively for the chemical assistant; Groq is its emergency fallback.
+const chemicalAI = createAI({ provider: "openai" });
+const chemicalFallbackAI = createAI({ provider: "groq" });
 let botUserId = null;
 let stopDeals = () => {};
 let stopCatalogs = () => {};
@@ -804,7 +805,7 @@ bot.action(/^panel:(home|chemical|prices|lists|merchants|deals|weather|reports|h
     } else if (section === "prices") {
       const count = await db.query("SELECT COUNT(*)::int AS count FROM price_observations");
       body = "💰 مرصد الأسعار\n\nإجمالي ملاحظات الأسعار المسجلة: " + (count.rows[0]?.count ?? 0) + "\n\nيعمل المرصد بصمت ويحول السجلات غير الواثقة للمراجعة.";
-    } else if (section === "chemical") body = "🧪 المساعد الكيميائي\n\nيستخدم Gemini أولًا ثم مزودي الاحتياط المضبوطين عند الحاجة.";
+    } else if (section === "chemical") body = "🧪 المساعد الكيميائي\n\nيستخدم OpenAI مع تدوير مفاتيحه، وGroq كمسار احتياطي عند تعطل الخدمة.";
     else if (section === "lists") body = "📋 قوائم الشركات\n\nأرسل /قائمة متبوعًا بنص قائمة الأسعار.";
     else if (section === "deals") body = "🛍️ العروض والنشرات\n\nإعدادات التشغيل موجودة في إعدادات الخدمات. لا يطلق هذا الزر عملية scraping مدفوعة.";
     else if (section === "weather") body = "🌦️ الطقس\n\nإعدادات الخدمة والنشرة موجودة في إعدادات الخدمات.";

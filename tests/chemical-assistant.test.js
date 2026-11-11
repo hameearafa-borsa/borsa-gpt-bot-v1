@@ -68,25 +68,38 @@ assert.match(chemistry.getProviderFallback(new Error("AI HTTP 400: invalid reque
   assert.match(serviceFailureAnswer, /لم يتم رفض سؤالك/);
 
   let fallbackCalls = 0;
-  const recoveredByOpenAIFallback = await chemistry.answer({
+  const recoveredWithoutOpenAIKey = await chemistry.answer({
+    primaryProvider: null,
+    async generate() { throw new Error("لا يوجد مزود AI مضبوط"); }
+  }, validQuestion, null, {
+    primaryProvider: "groq",
+    async generate() { return { text: "إجابة احتياطية عند غياب مفتاح OpenAI", provider: "groq" }; }
+  });
+  assert.match(recoveredWithoutOpenAIKey, /تقنيات Groq/);
+  assert.match(recoveredWithoutOpenAIKey, /إجابة احتياطية عند غياب مفتاح OpenAI/);
+
+  const recoveredByGroqFallback = await chemistry.answer({
+    primaryProvider: "openai",
     async generate(_prompt, options) {
-      assert.equal(options.googleSearch, true, "Gemini chemical requests should use Google Search grounding");
-      assert.equal(options.requestBudgetMs, 15000, "primary Gemini work should leave time for fallback");
-      throw new Error("AI HTTP 503: Google unavailable");
+      assert.equal(options.webSearch, true, "OpenAI chemical requests should use hosted web search");
+      assert.equal(options.googleSearch, false, "OpenAI primary must not send Gemini-only search options");
+      assert.equal(options.requestBudgetMs, 15000, "primary OpenAI work should leave time for fallback");
+      throw new Error("AI HTTP 503: OpenAI unavailable");
     }
   }, validQuestion, null, {
+    primaryProvider: "groq",
     async generate(_prompt, options) {
       fallbackCalls++;
-      assert.equal(options.webSearch, false, "OpenAI rescue must not require web search");
-      assert.equal(options.model, undefined, "fallback should use the already configured OPENAI_MODEL");
+      assert.equal(options.webSearch, false, "Groq rescue must not require web search");
+      assert.equal(options.model, undefined, "fallback should use the already configured Groq model");
       assert.equal(options.timeoutMs, 3500, "each fallback key receives a short bounded timeout");
       assert.equal(options.requestBudgetMs, 14000, "fallback keys and providers share a bounded 14-second budget");
-      return { text: "إجابة فنية عملية مباشرة", provider: "openai" };
+      return { text: "إجابة فنية عملية مباشرة", provider: "groq" };
     }
   });
   assert.equal(fallbackCalls, 1);
-  assert.match(recoveredByOpenAIFallback, /تقنيات OpenAI/);
-  assert.match(recoveredByOpenAIFallback, /إجابة فنية عملية مباشرة/);
+  assert.match(recoveredByGroqFallback, /تقنيات Groq/);
+  assert.match(recoveredByGroqFallback, /إجابة فنية عملية مباشرة/);
 
   const permanentFailureAnswer = await chemistry.answer({
     async generate() { throw new Error("AI HTTP 400: invalid request"); }

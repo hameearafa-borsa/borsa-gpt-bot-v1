@@ -26,15 +26,19 @@ assert.ok(geminiSection.includes("new GoogleGenAI"));
 assert.ok(geminiSection.includes("retryOptions: { attempts: 1 }"), "the SDK retry layer must not multiply the app retry budget");
 assert.ok(!geminiSection.includes("temperature"), "Gemini 3.8 Flash request must omit temperature sampling parameter");
 assert.ok(!geminiSection.includes("generationConfig"), "Gemini request should omit deprecated sampling configuration");
-assert.ok(aiSource.includes('AI_FALLBACK_ENABLED === "true"'));
+assert.ok(!aiSource.includes('AI_FALLBACK_ENABLED === "true"'), "legacy environment fallback must not widen routes or expose OpenAI keys");
 assert.ok(aiSource.includes("function isCredentialError"));
 assert.ok(aiSource.includes("fallbackProviders.flatMap"));
 assert.ok(aiSource.includes("(isProviderWideFailure(e) && !rotateOpenAIKeyAfterTimeout) || (!retryable && !credentialError)"), "provider-wide failures should skip sibling keys except for bounded OpenAI timeout key rotation");
 assert.ok(aiSource.includes("https://api.groq.com/openai/v1/chat/completions"));
+assert.ok(aiSource.includes("أنت محرك ذكاء اصطناعي مساعد لبوت بورصة المنظفات"), "Groq system prompt must support general classification and price-list tasks, not only chemistry");
 assert.ok(aiSource.includes("GROQ_MODEL"));
 assert.ok(aiSource.includes("GROQ_API_KEY_2"));
-assert.ok(index.includes('createAI({ provider: "gemini" })'), "chemical assistant must be pinned to Google only");
-assert.ok(index.includes('const chemicalFallbackAI = createAI({ provider: "openai", fallbackProviders: ["groq"] })'), "chemical rescue should rotate OpenAI keys before trying Groq");
+assert.ok(index.includes('const ai = createAI({ provider: "groq", fallbackProviders: ["gemini"] })'), "general AI routes must use Groq with Gemini-only fallback");
+assert.ok(index.includes('const chemicalAI = createAI({ provider: "openai" })'), "chemical assistant must own the OpenAI route");
+assert.ok(index.includes('const chemicalFallbackAI = createAI({ provider: "groq" })'), "chemical fallback must use Groq, never another OpenAI route");
+assert.ok(!index.includes('createAI()'), "no unpinned AI instance may accidentally inherit OpenAI");
+assert.ok(!index.includes('createAI({ provider: "gemini" })'), "Gemini must not be the chemical primary");
 
 function provider(name, providerName, run) {
   return { name, provider: providerName, run };
@@ -372,7 +376,7 @@ try {
   const routed = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"], providers });
   const result = await routed.generate("test prompt");
   assert.equal(result.provider, "groq");
-  assert.deepEqual(calls, ["gemini-1", "openai", "groq"], "provider-wide failures should skip remaining keys for the same provider");
+  assert.deepEqual(calls, ["gemini-1", "groq"], "non-chemical routes must skip OpenAI and provider-wide failures should skip sibling keys");
 
   const slowGeminiCalls = [];
   const slowGeminiProviders = [
@@ -381,9 +385,8 @@ try {
     provider("OPENAI_API_KEY", "openai", async () => { slowGeminiCalls.push("openai"); return { text: "recovered answer", provider: "openai" }; })
   ];
   const slowGeminiRouted = createAI({ provider: "gemini", fallbackProviders: ["openai"], providers: slowGeminiProviders });
-  const recovered = await slowGeminiRouted.generate("test prompt");
-  assert.equal(recovered.provider, "openai");
-  assert.deepEqual(slowGeminiCalls, ["gemini-1", "openai"], "a provider-wide 503 should not wait through each Gemini key slot");
+  await assert.rejects(slowGeminiRouted.generate("test prompt"));
+  assert.deepEqual(slowGeminiCalls, ["gemini-1"], "a non-chemical route must not use OpenAI as a fallback");
 
   const rateLimitCalls = [];
   const rateLimitProviders = [
@@ -441,9 +444,8 @@ try {
     provider("OPENAI_API_KEY", "openai", async () => { permanentCalls.push("openai"); return { text: "fallback", provider: "openai" }; })
   ];
   const permanentRouted = createAI({ provider: "gemini", fallbackProviders: ["openai"], providers: permanentProviders });
-  const permanentResult = await permanentRouted.generate("test prompt");
-  assert.equal(permanentResult.provider, "openai");
-  assert.deepEqual(permanentCalls, ["gemini-1", "openai"]);
+  await assert.rejects(permanentRouted.generate("test prompt"));
+  assert.deepEqual(permanentCalls, ["gemini-1"], "OpenAI must not be selected as a non-chemical fallback");
 
   const emptyResponseCalls = [];
   const emptyResponseProviders = [
@@ -453,9 +455,9 @@ try {
   ];
   const emptyResponseRouted = createAI({ provider: "gemini", fallbackProviders: ["openai", "groq"], providers: emptyResponseProviders });
   const emptyResponseResult = await emptyResponseRouted.generate("test prompt");
-  assert.equal(emptyResponseResult.provider, "openai");
-  assert.equal(emptyResponseResult.text, "OpenAI answer");
-  assert.deepEqual(emptyResponseCalls, ["gemini", "openai"]);
+  assert.equal(emptyResponseResult.provider, "groq");
+  assert.equal(emptyResponseResult.text, "Groq answer");
+  assert.deepEqual(emptyResponseCalls, ["gemini", "groq"]);
 
   const allFailProviders = [
     provider("GEMINI_API_KEY_1", "gemini", async () => { throw httpError(503, "Gemini unavailable"); }),
@@ -468,58 +470,41 @@ try {
     return true;
   });
 
-  // General routing stays on the primary provider when fallback is disabled.
+  // General routes remain isolated from OpenAI even when legacy env flags request it.
   process.env.AI_PROVIDER = "openai";
-  delete process.env.AI_FALLBACK_ENABLED;
-  const disabledCalls = [];
-  const disabled = createAI({ providers: [
-    provider("OPENAI_API_KEY", "openai", async () => {
-      disabledCalls.push("openai"); throw httpError(503);
-    }),
-    provider("GEMINI_API_KEY_1", "gemini", async () => {
-      disabledCalls.push("gemini"); return { text: "unexpected", provider: "gemini" };
-    })
-  ] });
-  await assert.rejects(disabled.generate("test prompt"));
-  assert.deepEqual(disabledCalls, ["openai"]);
-
-  // Enabling fallback adds configured providers and skips sibling keys on 503.
   process.env.AI_FALLBACK_ENABLED = "true";
-  const fallbackCalls = [];
-  const enabled = createAI({ providers: [
+  const generalCalls = [];
+  const general = createAI({ providers: [
     provider("OPENAI_API_KEY", "openai", async () => {
-      fallbackCalls.push("openai-1"); throw httpError(503);
-    }),
-    provider("OPENAI_API_KEY_2", "openai", async () => {
-      fallbackCalls.push("openai-2"); return { text: "must skip", provider: "openai" };
-    }),
-    provider("GEMINI_API_KEY_1", "gemini", async () => {
-      fallbackCalls.push("gemini"); return { text: "fallback answer", provider: "gemini" };
+      generalCalls.push("openai"); return { text: "must never run", provider: "openai" };
     }),
     provider("GROQ_API_KEY", "groq", async () => {
-      fallbackCalls.push("groq"); return { text: "unused", provider: "groq" };
-    })
-  ] });
-  const fallbackResult = await enabled.generate("test prompt");
-  assert.equal(fallbackResult.provider, "gemini");
-  assert.deepEqual(fallbackCalls, ["openai-1", "gemini"]);
-
-  // A 401 tries the next key of the same provider before changing providers.
-  const generalCredentialCalls = [];
-  const credential = createAI({ providers: [
-    provider("OPENAI_API_KEY", "openai", async () => {
-      generalCredentialCalls.push("openai-1"); throw httpError(401, "invalid_api_key");
-    }),
-    provider("OPENAI_API_KEY_2", "openai", async () => {
-      generalCredentialCalls.push("openai-2"); return { text: "recovered", provider: "openai" };
+      generalCalls.push("groq"); throw httpError(503);
     }),
     provider("GEMINI_API_KEY_1", "gemini", async () => {
-      generalCredentialCalls.push("gemini"); return { text: "unexpected", provider: "gemini" };
+      generalCalls.push("gemini"); return { text: "safe fallback", provider: "gemini" };
     })
   ] });
-  const generalCredentialResult = await credential.generate("test prompt");
-  assert.equal(generalCredentialResult.provider, "openai");
-  assert.deepEqual(generalCredentialCalls, ["openai-1", "openai-2"]);
+  const generalResult = await general.generate("general classification");
+  assert.equal(generalResult.provider, "gemini");
+  assert.deepEqual(generalCalls, ["groq", "gemini"], "general requests may use Groq then Gemini but must never consume OpenAI keys");
+
+  // OpenAI is reachable only when a caller explicitly selects it (chemical route).
+  const explicitChemicalCalls = [];
+  const explicitChemical = createAI({ provider: "openai", fallbackProviders: ["groq"], providers: [
+    provider("OPENAI_API_KEY", "openai", async () => {
+      explicitChemicalCalls.push("openai"); return { text: "chemical answer", provider: "openai" };
+    }),
+    provider("GROQ_API_KEY", "groq", async () => {
+      explicitChemicalCalls.push("groq"); return { text: "fallback answer", provider: "groq" };
+    }),
+    provider("GEMINI_API_KEY_1", "gemini", async () => {
+      explicitChemicalCalls.push("gemini"); return { text: "must not run", provider: "gemini" };
+    })
+  ] });
+  const chemicalResult = await explicitChemical.generate("chemical formulation");
+  assert.equal(chemicalResult.provider, "openai");
+  assert.deepEqual(explicitChemicalCalls, ["openai"], "the chemical route owns OpenAI and may fall back only to its explicit Groq route");
 
   console.log("AI provider routing and chemical fallback unit tests: OK");
 })().catch(error => {

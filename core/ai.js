@@ -80,7 +80,7 @@ function groqProvider(key, model) {
       model: selectedModel,
       temperature: options.temperature ?? 0,
       messages: [
-        { role: "system", content: "أنت المساعد الكيميائي لبوت بورصة المنظفات. أجب بالعربية الواضحة، لا تخترع نسبًا أو بيانات تجارية، واذكر مخاطر السلامة بوضوح." },
+        { role: "system", content: "أنت محرك ذكاء اصطناعي مساعد لبوت بورصة المنظفات. اتبع تعليمات الطلب بدقة، وأجب بالعربية الواضحة عند الحاجة. لا تخترع نسبًا أو بيانات تجارية، واذكر مخاطر السلامة بوضوح عندما يكون السؤال كيميائيًا." },
         { role: "user", content: String(prompt || "") }
       ]
     }, { authorization: `Bearer ${key}` }, Number(options.timeoutMs) || undefined);
@@ -281,7 +281,7 @@ function providersFromEnv() {
       });
     }
   }
-  const primary = String(process.env.AI_PROVIDER || "openai").toLowerCase();
+  const primary = String(process.env.AI_PROVIDER || "groq").toLowerCase();
   const order = [primary, ...["openai", "gemini", "groq"].filter(x => x !== primary)];
   return order.flatMap(provider => all[provider] || []);
 }
@@ -325,26 +325,23 @@ function isProviderWideFailure(error) {
 }
 
 function createAI(options = {}) {
-  // Optional provider injection supports deterministic unit tests; production defaults to environment configuration.
+  // OpenAI is reserved for the chemical assistant. General callers default to
+  // Groq and may explicitly allow Gemini as a fallback; environment flags must
+  // never widen a route to include OpenAI.
   const configured = Array.isArray(options.providers) ? options.providers : providersFromEnv();
-  const forcedProvider = options.provider ? String(options.provider).toLowerCase() : null;
-  const primaryProvider = forcedProvider || String(process.env.AI_PROVIDER || "openai").toLowerCase();
-  const primary = configured.filter(p => p.provider === primaryProvider);
-  const fallbackProviders = [...new Set((options.fallbackProviders || []).map(x => String(x).toLowerCase()))]
-    .filter(provider => provider !== primaryProvider);
-  const envFallbackEnabled = process.env.AI_FALLBACK_ENABLED === "true";
-  // Explicit fallback providers remain ordered; environment-enabled fallback
-  // adds all configured providers after the primary provider.
-  const selected = forcedProvider
-    ? [...primary, ...fallbackProviders.flatMap(provider => configured.filter(p => p.provider === provider))]
-    : (primary.length
-        ? (envFallbackEnabled
-            ? [...primary, ...configured.filter(p => p.provider !== primaryProvider)]
-            : primary)
-        : configured);
+  const primaryProvider = String(options.provider || "groq").toLowerCase();
+  const requestedFallbacks = Array.isArray(options.fallbackProviders)
+    ? options.fallbackProviders
+    : (options.provider ? [] : ["gemini"]);
+  const fallbackProviders = [...new Set(requestedFallbacks.map(x => String(x).toLowerCase()))]
+    .filter(provider => provider !== primaryProvider && (primaryProvider === "openai" || provider !== "openai"));
+  const selected = [
+    ...configured.filter(p => p.provider === primaryProvider),
+    ...fallbackProviders.flatMap(provider => configured.filter(p => p.provider === provider))
+  ];
   async function generate(prompt, options = {}) {
     if (!selected.length) throw new Error("لا يوجد مزود AI مضبوط");
-    const allowCrossProvider = fallbackProviders.length > 0 || process.env.AI_FALLBACK_ENABLED === "true";
+    const allowCrossProvider = fallbackProviders.length > 0;
     const providerOrder = allowCrossProvider ? selected : selected.filter(p => p.provider === selected[0].provider);
     let last;
     let skipProvider = null;

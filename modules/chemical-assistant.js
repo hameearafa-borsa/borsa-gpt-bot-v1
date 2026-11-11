@@ -128,7 +128,7 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
   const gate = safetyGate(question);
   if (gate) return gate;
   if (!ai || typeof ai.generate !== "function") {
-    const error = new Error("Gemini AI provider is not configured");
+    const error = new Error("Chemical AI provider is not configured");
     if (typeof onError === "function") { try { onError(error); } catch {} }
     return SERVICE_CONFIG_FALLBACK;
   }
@@ -143,14 +143,17 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
       : "";
     return providerLabel ? `🤖 الخدمة مقدمة بتقنيات ${providerLabel}\n\n${answerText}` : answerText;
   };
+  const primaryProvider = String(ai.primaryProvider || "configured");
+  const fallbackProvider = String(fallbackAI?.primaryProvider || "configured");
+  const primaryNotConfigured = !ai.primaryProvider;
   try {
     const result = await ai.generate(buildPrompt(question), {
-      temperature: 0.3, googleSearch: true, requestBudgetMs: 15000
+      temperature: 0.3, webSearch: primaryProvider === "openai", googleSearch: primaryProvider === "gemini", requestBudgetMs: 15000
     });
     return formatAnswer(result);
   } catch (primaryError) {
-    if (fallbackAI && typeof fallbackAI.generate === "function" && isTemporaryProviderFailure(primaryError)) {
-      console.warn(`[CHEMICAL_FALLBACK] primary=gemini outcome=starting reason=temporary_service_failure`);
+    if (fallbackAI && typeof fallbackAI.generate === "function" && (primaryNotConfigured || isTemporaryProviderFailure(primaryError))) {
+      console.warn(`[CHEMICAL_FALLBACK] primary=${primaryProvider} fallback=${fallbackProvider} outcome=starting reason=temporary_service_failure`);
       try {
         // Keep the emergency answer path fast: web search is optional for a
         // formulation question and must not block the fallback model.
@@ -160,11 +163,11 @@ async function answer(ai, question, onError = null, fallbackAI = null) {
           timeoutMs: 3500,
           requestBudgetMs: 14000
         });
-        if (!String(result?.text || "").trim()) throw new Error("OpenAI fallback returned an empty response");
-        console.info(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=succeeded`);
+        if (!String(result?.text || "").trim()) throw new Error(`${fallbackProvider} fallback returned an empty response`);
+        console.info(`[CHEMICAL_FALLBACK] primary=${primaryProvider} fallback=${fallbackProvider} outcome=succeeded`);
         return formatAnswer(result);
       } catch (fallbackError) {
-        console.warn(`[CHEMICAL_FALLBACK] primary=gemini fallback=openai outcome=failed error=${String(fallbackError?.message || "provider_error").slice(0, 220)}`);
+        console.warn(`[CHEMICAL_FALLBACK] primary=${primaryProvider} fallback=${fallbackProvider} outcome=failed error=${String(fallbackError?.message || "provider_error").slice(0, 220)}`);
         if (typeof onError === "function") { try { onError(fallbackError); } catch {} }
         return getProviderFallback(fallbackError);
       }

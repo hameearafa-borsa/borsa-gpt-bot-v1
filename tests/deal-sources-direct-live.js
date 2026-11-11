@@ -13,11 +13,11 @@ const targets = [
 ];
 
 function metroMarkupSamples(html) {
-  const pattern = /<(?:article|div|li)\\b(?=[^>]*(?:class|data-qa|data-testid)=[\"'][^\"']*(?:product|prd)[^\"']*[\"'])[^>]*>/gi;
+  const pattern = /<(?:article|div|li)\b(?=[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:product|prd)[^"']*["'])[^>]*>/gi;
   const starts = [...html.matchAll(pattern)];
   return starts.slice(0, 3).map((match, index) => {
     const next = starts[index + 1]?.index ?? match.index + 2600;
-    return html.slice(match.index, Math.min(next, match.index + 2600)).replace(/\\s+/g, " ").slice(0, 1800);
+    return html.slice(match.index, Math.min(next, match.index + 2600)).replace(/\s+/g, " ").slice(0, 1800);
   });
 }
 

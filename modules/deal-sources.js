@@ -11,14 +11,15 @@ const SOURCES = Object.freeze({
   amazon: { host: "www.amazon.eg", base: "https://www.amazon.eg/s?k=" },
   jumia: { host: "www.jumia.com.eg", base: "https://www.jumia.com.eg/catalog/?q=" },
   noon: { host: "www.noon.com", base: "https://www.noon.com/egypt-ar/search/?q=" },
-  carrefour: { host: "www.carrefouregypt.com", base: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers" }
+  carrefour: { host: "www.carrefouregypt.com", base: "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers" },
+  metro: { host: "shop.metro-markets.com", base: "https://shop.metro-markets.com/promotions" }
 });
-const INCLUDE = /غسيل|مسحوق|بودر|جل|منعم|كلور|صابون|شامبو|كريم|مناديل|حفاض|فاين|ديتول|فيري|بريل|برسيل|تايد|اريال|آريال|اومو|أومو|كلوركس|دوف|لوكس|بانتين|بامبرز|مولفكس|محارم|غسول|مرطب|عناية|ورقي|مكياج|تجميل|لوشن|سيروم|مزيل عرق|معجون|فازلين|نيفيا|منظف|منظفات|مطهر|معقم|سائل أطباق|سائل اطباق|سائل صحون|سائل جلي|سائل غسيل|معطر|مبيض|مزيل بقع|ورق تواليت|مناديل مطبخ|مناديل حمام|ملمع|سائل تنظيف|منظف زجاج|معجون أسنان|معجون اسنان/i;
-const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|حذاء|ملابس نسائية|ملابس رجالية|ملابس أطفال|فستان|تيشيرت|بنطلون|جاكيت|مكيف|ثلاجة|تلفزيون|شاشة|ايفون|سامسونج جالكسي|غسالة ملابس|بوتاجاز|ميكروويف|مروحة|تكييف|أثاث|كنبة|سرير|مرتبة|لعبة أطفال|ألعاب أطفال|مكمل غذائي|علف|طعام قطط|طعام كلاب|كريم طبخ|كريمة طبخ|شامبو سيارات|منظف سيارات|زيت محرك/i;
+const INCLUDE = /غسيل|مسحوق|بودر|جل|منعم|كلور|صابون|شامبو|كريم|مناديل|حفاض|فاين|ديتول|فيري|بريل|برسيل|تايد|اريال|آريال|اومو|أومو|كلوركس|دوف|لوكس|بانتين|بامبرز|مولفكس|محارم|غسول|مرطب|عناية|ورقي|مكياج|تجميل|لوشن|سيروم|مزيل عرق|معجون|فازلين|نيفيا|منظف|منظفات|مطهر|معقم|سائل أطباق|سائل اطباق|سائل صحون|سائل جلي|سائل غسيل|معطر|مبيض|مزيل بقع|ورق تواليت|مناديل مطبخ|مناديل حمام|ملمع|سائل تنظيف|منظف زجاج|معجون أسنان|معجون اسنان|detergent|laundry|washing powder|washing liquid|dishwashing|dish soap|fabric softener|bleach|cleaner|cleaning|disinfectant|tissue|toilet paper|paper towel|diaper|shampoo|soap|body wash|hand wash|deodorant|toothpaste|sanitary pad|persil|ariel|tide|omo|downy|comfort|finish|fairy|pril|dettol|dove|lux|pantene|pampers|molfix|fine\s+(?:touch|smart|tissue|facial|kitchen|toilet|wipes)|kleenex|nivea|vaseline|rexona|colgate|signal/i;
+const EXCLUDE = /tv|لابتوب|موبايل|تليفون|ساعة ذكية|سماعات|حذاء|ملابس نسائية|ملابس رجالية|ملابس أطفال|فستان|تيشيرت|بنطلون|جاكيت|مكيف|ثلاجة|تلفزيون|شاشة|ايفون|سامسونج جالكسي|غسالة ملابس|بوتاجاز|ميكروويف|مروحة|تكييف|أثاث|كنبة|سرير|مرتبة|لعبة أطفال|ألعاب أطفال|مكمل غذائي|علف|طعام قطط|طعام كلاب|كريم طبخ|كريمة طبخ|شامبو سيارات|منظف سيارات|زيت محرك|flour|milk|banana|rice|pasta|sugar|cooking oil|vegetable oil|juice|water|coffee|tea|chocolate|cheese|yogurt|yoghurt|meat|chicken|fish|fruit|vegetable|food|grocery|bread|biscuit|snack|cereal|canned|frozen/i;
 function categoryOf(title) {
   const s = normalizeArabic(title);
-  if (/حفاض|بامبرز|مولفكس|مناديل|فاين|محارم|كلينكس|ورقي/.test(s)) return "paper";
-  if (/صابون|شامبو|كريم|غسول|مرطب|دوف|لوكس|بانتين|عنايه|مكياج|تجميل|لوشن|سيروم|مزيل عرق|فازلين|نيفيا/.test(s)) return "personal_care";
+  if (/حفاض|بامبرز|مولفكس|مناديل|فاين|محارم|كلينكس|ورقي|tissue|toilet paper|paper towel|diaper|fine\s+(?:touch|smart|tissue|facial|kitchen|toilet|wipes)|kleenex/i.test(s)) return "paper";
+  if (/صابون|شامبو|كريم|غسول|مرطب|دوف|لوكس|بانتين|عنايه|مكياج|تجميل|لوشن|سيروم|مزيل عرق|فازلين|نيفيا|soap|shampoo|body wash|hand wash|deodorant|toothpaste|dove|lux|pantene|nivea|vaseline|rexona|colgate|signal/i.test(s)) return "personal_care";
   return "detergent";
 }
 function htmlText(value) { return String(value || "").replace(/<script[\s\S]*?<\/script>/gi," ").replace(/<style[\s\S]*?<\/style>/gi," ").replace(/<[^>]+>/g," ").replace(/&nbsp;|&#160;/gi," ").replace(/&amp;/gi,"&").replace(/&quot;/gi,'"').replace(/&#x27;|&#39;/gi,"'").replace(/\s+/g," ").trim(); }
@@ -46,7 +47,7 @@ function safeProductUrl(raw, sourceName) {
     u.hash = "";
     // Strip tracking parameters; preserve only the path and essential product identifier.
     if (sourceName === "amazon" && /\/dp\/[A-Z0-9]{10}/i.test(u.pathname)) u.search = "";
-    else if (sourceName === "jumia" || sourceName === "noon") u.search = "";
+    else if (sourceName === "jumia" || sourceName === "noon" || sourceName === "metro") u.search = "";
     return u.toString();
   } catch { return null; }
 }
@@ -87,7 +88,7 @@ function extractStructuredCards(html, sourceName, query = "", counters = null) {
   for (const script of scripts) {
     try { visit(JSON.parse(script.trim())); } catch { /* Ignore non-JSON and malformed hydration payloads. */ }
   }
-  const merchant = sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "noon" ? "Noon Egypt" : "Carrefour Egypt";
+  const merchant = sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "noon" ? "Noon Egypt" : sourceName === "metro" ? "مترو ماركت" : "Carrefour Egypt";
   const cards = [];
   for (const product of products) {
     const stats = counters?.json;
@@ -135,6 +136,12 @@ function extractCards(html, sourceName, query = "", counters = null) {
     const starts = [...html.matchAll(/<div\b(?=[^>]*\bdata-component-type=["']s-search-result["'])[^>]*>/gi)];
     chunks = starts.map((match, index) => html.slice(match.index, starts[index + 1]?.index ?? html.length));
   }
+  else if (sourceName === "metro") {
+    // Metro uses a stable .product-card wrapper; avoid nested product-select
+    // and category containers that also contain the word "product".
+    const starts = [...html.matchAll(/<div\b(?=[^>]*class=["'][^"']*\bproduct-card\b[^"']*["'])[^>]*>/gi)];
+    chunks = starts.map((match, index) => html.slice(match.index, starts[index + 1]?.index ?? html.length));
+  }
   else {
     // Retailer card wrappers may be article or div; require a product-like marker.
     const cardPattern = /<(?:article|div)\b(?=[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:\bprd\b|product(?:[-_ ]?(?:card|item|tile))?|item-product|productContainer)[^"']*["'])[^>]*>/gi;
@@ -142,6 +149,7 @@ function extractCards(html, sourceName, query = "", counters = null) {
     chunks = starts.map((match, index) => html.slice(match.index, starts[index + 1]?.index ?? html.length));
     if (!chunks.length) chunks = [...html.matchAll(/<article[\s\S]*?<\/article>/gi)].map(m => m[0]);
   }
+
   for (const chunk of chunks) {
     const stats = counters?.html;
     if (stats) stats.candidates++;
@@ -158,7 +166,10 @@ function extractCards(html, sourceName, query = "", counters = null) {
         for (const attr of (match[1] || "").matchAll(/\b(?:aria-label|title|alt)=["']([^"']+)["']/gi)) noonCandidates.push(attr[1]);
       }
     }
-    const title = sourceName === "noon" ? selectProductTitle([...noonCandidates, titleMatch?.[1]]) : htmlText(titleMatch?.[1] || "");
+    const metroTitleMatch = sourceName === "metro" ? chunk.match(/<h[1-6]\b[^>]*>([\s\S]*?)<\/h[1-6]>/i) : null;
+    const title = sourceName === "noon" ? selectProductTitle([...noonCandidates, titleMatch?.[1]]) :
+      sourceName === "metro" ? htmlText(metroTitleMatch?.[1] || "") : htmlText(titleMatch?.[1] || "");
+
     if (title.length < 4 || !INCLUDE.test(title) || EXCLUDE.test(title)) { if (stats) { stats.rejectedName++; addRejectionSample(stats, "name", title, ""); } continue; }
     const anchorHrefs = [...chunk.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>/gi)].map(match => match[1]);
     const href = sourceName === "noon"
@@ -168,15 +179,22 @@ function extractCards(html, sourceName, query = "", counters = null) {
     if (!url) { if (stats) { stats.rejectedUrl++; addRejectionSample(stats, "url", title, href || ""); } continue; }
     const priceMatch = sourceName === "amazon"
       ? (chunk.match(/class=["']a-price-whole["'][^>]*>([\s\S]*?)<\//i) || chunk.match(/class=["']a-offscreen["'][^>]*>([\s\S]*?)<\//i))
-      : (chunk.match(/class=["'][^"']*(?:prc|priceNow|price-now|sellingPrice|selling-price|finalPrice|currentPrice|price)["'][^>]*>([\s\S]*?)<\//i) ||
+      : sourceName === "metro"
+        ? chunk.match(/<p\b[^>]*class=["'][^"']*\bafter\b[^"']*["'][^>]*>([\s\S]*?)<\/p>/i)
+        : (chunk.match(/class=["'][^"']*(?:prc|priceNow|price-now|sellingPrice|selling-price|finalPrice|currentPrice|price)["'][^>]*>([\s\S]*?)<\//i) ||
         chunk.match(/(?:data-qa|data-testid)=["'][^"']*product[-_ ]?price[^"']*["'][^>]*>([\s\S]*?)<\//i) ||
         chunk.match(/itemprop=["']price["'][^>]*content=["']([^"']+)["']/i));
+
     const price = money(htmlText(priceMatch?.[1] || ""));
     if (stats && /\b(?:USD|SAR|AED|EUR|GBP)\b|دولار|ريال|درهم|يورو|استرليني/i.test(chunk)) stats.currencySignals++;
-    const oldMatch = chunk.match(/class=["'][^"']*(?:old|oldPrice|price-was)[^"']*["'][^>]*>([\s\S]*?)<\//i);
+    const oldMatch = sourceName === "metro"
+      ? chunk.match(/<p\b[^>]*class=["'][^"']*\bbefore\b[^"']*["'][^>]*>([\s\S]*?)<\/p>/i)
+      : chunk.match(/class=["'][^"']*(?:old|oldPrice|price-was)[^"']*["'][^>]*>([\s\S]*?)<\//i);
+
     const oldPrice = money(htmlText(oldMatch?.[1] || ""));
     if (!price) { if (stats) stats.rejectedPrice++; continue; }
-    const deal = { merchant: sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "carrefour" ? "Carrefour Egypt" : "Noon Egypt", title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
+    const merchant = sourceName === "amazon" ? "Amazon.eg" : sourceName === "jumia" ? "Jumia Egypt" : sourceName === "carrefour" ? "Carrefour Egypt" : sourceName === "metro" ? "مترو ماركت" : "Noon Egypt";
+    const deal = { merchant, title: title.slice(0,180), url, price, old_price: oldPrice > price ? oldPrice : null, discount_pct: oldPrice > price ? Math.round((oldPrice-price)/oldPrice*10000)/100 : 0, category: categoryOf(title), query };
     const validation = validateDeal(deal);
     if (validation.ok) { if (stats) stats.accepted++; const key = deal.url + "|" + deal.price; if (!structuredKeys.has(key)) cards.push(deal); structuredKeys.add(key); }
     else if (stats) stats.rejectedValidation++;
@@ -225,6 +243,8 @@ function extractionDiagnostics(html, sourceName, deals = [], counters = null) {
   let htmlCardChunks = 0, htmlTitleMatches = 0;
   if (sourceName === "amazon") {
     htmlCardChunks = [...html.matchAll(/<div\b(?=[^>]*\bdata-component-type=["']s-search-result["'])[^>]*>/gi)].length;
+  } else if (sourceName === "metro") {
+    htmlCardChunks = [...html.matchAll(/<div\b(?=[^>]*class=["'][^"']*\bproduct-card\b[^"']*["'])[^>]*>/gi)].length;
   } else {
     const cardPattern = /<(?:article|div)\b(?=[^>]*(?:class|data-qa|data-testid)=["'][^"']*(?:\bprd\b|product(?:[-_ ]?(?:card|item|tile))?|item-product|productContainer)[^"']*["'])[^>]*>/gi;
     htmlCardChunks = [...html.matchAll(cardPattern)].length;
@@ -256,6 +276,33 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
   // Keep Jumia's legacy parser fixtures available, but block live automated
   // collection until an explicitly authorized API/feed is available.
   if (sourceName === "jumia") return { source: sourceName, ok: false, reason: "source_not_authorized", deals: [] };
+  // Metro has a publicly reachable official storefront. Fetch its promotions
+  // page directly: no ScraperAPI key, paid proxy request, or AI translation.
+  if (sourceName === "metro") {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(timeoutMs, 25000));
+    try {
+      const response = await fetchImpl(new URL(source.base), {
+        signal: controller.signal, redirect: "follow",
+        headers: { accept: "text/html,application/xhtml+xml", "accept-language": "ar-EG,ar;q=0.9,en;q=0.7", "user-agent": "BorsaPublicOffers/1.0" }
+      });
+      if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
+      const html = await response.text();
+      if (Buffer.byteLength(html, "utf8") > 6_000_000) return { source: sourceName, ok: false, reason: "response_too_large", deals: [] };
+      const finalHost = (() => { try { return new URL(response.url || source.base).hostname; } catch { return ""; } })();
+      if (finalHost !== source.host) return { source: sourceName, ok: false, reason: "redirect_host_not_allowed", deals: [] };
+      const counters = createExtractionCounters();
+      const deals = extractCards(html, sourceName, query, counters);
+      const diagnostics = extractionDiagnostics(html, sourceName, deals, counters);
+      const pageSignal = /captcha|robot check|automated access|access denied/i.test(html)
+        ? "captcha_or_block_page"
+        : diagnostics.htmlCardChunks || diagnostics.structuredProductObjects ? "product_markup_present"
+          : html.trim().length === 0 ? "empty_response" : "no_product_markers";
+      return { source: sourceName, ok: true, deals, pageSignal, extractionDiagnostics: diagnostics };
+    } catch (error) {
+      return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] };
+    } finally { clearTimeout(timer); }
+  }
   const keys = getScraperKeys();
   if (!keys.length) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
   const startIndex = nextScraperKeyIndex % keys.length;
@@ -324,7 +371,8 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
     otherQueries.forEach((q, queryIndex) => tasks.push({ source: "noon", query: q, queryIndex }));
     tasks.push({ source: "carrefour", query: "", queryIndex: 0 });
   }
-  if (!["all", "amazon", "online_stores", "market_stores", "other_sites"].includes(edition)) throw new Error("unsupported_newsletter_edition");
+  if (edition === "metro_stores") tasks.push({ source: "metro", query: "", queryIndex: 0 });
+  if (!["all", "amazon", "online_stores", "market_stores", "other_sites", "metro_stores"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   // Start SnapFlyer collection alongside the retailer searches. Its bounded
   // category-page requests should not wait behind slow ScraperAPI responses.
   const snapFlyerPromise = ["market_stores", "other_sites", "all"].includes(edition)

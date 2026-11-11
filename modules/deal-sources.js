@@ -264,6 +264,27 @@ function extractionDiagnostics(html, sourceName, deals = [], counters = null) {
     stages: counters ? { json: { ...counters.json }, html: { ...counters.html } } : undefined
   };
 }
+function safeHttpErrorDiagnostics(response, body, keys = []) {
+  const headers = response?.headers;
+  let preview = String(body || "").replace(/<script[\\s\\S]*?<\\/script>/gi, " ")
+    .replace(/<style[\\s\\S]*?<\\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ").replace(/&nbsp;|&#160;/gi, " ")
+    .replace(/&amp;/gi, "&").replace(/\\s+/g, " ").trim();
+  for (const key of keys.filter(Boolean)) preview = preview.split(key).join("[REDACTED]");
+  preview = preview.replace(/([?&](?:api_key|apikey|token|key)=)[^&\\s]+/gi, "$1[REDACTED]")
+    .replace(/Bearer\\s+[A-Za-z0-9._~-]+/gi, "Bearer [REDACTED]")
+    .slice(0, 360);
+  const contentType = String(headers?.get?.("content-type") || "").slice(0, 100);
+  const server = String(headers?.get?.("server") || "").slice(0, 100);
+  const requestId = String(headers?.get?.("x-request-id") || headers?.get?.("x-amz-cf-id") || "").slice(0, 120);
+  const lower = preview.toLowerCase();
+  const signal = /invalid api.?key|api.?key.*(?:invalid|missing|expired)/i.test(lower) ? "proxy_auth_rejected"
+    : /insufficient.*(?:credits|subscription)|credits.*(?:exhausted|insufficient)|subscription.*(?:inactive|expired)/i.test(lower) ? "proxy_account_limit"
+      : /captcha|robot check|automated access|access denied|request blocked/i.test(lower) ? "retailer_or_edge_block"
+        : /rate.?limit|too many requests/i.test(lower) ? "proxy_or_retailer_rate_limit"
+          : preview ? "unclassified_error_body" : "empty_error_body";
+  return { contentType, ...(server ? { server } : {}), ...(requestId ? { requestId } : {}), signal, ...(preview ? { bodyPreview: preview } : {}) };
+}
 function getScraperKeys() {
   return [...new Set([
     String(process.env.SCRAPER_API_KEY || "").trim(),
@@ -286,7 +307,12 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
         signal: controller.signal, redirect: "follow",
         headers: { accept: "text/html,application/xhtml+xml", "accept-language": "ar-EG,ar;q=0.9,en;q=0.7", "user-agent": "BorsaPublicOffers/1.0" }
       });
-      if (!response.ok) return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`, deals: [] };
+      if (!response.ok) {
+        let body = "";
+        try { body = await response.text(); } catch {}
+        return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`,
+          responseDiagnostics: safeHttpErrorDiagnostics(response, body, keys), deals: [] };
+      }
       const html = await response.text();
       if (Buffer.byteLength(html, "utf8") > 6_000_000) return { source: sourceName, ok: false, reason: "response_too_large", deals: [] };
       const finalHost = (() => { try { return new URL(response.url || source.base).hostname; } catch { return ""; } })();
@@ -341,7 +367,11 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
   if (!first.ok && retryableStatus && keys.length > 1) {
     const alternate = await requestWithKey(keys[(startIndex + 1) % keys.length]);
     if (alternate.ok) return alternate;
-    return { ...alternate, reason: `${first.reason};alternate_${alternate.reason}` };
+    return { ...alternate, reason: `${first.reason};alternate_${alternate.reason}`,
+      responseDiagnostics: { attempts: [
+        { keySlot: "primary", status: first.status, ...first.responseDiagnostics },
+        { keySlot: "alternate", status: alternate.status, ...alternate.responseDiagnostics }
+      ] } };
   }
   const { status, ...result } = first;
   return result;
@@ -399,8 +429,8 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
     }
     if (!r.value.ok) {
       aggregate.transportFailures++;
-      errors.push({ source: r.value.source, reason: r.value.reason });
-      sourceStats.push({ source: r.value.source, queryIndex: task.queryIndex, ok: false, stage: "transport", extractedCount: 0, reason: r.value.reason });
+      errors.push({ source: r.value.source, reason: r.value.reason, ...(r.value.responseDiagnostics ? { responseDiagnostics: r.value.responseDiagnostics } : {}) });
+      sourceStats.push({ source: r.value.source, queryIndex: task.queryIndex, ok: false, stage: "transport", extractedCount: 0, reason: r.value.reason, ...(r.value.responseDiagnostics ? { responseDiagnostics: r.value.responseDiagnostics } : {}) });
       continue;
     }
     const extractedCount = r.value.deals.length;

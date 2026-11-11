@@ -70,6 +70,18 @@ const noonDivCards = extractCards(noonDivFixture, "noon");
 assert.equal(noonDivCards.length, 1, "Noon product cards rendered as divs should be extracted");
 assert.equal(noonDivCards[0].price, 119.5);
 
+const noonAccessibleTitleFixture = `<div data-testid="product-card">
+  <a href="/egypt-ar/search?tracking=card-image"><img alt="Persil Automatic Laundry Detergent Powder 2.5 kg"></a>
+  <a href="/egypt-ar/product/PERSIL456"><h3 aria-label="مسحوق برسيل أوتوماتيك للغسالات 2.5 كيلو">Persil</h3></a>
+  <span class="price-now">161.00 ج.م</span>
+</div>`;
+const noonAccessibleTitleCards = extractCards(noonAccessibleTitleFixture, "noon");
+assert.equal(noonAccessibleTitleCards.length, 1,
+  "Noon should recover descriptive product names from accessible labels when visible headings contain only a brand");
+assert.match(noonAccessibleTitleCards[0].title, /مسحوق برسيل أوتوماتيك للغسالات 2.5 كيلو/);
+assert.equal(noonAccessibleTitleCards[0].url, "https://www.noon.com/egypt-ar/product/PERSIL456",
+  "Noon should prefer a product URL over an earlier image/search tracking link");
+
 const noonHydrationFixture = `<script id="__NEXT_DATA__" type="application/json">${JSON.stringify({
   props: { pageProps: { products: [
     { name: "مسحوق برسيل للغسالات 3 كيلو", slug: "/egypt-ar/product/PERSIL123", price: { value: "175.00", currency: "EGP" }, oldPrice: 210 }

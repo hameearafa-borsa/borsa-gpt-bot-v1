@@ -449,7 +449,7 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
      }
      amazonZenRowsCalls.push(endpoint);
      return { ok: true, status: 200,
-       headers: { get: name => name.toLowerCase() === "zr-final-url" ? "https://www.amazon.eg/s?k=%D9%85%D8%B3%D8%AD%D9%88%D9%82+%D8%BA%D8%B3%D9%8A%D9%84" : null },
+       headers: { get: name => name.toLowerCase() === "zr-final-url" ? "https://www.amazon.eg/s?k=%D9%85%D8%B3%D8%AD%D9%88%D9%82%20%D8%BA%D8%B3%D9%8A%D9%84" : null },
        text: async () => amazonStructuredFixture };
    }
  });
@@ -459,7 +459,7 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.equal(amazonZenRowsCalls.length, 1, "Amazon ZenRows fallback must make exactly one bounded request");
  assert.equal(amazonZenRowsCalls[0].searchParams.get("apikey"), "zenrows-test-secret");
  assert.equal(amazonZenRowsCalls[0].searchParams.get("mode"), "auto");
- assert.equal(amazonZenRowsCalls[0].searchParams.get("url"), "https://www.amazon.eg/s?k=%D9%85%D8%B3%D8%AD%D9%88%D9%82+%D8%BA%D8%B3%D9%8A%D9%84");
+ assert.equal(amazonZenRowsCalls[0].searchParams.get("url"), "https://www.amazon.eg/s?k=%D9%85%D8%B3%D8%AD%D9%88%D9%82%20%D8%BA%D8%B3%D9%8A%D9%84");
  const zenRowsNoFallback = await fetchSearch("noon", "detergent", {
    fetchImpl: async url => ({ ok: false, status: 403, text: async () => creditExhaustedBody })
  });

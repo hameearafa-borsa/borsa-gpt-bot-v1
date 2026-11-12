@@ -261,8 +261,22 @@ bot.use(async (ctx, next) => {
   // Review buttons live in the log channel; returning here silently swallowed every button press.
   if (!m.chatId || (isLogChat(m.chatId) && !ctx.callbackQuery)) return;
   const isMessageUpdate = Boolean(ctx.message || ctx.editedMessage || ctx.channelPost);
-  if (isMessageUpdate && m.messageId) await cacheMessage(db.pool, m).catch(e => console.warn("[CACHE_FAIL]", redactString(e?.message || "cache_error")));
-  if (isMessageUpdate && m.messageId && !(await claimMessage(db.pool, { chatId: m.chatId, messageId: m.messageId, updateType: ctx.updateType }))) return;
+  if (isMessageUpdate && m.messageId) {
+    await cacheMessage(db.pool, m).catch(e => console.warn("[CACHE_FAIL]", redactString(e?.message || "cache_error")));
+    const incomingCommand = commandName(m.text);
+    if (incomingCommand) {
+      console.info(`[TELEGRAM_COMMAND_RECEIVED] command=${incomingCommand} chatId=${m.chatId} chatType=${m.chatType} userId=${m.userId} updateType=${ctx.updateType}`);
+    }
+  }
+  if (isMessageUpdate && m.messageId) {
+    try {
+      if (!(await claimMessage(db.pool, { chatId: m.chatId, messageId: m.messageId, updateType: ctx.updateType }))) return;
+    } catch (error) {
+      // Do not silently drop an explicit command solely because message de-duplication is unavailable.
+      if (!commandName(m.text)) throw error;
+      console.error(`[TELEGRAM_COMMAND_DEDUPE_FAILED] command=${commandName(m.text)} chatId=${m.chatId} code=${error?.code || "unknown"} message=${redactString(error?.message || "dedupe failed")}`);
+    }
+  }
   return next();
 });
 
@@ -270,6 +284,8 @@ bot.on("my_chat_member", async ctx => {
   const u = ctx.myChatMember;
   const chat = u?.chat;
   const nextStatus = u?.new_chat_member?.status;
+  const previousStatus = u?.old_chat_member?.status || "unknown";
+  console.info(`[TELEGRAM_MY_CHAT_MEMBER] chatId=${chat?.id ?? "unknown"} chatType=${chat?.type ?? "unknown"} oldStatus=${previousStatus} newStatus=${nextStatus ?? "unknown"} actor=${u?.from?.id ?? "unknown"}`);
   // Group authorization is intentionally limited to groups and supergroups; channels are out of scope.
   if (!chat || !["group", "supergroup"].includes(chat.type) || !["member", "administrator"].includes(nextStatus)) return;
   const actor = u?.from?.id;
@@ -302,6 +318,15 @@ bot.on("my_chat_member", async ctx => {
       owner_user_id=EXCLUDED.owner_user_id, requested_at=NOW(), status='pending',
       approved_by=NULL, approved_at=NULL`,
       [chat.id, chat.type, actor ?? null, creatorId]);
+  }
+  if (!["member", "administrator"].includes(previousStatus)) {
+    try {
+      await ctx.telegram.sendMessage(MASTER_ID,
+        `طلب اعتماد مجموعة جديدة\nاسم المجموعة: ${chat.title || "غير متاح"}\nالمعرّف: ${chat.id}\nمنشئ المجموعة: ${creatorId || "تعذر تحديده"}\nللموافقة أرسل في الخاص: /approvechat ${chat.id}`);
+      console.info(`[GROUP_APPROVAL_OWNER_NOTIFIED] chatId=${chat.id} ownerUserId=${creatorId ?? "unknown"}`);
+    } catch (error) {
+      console.warn(`[GROUP_APPROVAL_OWNER_NOTIFY_FAILED] chatId=${chat.id} code=${error?.code || "unknown"} message=${redactString(error?.message || "Telegram notification failed")}`);
+    }
   }
   await sendLog({ module: "security", stage: "group_approval_required", severity: "warn", status: "pending", details: { chatId: chat.id, actor, ownerUserId: creatorId, chatType: chat.type } });
 });
@@ -364,9 +389,11 @@ bot.on(["text", "photo"], async ctx => {
 
   // /claim submits a request only; it never grants group access.
   if (cmd === "claim" && ["group", "supergroup"].includes(m.chatType)) {
+    console.info(`[GROUP_CLAIM_RECEIVED] chatId=${m.chatId} chatType=${m.chatType} actor=${m.userId}`);
     try {
       const admins = await ctx.telegram.getChatAdministrators(m.chatId);
       const creator = admins.find(a => a.status === "creator")?.user;
+      console.info(`[GROUP_CLAIM_CREATOR_CHECK] chatId=${m.chatId} actor=${m.userId} creatorId=${creator?.id ?? "unknown"} matches=${Boolean(creator && String(creator.id) === String(m.userId))}`);
       if (!creator || String(creator.id) !== String(m.userId)) {
         await ctx.reply("يمكن لمنشئ المجموعة الأصلي فقط طلب الاعتماد. التفعيل يتطلب موافقة مالك البوت.");
         return;
@@ -385,7 +412,12 @@ bot.on(["text", "photo"], async ctx => {
         approved_by=NULL, approved_at=NULL`,
         [m.chatId, m.chatType, m.userId, creator.id]);
       await ctx.reply("تم تسجيل طلب الاعتماد. ستبقى خدمات البوت متوقفة لهذه المجموعة حتى موافقة مالك البوت.");
-      try { await ctx.telegram.sendMessage(5256328556, `طلب اعتماد مجموعة جديدة\nالمعرّف: ${m.chatId}\nمنشئ المجموعة: ${creator.id}\nللموافقة أرسل في الخاص: /approvechat ${m.chatId}`); } catch {}
+      try {
+        await ctx.telegram.sendMessage(MASTER_ID, `طلب اعتماد مجموعة جديدة\nالمعرّف: ${m.chatId}\nمنشئ المجموعة: ${creator.id}\nللموافقة أرسل في الخاص: /approvechat ${m.chatId}`);
+        console.info(`[GROUP_CLAIM_OWNER_NOTIFIED] chatId=${m.chatId} ownerUserId=${creator.id}`);
+      } catch (notifyError) {
+        console.warn(`[GROUP_CLAIM_OWNER_NOTIFY_FAILED] chatId=${m.chatId} code=${notifyError?.code || "unknown"} message=${redactString(notifyError?.message || "Telegram notification failed")}`);
+      }
       await sendLog({ module: "security", stage: "group_claim_requested", status: "pending", details: { chatId: m.chatId, ownerUserId: creator.id, actor: m.userId } });
     } catch (error) {
       await ctx.reply("تعذر تسجيل الطلب. تأكد من اتصال قاعدة البيانات ثم أعد المحاولة.");

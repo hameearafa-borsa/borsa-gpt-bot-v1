@@ -45,7 +45,7 @@ delete process.env.SCRAPER_API_KEY_2;
     },
     snapFlyerFetcher: async () => { snapFlyerCalls++; throw new Error("Metro edition must not call SnapFlyer"); }
   });
-  assert.equal(collected.sourceCount, 1);
+  assert.equal(collected.sourceCount, 2, "Metro edition also attempts the Carrefour source");
   assert.equal(collected.deals.length, 1);
   assert.equal(collected.deals[0].merchant, "مترو ماركت");
   assert.equal(snapFlyerCalls, 0);

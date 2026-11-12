@@ -56,6 +56,26 @@ delete process.env.SCRAPER_API_KEY_2;
   assert.equal(newsletterKindAt(new Date("2026-11-11T10:00:00.000Z")), null);
   assert.equal(newsletterKindAt(new Date("2026-11-11T10:30:00.000Z")), "online_stores");
   assert.equal(newsletterKindAt(new Date("2026-11-11T12:00:00.000Z")), "market_stores");
+  // Egypt returned to UTC+2 after daylight-saving time ended on 2026-10-30.
+  // Assert every newsletter window against the actual Cairo offset on 2026-11-12.
+  const postDstSchedule = [
+    ["2026-11-12T09:29:00.000Z", null],
+    ["2026-11-12T09:30:00.000Z", "metro_stores"],
+    ["2026-11-12T09:59:00.000Z", "metro_stores"],
+    ["2026-11-12T10:00:00.000Z", null],
+    ["2026-11-12T10:30:00.000Z", "online_stores"],
+    ["2026-11-12T11:29:00.000Z", "online_stores"],
+    ["2026-11-12T11:30:00.000Z", null],
+    ["2026-11-12T12:00:00.000Z", "market_stores"],
+    ["2026-11-12T12:59:00.000Z", "market_stores"],
+    ["2026-11-12T13:00:00.000Z", null],
+    ["2026-11-12T14:00:00.000Z", "amazon"],
+    ["2026-11-12T14:44:00.000Z", "amazon"],
+    ["2026-11-12T14:45:00.000Z", null]
+  ];
+  for (const [timestamp, expected] of postDstSchedule) {
+    assert.equal(newsletterKindAt(new Date(timestamp)), expected, "wrong Cairo newsletter window at " + timestamp);
+  }
 
   const selected = selectNewsletterDeals([
     { merchant: "مترو ماركت", title: "مسحوق برسيل 3 كيلو", category: "detergent", price: 175, url: "https://shop.metro-markets.com/product/Persil-Automatic-Powder-3kg/123" },

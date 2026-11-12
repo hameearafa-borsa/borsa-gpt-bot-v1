@@ -381,14 +381,14 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
         { keySlot: "alternate", status: alternate.status, ...alternate.responseDiagnostics }
       ] } };
   }
-  // ZenRows is a bounded, independent fallback for Carrefour only, and
-  // only when ScraperAPI explicitly reports exhausted account credits.
-  // Do not use it to retry retailer blocks, rate limits, timeouts, or Noon.
+  // ZenRows is a bounded, independent fallback for Amazon and Carrefour,
+  // and only when ScraperAPI explicitly reports exhausted account credits.
+  // Do not use it to retry retailer blocks, rate limits, timeouts, or other stores.
   const firstSignal = first.responseDiagnostics?.signal;
   const alternateSignal = first.responseDiagnostics?.attempts?.at(-1)?.signal;
   const accountCreditsExhausted = firstSignal === "proxy_account_limit" ||
     alternateSignal === "proxy_account_limit";
-  const zenRowsKey = sourceName === "carrefour" && !first.ok && accountCreditsExhausted
+  const zenRowsKey = ["amazon", "carrefour"].includes(sourceName) && !first.ok && accountCreditsExhausted
     ? getZenRowsKey() : "";
   if (zenRowsKey) {
     const endpoint = new URL("https://api.zenrows.com/v1/");

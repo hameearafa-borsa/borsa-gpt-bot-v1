@@ -463,11 +463,14 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   if (edition === "all" || edition === "amazon") {
     amazonQueries.forEach((q, queryIndex) => tasks.push({ source: "amazon", query: q, queryIndex }));
   }
-  if (["all", "online_stores", "other_sites"].includes(edition)) {
+  if ([ "all", "online_stores", "other_sites" ].includes(edition)) {
     otherQueries.forEach((q, queryIndex) => tasks.push({ source: "noon", query: q, queryIndex }));
-    tasks.push({ source: "carrefour", query: "", queryIndex: 0 });
   }
-  if (edition === "metro_stores") tasks.push({ source: "metro", query: "", queryIndex: 0 });
+  // Carrefour joins the dedicated Metro edition; Metro remains a direct fetch.
+  if (edition === "all" || edition === "metro_stores") {
+    tasks.push({ source: "carrefour", query: "", queryIndex: 0 });
+    tasks.push({ source: "metro", query: "", queryIndex: 0 });
+  }
   if (!["all", "amazon", "online_stores", "market_stores", "other_sites", "metro_stores"].includes(edition)) throw new Error("unsupported_newsletter_edition");
   // Start SnapFlyer collection alongside the retailer searches. Its bounded
   // category-page requests should not wait behind slow ScraperAPI responses.

@@ -417,7 +417,7 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.ok(JSON.stringify(diagnosticFailure.responseDiagnostics).includes("[REDACTED]"));
  assert.equal(diagnosticKeys.length, 2, "diagnostics must retain the existing single alternate-key retry bound");
 
- // Amazon and Carrefour may use ZenRows after both ScraperAPI keys report exhausted credits.
+ // Every ScraperAPI-backed retailer may use ZenRows after ScraperAPI failure.
  const oldZenRowsKey = process.env.ZENROWS_API_KEY;
  process.env.ZENROWS_API_KEY = "zenrows-test-secret";
  const zenRowsCalls = [];
@@ -460,11 +460,39 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.equal(amazonZenRowsCalls[0].searchParams.get("apikey"), "zenrows-test-secret");
  assert.equal(amazonZenRowsCalls[0].searchParams.get("mode"), "auto");
  assert.equal(amazonZenRowsCalls[0].searchParams.get("url"), "https://www.amazon.eg/s?k=%D9%85%D8%B3%D8%AD%D9%88%D9%82%20%D8%BA%D8%B3%D9%8A%D9%84");
- const zenRowsNoFallback = await fetchSearch("noon", "detergent", {
-   fetchImpl: async url => ({ ok: false, status: 403, text: async () => creditExhaustedBody })
+ const noonZenRowsCalls = [];
+ const noonZenRowsFallback = await fetchSearch("noon", "نيفيا", {
+   fetchImpl: async url => {
+     const endpoint = new URL(String(url));
+     if (endpoint.hostname === "api.scraperapi.com") return { ok: false, status: 403, text: async () => creditExhaustedBody };
+     noonZenRowsCalls.push(endpoint);
+     return { ok: true, status: 200,
+       headers: { get: name => name.toLowerCase() === "zr-final-url" ? "https://www.noon.com/egypt-ar/search/?q=%D9%86%D9%8A%D9%81%D9%8A%D8%A7" : null },
+       text: async () => noonStructuredFixture };
+   }
  });
- assert.equal(zenRowsNoFallback.ok, false);
- assert.equal(zenRowsCalls.length, 1, "Noon must not be sent to ZenRows by this limited first rollout");
+ assert.equal(noonZenRowsFallback.ok, true, "ZenRows should recover Noon after ScraperAPI failure");
+ assert.equal(noonZenRowsFallback.provider, "zenrows");
+ assert.equal(noonZenRowsFallback.deals.length, 1);
+ assert.equal(noonZenRowsCalls.length, 1);
+ assert.equal(noonZenRowsCalls[0].searchParams.get("url"), "https://www.noon.com/egypt-ar/search/?q=%D9%86%D9%8A%D9%81%D9%8A%D8%A7");
+ const savedScraperKeyOne = process.env.SCRAPER_API_KEY;
+ const savedScraperKeyTwo = process.env.SCRAPER_API_KEY_2;
+ delete process.env.SCRAPER_API_KEY;
+ delete process.env.SCRAPER_API_KEY_2;
+ const zenRowsWithoutScraper = await fetchSearch("noon", "نيفيا", {
+   fetchImpl: async url => {
+     const endpoint = new URL(String(url));
+     assert.equal(endpoint.hostname, "api.zenrows.com");
+     return { ok: true, status: 200,
+       headers: { get: name => name.toLowerCase() === "zr-final-url" ? "https://www.noon.com/egypt-ar/search/?q=%D9%86%D9%8A%D9%81%D9%8A%D8%A7" : null },
+       text: async () => noonStructuredFixture };
+   }
+ });
+ assert.equal(zenRowsWithoutScraper.ok, true, "ZenRows should work when ScraperAPI credentials are absent");
+ assert.equal(zenRowsWithoutScraper.provider, "zenrows");
+ if (savedScraperKeyOne === undefined) delete process.env.SCRAPER_API_KEY; else process.env.SCRAPER_API_KEY = savedScraperKeyOne;
+ if (savedScraperKeyTwo === undefined) delete process.env.SCRAPER_API_KEY_2; else process.env.SCRAPER_API_KEY_2 = savedScraperKeyTwo;
  if (oldZenRowsKey === undefined) delete process.env.ZENROWS_API_KEY;
  else process.env.ZENROWS_API_KEY = oldZenRowsKey;
 
@@ -517,11 +545,11 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
    // This test isolates ScraperAPI fan-out; SnapFlyer has its own fixture suite.
    snapFlyerFetcher: async () => ({ deals: [], errors: [], sourceStats: [], sourceCount: 0 })
  });
- assert.equal(requestCount, 7, "all Amazon, Noon and Carrefour searches should be attempted");
+ assert.equal(requestCount, 8, "all Amazon, Noon, Carrefour and Metro searches should be attempted");
  assert.ok(peakRequests <= 2, "ScraperAPI requests must be bounded to two concurrent requests");
- assert.equal(collected.sourceCount, 7);
- assert.equal(collected.sourceStats.length, 7, "each source request should report a safe extraction summary");
- assert.equal(collected.sourceSummary.length, 3, "store summaries should aggregate counters by retailer");
+ assert.equal(collected.sourceCount, 8);
+ assert.equal(collected.sourceStats.length, 8, "each source request should report a safe extraction summary");
+ assert.equal(collected.sourceSummary.length, 4, "store summaries should aggregate counters by retailer");
  assert.ok(collected.sourceSummary.every(summary => summary.queries > 0 && summary.transportFailures === 0),
    "per-store query totals should include every successful request");
  const failedQuerySummary = await collectDealCandidates({
@@ -537,7 +565,7 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.ok(collected.sourceStats.every(stat => Number.isInteger(stat.queryIndex) && ["extraction_empty", "candidate_rejection", "validated"].includes(stat.stage)), "each query should expose a safe query index and parser stage");
  assert.ok(collected.sourceStats.every(stat => stat.ok && stat.extractedCount === 0 && stat.stage === "extraction_empty"),
    "successful HTTP responses with empty parser results must be distinguishable from request failures");
- assert.equal(collected.errors.length, 7, "empty extraction should be visible for each successful source request");
+ assert.equal(collected.errors.length, 8, "empty extraction should be visible for each successful source request");
  const amazonTargets = [];
  
  const blockedPage = await fetchSearch("amazon", "diagnostic test", {
@@ -568,10 +596,23 @@ const amazonOnly = await collectDealCandidates({
    // Isolate the four Noon and Carrefour searches; SnapFlyer has its own catalog tests.
    snapFlyerFetcher: async () => ({ deals: [], errors: [], sourceStats: [], sourceCount: 0 })
  });
- assert.equal(otherOnly.sourceCount, 4, "online-stores edition should make three Noon and one Carrefour search");
- assert.equal(otherTargets.length, 4);
- assert.ok(otherTargets.every(url => !new URL(url).hostname.includes("amazon")),
-   "other-store edition must not spend scraper requests on Amazon");
+ assert.equal(otherOnly.sourceCount, 3, "online-stores edition should make only three Noon searches");
+ assert.equal(otherTargets.length, 3);
+ assert.ok(otherTargets.every(url => new URL(url).hostname === "www.noon.com"),
+   "online-stores edition should keep Carrefour out of the Noon newsletter");
+ const metroTargets = [];
+ const metroEdition = await collectDealCandidates({
+   edition: "metro_stores",
+   fetchImpl: async url => {
+     const parsed = new URL(String(url));
+     metroTargets.push(parsed.hostname === "api.scraperapi.com" ? parsed.searchParams.get("url") : parsed.href);
+     return { ok: true, status: 200, text: async () => "<html></html>" };
+   }
+ });
+ assert.equal(metroEdition.sourceCount, 2, "Metro edition should collect Carrefour and Metro only");
+ assert.equal(metroTargets.length, 2);
+ assert.ok(metroTargets.some(url => new URL(url).hostname === "shop.metro-markets.com"));
+ assert.ok(metroTargets.some(url => new URL(url).hostname === "www.carrefouregypt.com"));
 
  let amazonCatalogCalls = 0;
  const amazonEditionWithCatalogSpy = await collectDealCandidates({
@@ -656,7 +697,7 @@ const amazonOnly = await collectDealCandidates({
    }
  });
  assert.equal(allEditionCatalogCalls, 1, "combined collection mode must include SnapFlyer once");
- assert.equal(allEdition.sourceCount, 10, "combined mode must count three Amazon, four online-store, and three SnapFlyer sources");
+ assert.equal(allEdition.sourceCount, 11, "combined mode must count three Amazon, three Noon, two Metro/Carrefour, and three SnapFlyer sources");
 
  // End-to-end publication path for the 12:30 PM Cairo online-stores edition.
  const publicationQueries = [];

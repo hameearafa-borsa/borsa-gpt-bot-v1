@@ -314,7 +314,7 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
         let body = "";
         try { body = await response.text(); } catch {}
         return { source: sourceName, ok: false, status: response.status, reason: `http_${response.status}`,
-          responseDiagnostics: safeHttpErrorDiagnostics(response, body, keys), deals: [] };
+          responseDiagnostics: safeHttpErrorDiagnostics(response, body, []), deals: [] };
       }
       const html = await response.text();
       if (Buffer.byteLength(html, "utf8") > 6_000_000) return { source: sourceName, ok: false, reason: "response_too_large", deals: [] };

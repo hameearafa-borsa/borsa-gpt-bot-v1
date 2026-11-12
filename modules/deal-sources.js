@@ -291,6 +291,9 @@ function getScraperKeys() {
     String(process.env.SCRAPER_API_KEY_2 || "").trim()
   ].filter(Boolean))];
 }
+function getZenRowsKey() {
+  return String(process.env.ZENROWS_API_KEY || "").trim();
+}
 async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = globalThis.fetch } = {}) {
   const source = SOURCES[sourceName];
   if (!source) throw new Error("unsupported_deal_source");
@@ -377,6 +380,54 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
         { keySlot: "primary", status: first.status, ...first.responseDiagnostics },
         { keySlot: "alternate", status: alternate.status, ...alternate.responseDiagnostics }
       ] } };
+  }
+  // ZenRows is a bounded, independent fallback for Carrefour only, and
+  // only when ScraperAPI explicitly reports exhausted account credits.
+  // Do not use it to retry retailer blocks, rate limits, timeouts, or Noon.
+  const firstSignal = first.responseDiagnostics?.signal;
+  const alternateSignal = first.responseDiagnostics?.attempts?.at(-1)?.signal;
+  const accountCreditsExhausted = firstSignal === "proxy_account_limit" ||
+    alternateSignal === "proxy_account_limit";
+  const zenRowsKey = sourceName === "carrefour" && !first.ok && accountCreditsExhausted
+    ? getZenRowsKey() : "";
+  if (zenRowsKey) {
+    const endpoint = new URL("https://api.zenrows.com/v1/");
+    endpoint.searchParams.set("apikey", zenRowsKey);
+    endpoint.searchParams.set("url", targetUrl);
+    endpoint.searchParams.set("mode", "auto");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
+      if (response.ok) {
+        const html = await response.text();
+        if (Buffer.byteLength(html, "utf8") > 6_000_000) {
+          return { source: sourceName, ok: false, reason: "zenrows_response_too_large", deals: [] };
+        }
+        const counters = createExtractionCounters();
+        const deals = extractCards(html, sourceName, query, counters);
+        const diagnostics = extractionDiagnostics(html, sourceName, deals, counters);
+        const finalUrl = response.headers?.get?.("zr-final-url") || targetUrl;
+        let finalHost = "";
+        try { finalHost = new URL(finalUrl).hostname; } catch {}
+        if (finalHost !== source.host) {
+          return { source: sourceName, ok: false, reason: "zenrows_redirect_host_not_allowed", deals: [] };
+        }
+        const pageSignal = /captcha|robot check|automated access|access denied/i.test(html)
+          ? "captcha_or_block_page"
+          : diagnostics.htmlCardChunks || diagnostics.structuredProductObjects ? "product_markup_present"
+            : html.trim().length === 0 ? "empty_response" : "no_product_markers";
+        return { source: sourceName, ok: true, provider: "zenrows", deals, pageSignal, extractionDiagnostics: diagnostics };
+      }
+      let body = "";
+      try { body = await response.text(); } catch {}
+      return { source: sourceName, ok: false, reason: `zenrows_http_${response.status}`,
+        responseDiagnostics: safeHttpErrorDiagnostics(response, body, [zenRowsKey]), deals: [] };
+    } catch (error) {
+      return { source: sourceName, ok: false,
+        reason: error.name === "AbortError" ? "zenrows_timeout" : "zenrows_fetch_failed",
+        error: redactString(error?.message || "fetch_failed"), deals: [] };
+    } finally { clearTimeout(timer); }
   }
   const { status, ...result } = first;
   return result;
@@ -481,4 +532,4 @@ async function collectDealCandidates({ amazonQueries = ["مسحوق غسيل م�
   for (const task of tasks) if (!storeCounters.has(task.source)) storeCounters.set(task.source, { source: task.source, queries: 0, transportFailures: 0, json: createExtractionCounters().json, html: createExtractionCounters().html });
   return { deals, errors, sourceStats, sourceSummary: [...storeCounters.values()], sourceCount: tasks.length + snapFlyerSourceCount };
 }
-module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, createExtractionCounters, getScraperKeys, fetchSearch, collectDealCandidates };
+module.exports = { SOURCES, categoryOf, safeProductUrl, extractCards, extractionDiagnostics, createExtractionCounters, getScraperKeys, getZenRowsKey, fetchSearch, collectDealCandidates };

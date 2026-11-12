@@ -417,6 +417,37 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.ok(JSON.stringify(diagnosticFailure.responseDiagnostics).includes("[REDACTED]"));
  assert.equal(diagnosticKeys.length, 2, "diagnostics must retain the existing single alternate-key retry bound");
 
+ // Carrefour alone may use ZenRows after both ScraperAPI keys report exhausted credits.
+ const oldZenRowsKey = process.env.ZENROWS_API_KEY;
+ process.env.ZENROWS_API_KEY = "zenrows-test-secret";
+ const zenRowsCalls = [];
+ const creditExhaustedBody = "You have exhausted the API Credits available in this monthly cycle.";
+ const zenRowsFallback = await fetchSearch("carrefour", "detergent", {
+   fetchImpl: async url => {
+     const endpoint = new URL(String(url));
+     if (endpoint.hostname === "api.scraperapi.com") {
+       return { ok: false, status: 403, text: async () => creditExhaustedBody };
+     }
+     zenRowsCalls.push(endpoint);
+     return { ok: true, status: 200, headers: { get: name => name.toLowerCase() === "zr-final-url" ? "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers" : null },
+       text: async () => carrefourFixture };
+   }
+ });
+ assert.equal(zenRowsFallback.ok, true, "ZenRows should recover Carrefour after ScraperAPI account-credit exhaustion");
+ assert.equal(zenRowsFallback.provider, "zenrows");
+ assert.equal(zenRowsFallback.deals.length, 1);
+ assert.equal(zenRowsCalls.length, 1, "ZenRows fallback must make exactly one bounded request");
+ assert.equal(zenRowsCalls[0].searchParams.get("apikey"), "zenrows-test-secret");
+ assert.equal(zenRowsCalls[0].searchParams.get("mode"), "auto");
+ assert.equal(zenRowsCalls[0].searchParams.get("url"), "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers");
+ const zenRowsNoFallback = await fetchSearch("noon", "detergent", {
+   fetchImpl: async url => ({ ok: false, status: 403, text: async () => creditExhaustedBody })
+ });
+ assert.equal(zenRowsNoFallback.ok, false);
+ assert.equal(zenRowsCalls.length, 1, "Noon must not be sent to ZenRows by this limited first rollout");
+ if (oldZenRowsKey === undefined) delete process.env.ZENROWS_API_KEY;
+ else process.env.ZENROWS_API_KEY = oldZenRowsKey;
+
  const serverRetryKeys = [];
  const serverRetry = await fetchSearch("noon", "temporary upstream error", {
    fetchImpl: async url => {

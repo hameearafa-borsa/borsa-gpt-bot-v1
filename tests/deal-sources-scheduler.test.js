@@ -244,11 +244,18 @@ const editionOnline = selectNewsletterDeals([
   ...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia"),
   ...makeDeals("www.noon.com","Noon"), ...makeDeals("www.carrefouregypt.com","Carrefour")
 ], "online_stores");
+const editionMetroCarrefour = selectNewsletterDeals([
+  ...makeDeals("shop.metro-markets.com","Metro"),
+  ...makeDeals("www.carrefouregypt.com","Carrefour"),
+  ...makeDeals("www.noon.com","Noon")
+], "metro_stores");
 const editionMarket = selectNewsletterDeals(makeDeals("snapflyer.io","SnapFlyer"), "market_stores");
 assert.equal(editionAmazon.length, 30);
 assert.ok(editionAmazon.every(d => new URL(d.url).hostname === "www.amazon.eg"));
 assert.equal(editionOnline.length, 15);
-assert.ok(editionOnline.every(d => ["www.noon.com","www.carrefouregypt.com"].includes(new URL(d.url).hostname)));
+assert.ok(editionOnline.every(d => new URL(d.url).hostname === "www.noon.com"));
+assert.equal(editionMetroCarrefour.length, 15);
+assert.ok(editionMetroCarrefour.every(d => ["shop.metro-markets.com","www.carrefouregypt.com"].includes(new URL(d.url).hostname)));
 assert.equal(editionMarket.length, 15);
 assert.ok(editionMarket.every(d => new URL(d.url).hostname === "snapflyer.io"));
 for (const category of ["detergent","paper","personal_care"]) {
@@ -730,7 +737,7 @@ const amazonOnly = await collectDealCandidates({
  const publicationDeals = [
    { merchant: "Amazon.eg", title: "مسحوق برسيل 3 كيلو", price: 175, old_price: 210, category: "detergent", url: "https://www.amazon.eg/dp/B0AMAZON123" },
    { merchant: "كازيون", title: "تايد جل غسالات أوتوماتيك 2.35 لتر", price: 174.95, category: "detergent", url: "https://snapflyer.io/eg/downtown/offers/kazyon/1711", source: "snapflyer_catalog" },
-   { merchant: "مترو ماركت", title: "منظف أطباق أوكسي 2.5 لتر", price: 114.95, category: "detergent", url: "https://snapflyer.io/eg/downtown/offers/metro-market/1532", source: "snapflyer_catalog" },
+   { merchant: "مترو ماركت", title: "منظف أطباق أوكسي 2.5 لتر", price: 114.95, category: "detergent", url: "https://shop.metro-markets.com/p/oxy-dish-cleaner-123" },
    { merchant: "Jumia", title: "مناديل فاين 200 منديل", price: 35, old_price: 42, category: "paper", url: "https://www.jumia.com.eg/fine-tissues-123" },
    { merchant: "Noon", title: "شامبو دوف للعناية بالشعر", price: 119.5, category: "personal_care", url: "https://www.noon.com/egypt-ar/dove-shampoo-123" },
    { merchant: "Carrefour", title: "منظف أرضيات متعدد الاستخدامات", price: 65, category: "detergent", url: "https://www.carrefouregypt.com/mafegy/ar/p/floor-cleaner-123" }
@@ -743,7 +750,7 @@ const amazonOnly = await collectDealCandidates({
      return { message_id: 9901 };
    } },
    chatIds: [-1001234567890],
-   now: new Date("2026-10-12T09:30:00.000Z"), // 12:30 PM Cairo
+   now: new Date("2026-10-12T08:30:00.000Z"), // 11:30 AM Cairo
    fetcher: async ({ edition }) => {
      publicationEdition = edition;
      return { deals: publicationDeals, errors: [], sourceStats: [], sourceCount: 4 };
@@ -752,16 +759,16 @@ const amazonOnly = await collectDealCandidates({
    onError: async error => publicationErrors.push(String(error?.message || error)),
    onDiagnostics: async details => publicationDiagnostics.push(details)
  });
- assert.equal(publicationEdition, "online_stores", "12:30 PM publication must collect only the online-stores edition");
- assert.equal(publicationResult.kind, "online_stores");
+ assert.equal(publicationEdition, "metro_stores", "11:30 AM publication must collect the dedicated Metro/Carrefour edition");
+ assert.equal(publicationResult.kind, "metro_stores");
  assert.equal(publicationMessages.length, 1, "one authorized group should receive one newsletter message");
  assert.equal(publicationMessages[0].chatId, -1001234567890);
- assert.ok(publicationMessages[0].message.includes("عروض التسوق الإلكتروني"));
- assert.ok(publicationMessages[0].message.includes("Noon"));
+ assert.ok(publicationMessages[0].message.includes("عروض مترو ماركت وكارفور"));
+ assert.ok(publicationMessages[0].message.includes("مترو ماركت"));
  assert.ok(publicationMessages[0].message.includes("Carrefour"));
  assert.ok(!publicationMessages[0].message.includes("Jumia"));
  assert.ok(!publicationMessages[0].message.includes("كازيون"));
- assert.ok(!publicationMessages[0].message.includes("مترو ماركت"));
+ assert.ok(!publicationMessages[0].message.includes("Noon"));
  assert.ok(!publicationMessages[0].message.includes("Amazon.eg"));
  assert.ok(!publicationMessages[0].message.includes("SnapFlyer"));
  assert.ok(!publicationMessages[0].message.includes("B0AMAZON123"),
@@ -774,11 +781,11 @@ const amazonOnly = await collectDealCandidates({
    "successful Telegram delivery must be recorded as published");
  const persistedOffers = publicationQueries.filter(q => q.sql.startsWith("INSERT INTO deal_observations"));
  assert.equal(persistedOffers.length, 2,
-   "only the Noon and Carrefour offers selected for this edition should be persisted");
+   "only the Metro and Carrefour offers selected for this edition should be persisted");
  assert.deepEqual(publicationErrors, []);
  assert.deepEqual(publicationDiagnostics.map(item => item.stage), ["collected", "filtered"],
    "publication must emit collection and post-filter diagnostics");
- assert.equal(publicationDiagnostics[0].kind, "online_stores");
+ assert.equal(publicationDiagnostics[0].kind, "metro_stores");
  assert.equal(publicationDiagnostics[0].gatheredCount, 6);
  assert.equal(publicationDiagnostics[1].selectedCount, 2);
  assert.equal(publicationDiagnostics[1].duplicateCooldownDays, 7);

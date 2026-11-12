@@ -368,14 +368,14 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
     } catch (error) { return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] }; }
     finally { clearTimeout(timer); }
   };
-  const first = await requestWithKey(keys[startIndex]);
+  let first = await requestWithKey(keys[startIndex]);
   // Retry once with the alternate key for auth failures or transient server errors.
   // Never retry rate limits, timeouts, or successful pages with empty extraction.
   const retryableStatus = [401, 403, 500, 502, 503, 504].includes(first.status);
   if (!first.ok && retryableStatus && keys.length > 1) {
     const alternate = await requestWithKey(keys[(startIndex + 1) % keys.length]);
     if (alternate.ok) return alternate;
-    return { ...alternate, reason: `${first.reason};alternate_${alternate.reason}`,
+    first = { ...alternate, reason: `${first.reason};alternate_${alternate.reason}`,
       responseDiagnostics: { attempts: [
         { keySlot: "primary", status: first.status, ...first.responseDiagnostics },
         { keySlot: "alternate", status: alternate.status, ...alternate.responseDiagnostics }

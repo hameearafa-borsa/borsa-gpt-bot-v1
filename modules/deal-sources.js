@@ -332,14 +332,61 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
       return { source: sourceName, ok: false, reason: error.name === "AbortError" ? "timeout" : "fetch_failed", error: redactString(error?.message || "fetch_failed"), deals: [] };
     } finally { clearTimeout(timer); }
   }
+  // Amazon, Noon and Carrefour share a provider chain: ScraperAPI first,
+  // then one bounded ZenRows attempt if ScraperAPI is unavailable or fails.
+  // Metro remains a direct official-store fetch and never consumes proxy credits.
+  const target = new URL(sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`);
+  // Keep retailer URLs in their known-working form; extract Arabic titles from page data.
+  const targetUrl = target.href;
+  const scraperEligible = ["amazon", "noon", "carrefour"].includes(sourceName);
+  const requestWithZenRows = async () => {
+    const zenRowsKey = scraperEligible ? getZenRowsKey() : "";
+    if (!zenRowsKey) return null;
+    const endpoint = new URL("https://api.zenrows.com/v1/");
+    endpoint.searchParams.set("apikey", zenRowsKey);
+    endpoint.searchParams.set("url", targetUrl);
+    endpoint.searchParams.set("mode", "auto");
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
+      if (!response.ok) {
+        let body = "";
+        try { body = await response.text(); } catch {}
+        return { source: sourceName, ok: false, reason: `zenrows_http_${response.status}`,
+          responseDiagnostics: safeHttpErrorDiagnostics(response, body, [zenRowsKey]), deals: [] };
+      }
+      const html = await response.text();
+      if (Buffer.byteLength(html, "utf8") > 6_000_000) {
+        return { source: sourceName, ok: false, reason: "zenrows_response_too_large", deals: [] };
+      }
+      const finalUrl = response.headers?.get?.("zr-final-url") || targetUrl;
+      let finalHost = "";
+      try { finalHost = new URL(finalUrl).hostname; } catch {}
+      if (finalHost !== source.host) {
+        return { source: sourceName, ok: false, reason: "zenrows_redirect_host_not_allowed", deals: [] };
+      }
+      const counters = createExtractionCounters();
+      const deals = extractCards(html, sourceName, query, counters);
+      const diagnostics = extractionDiagnostics(html, sourceName, deals, counters);
+      const pageSignal = /captcha|robot check|automated access|access denied/i.test(html)
+        ? "captcha_or_block_page"
+        : diagnostics.htmlCardChunks || diagnostics.structuredProductObjects ? "product_markup_present"
+          : html.trim().length === 0 ? "empty_response" : "no_product_markers";
+      return { source: sourceName, ok: true, provider: "zenrows", deals, pageSignal, extractionDiagnostics: diagnostics };
+    } catch (error) {
+      return { source: sourceName, ok: false,
+        reason: error.name === "AbortError" ? "zenrows_timeout" : "zenrows_fetch_failed",
+        error: redactString(error?.message || "fetch_failed"), deals: [] };
+    } finally { clearTimeout(timer); }
+  };
   const keys = getScraperKeys();
-  if (!keys.length) return { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
+  if (!keys.length) {
+    const fallback = await requestWithZenRows();
+    return fallback || { source: sourceName, ok: false, reason: "SCRAPER_API_KEY_not_configured", deals: [] };
+  }
   const startIndex = nextScraperKeyIndex % keys.length;
   nextScraperKeyIndex = (nextScraperKeyIndex + 1) % keys.length;
-  const target = new URL(sourceName === "carrefour" ? source.base : `${source.base}${encodeURIComponent(query)}`);
-  // Keep the retailer search URL in its known-working form. Arabic names are
-  // selected from product data during extraction, not by changing Amazon locale.
-  const targetUrl = target.href;
   const requestWithKey = async key => {
     const endpoint = new URL("https://api.scraperapi.com/");
     endpoint.searchParams.set("api_key", key);
@@ -381,53 +428,16 @@ async function fetchSearch(sourceName, query, { timeoutMs = 70000, fetchImpl = g
         { keySlot: "alternate", status: alternate.status, ...alternate.responseDiagnostics }
       ] } };
   }
-  // ZenRows is a bounded, independent fallback for Amazon and Carrefour,
-  // and only when ScraperAPI explicitly reports exhausted account credits.
-  // Do not use it to retry retailer blocks, rate limits, timeouts, or other stores.
-  const firstSignal = first.responseDiagnostics?.signal;
-  const alternateSignal = first.responseDiagnostics?.attempts?.at(-1)?.signal;
-  const accountCreditsExhausted = firstSignal === "proxy_account_limit" ||
-    alternateSignal === "proxy_account_limit";
-  const zenRowsKey = ["amazon", "carrefour"].includes(sourceName) && !first.ok && accountCreditsExhausted
-    ? getZenRowsKey() : "";
-  if (zenRowsKey) {
-    const endpoint = new URL("https://api.zenrows.com/v1/");
-    endpoint.searchParams.set("apikey", zenRowsKey);
-    endpoint.searchParams.set("url", targetUrl);
-    endpoint.searchParams.set("mode", "auto");
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), timeoutMs);
-    try {
-      const response = await fetchImpl(endpoint, { signal: controller.signal, redirect: "error" });
-      if (response.ok) {
-        const html = await response.text();
-        if (Buffer.byteLength(html, "utf8") > 6_000_000) {
-          return { source: sourceName, ok: false, reason: "zenrows_response_too_large", deals: [] };
-        }
-        const counters = createExtractionCounters();
-        const deals = extractCards(html, sourceName, query, counters);
-        const diagnostics = extractionDiagnostics(html, sourceName, deals, counters);
-        const finalUrl = response.headers?.get?.("zr-final-url") || targetUrl;
-        let finalHost = "";
-        try { finalHost = new URL(finalUrl).hostname; } catch {}
-        if (finalHost !== source.host) {
-          return { source: sourceName, ok: false, reason: "zenrows_redirect_host_not_allowed", deals: [] };
-        }
-        const pageSignal = /captcha|robot check|automated access|access denied/i.test(html)
-          ? "captcha_or_block_page"
-          : diagnostics.htmlCardChunks || diagnostics.structuredProductObjects ? "product_markup_present"
-            : html.trim().length === 0 ? "empty_response" : "no_product_markers";
-        return { source: sourceName, ok: true, provider: "zenrows", deals, pageSignal, extractionDiagnostics: diagnostics };
-      }
-      let body = "";
-      try { body = await response.text(); } catch {}
-      return { source: sourceName, ok: false, reason: `zenrows_http_${response.status}`,
-        responseDiagnostics: safeHttpErrorDiagnostics(response, body, [zenRowsKey]), deals: [] };
-    } catch (error) {
-      return { source: sourceName, ok: false,
-        reason: error.name === "AbortError" ? "zenrows_timeout" : "zenrows_fetch_failed",
-        error: redactString(error?.message || "fetch_failed"), deals: [] };
-    } finally { clearTimeout(timer); }
+  // Use ZenRows as an independent provider for any failed ScraperAPI-backed
+  // retailer request. Do not double-spend on rate limits or timeouts, and do
+  // not retry successful HTTP pages whose product extraction is empty.
+  const finalAttemptStatus = first.responseDiagnostics?.attempts?.at(-1)?.status ?? first.status;
+  const rateLimited = finalAttemptStatus === 429 ||
+    first.responseDiagnostics?.signal === "proxy_or_retailer_rate_limit" ||
+    first.responseDiagnostics?.attempts?.at(-1)?.signal === "proxy_or_retailer_rate_limit";
+  if (!first.ok && scraperEligible && first.reason !== "timeout" && !rateLimited) {
+    const fallback = await requestWithZenRows();
+    if (fallback) return { ...fallback, fallbackFrom: first.reason || "scraperapi_failed" };
   }
   const { status, ...result } = first;
   return result;

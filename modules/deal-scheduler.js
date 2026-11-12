@@ -30,13 +30,13 @@ function selectNewsletterDeals(recent, kind) {
   const hostOf = deal => { try { return new URL(deal.url).hostname.toLowerCase(); } catch { return ""; } };
   const isOnlineStore = deal => ["www.noon.com", "noon.com", "www.carrefouregypt.com", "carrefouregypt.com"].includes(hostOf(deal));
   const isMarketStore = deal => hostOf(deal) === "snapflyer.io";
-  const isMetroStore = deal => hostOf(deal) === "shop.metro-markets.com";
+  const isMetroCarrefourStore = deal => ["shop.metro-markets.com", "www.carrefouregypt.com", "carrefouregypt.com"].includes(hostOf(deal));
   // Strict source allowlists prevent one edition from leaking into another.
   const editionPool = recent.filter(d =>
     kind === "amazon" ? isAmazon(d) :
-    kind === "online_stores" ? isOnlineStore(d) :
+    kind === "online_stores" ? isOnlineStore(d) && !["www.carrefouregypt.com", "carrefouregypt.com"].includes(hostOf(d)) :
     kind === "market_stores" ? isMarketStore(d) :
-    kind === "metro_stores" ? isMetroStore(d) : false
+    kind === "metro_stores" ? isMetroCarrefourStore(d) : false
   );
   const balanced = distributeDeals(editionPool, kind === "amazon" ? AMAZON_TARGETS : TARGETS);
   return [...balanced.detergent, ...balanced.paper, ...balanced.personal_care];
@@ -353,7 +353,7 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
         title: ({
           amazon: "عروض أمازون للمنظفات والورقيات والعناية",
           online_stores: "عروض التسوق الإلكتروني",
-          metro_stores: "عروض مترو ماركت"
+          metro_stores: "عروض مترو ماركت وكارفور"
         })[kind] || "عروض المتاجر الأخرى المختارة",
         groupIndex: null
       }];

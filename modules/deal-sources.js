@@ -279,7 +279,7 @@ function safeHttpErrorDiagnostics(response, body, keys = []) {
   const requestId = String(headers?.get?.("x-request-id") || headers?.get?.("x-amz-cf-id") || "").slice(0, 120);
   const lower = preview.toLowerCase();
   const signal = /invalid api.?key|api.?key.*(?:invalid|missing|expired)/i.test(lower) ? "proxy_auth_rejected"
-    : /insufficient.*(?:credits|subscription)|credits.*(?:exhausted|insufficient)|subscription.*(?:inactive|expired)/i.test(lower) ? "proxy_account_limit"
+    : /insufficient.*(?:credits|subscription)|credits.*(?:exhausted|insufficient)|exhausted.{0,40}credits|subscription.*(?:inactive|expired)/i.test(lower) ? "proxy_account_limit"
       : /captcha|robot check|automated access|access denied|request blocked/i.test(lower) ? "retailer_or_edge_block"
         : /rate.?limit|too many requests/i.test(lower) ? "proxy_or_retailer_rate_limit"
           : preview ? "unclassified_error_body" : "empty_error_body";

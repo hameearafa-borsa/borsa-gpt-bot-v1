@@ -417,7 +417,7 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.ok(JSON.stringify(diagnosticFailure.responseDiagnostics).includes("[REDACTED]"));
  assert.equal(diagnosticKeys.length, 2, "diagnostics must retain the existing single alternate-key retry bound");
 
- // Carrefour alone may use ZenRows after both ScraperAPI keys report exhausted credits.
+ // Amazon and Carrefour may use ZenRows after both ScraperAPI keys report exhausted credits.
  const oldZenRowsKey = process.env.ZENROWS_API_KEY;
  process.env.ZENROWS_API_KEY = "zenrows-test-secret";
  const zenRowsCalls = [];
@@ -440,6 +440,26 @@ assert.ok(compensated.detergent.length > 10 || compensated.personal_care.length 
  assert.equal(zenRowsCalls[0].searchParams.get("apikey"), "zenrows-test-secret");
  assert.equal(zenRowsCalls[0].searchParams.get("mode"), "auto");
  assert.equal(zenRowsCalls[0].searchParams.get("url"), "https://www.carrefouregypt.com/mafegy/ar/c/promo-exclusive-online-offers");
+ const amazonZenRowsCalls = [];
+ const amazonZenRowsFallback = await fetchSearch("amazon", "مسحوق غسيل", {
+   fetchImpl: async url => {
+     const endpoint = new URL(String(url));
+     if (endpoint.hostname === "api.scraperapi.com") {
+       return { ok: false, status: 403, text: async () => creditExhaustedBody };
+     }
+     amazonZenRowsCalls.push(endpoint);
+     return { ok: true, status: 200,
+       headers: { get: name => name.toLowerCase() === "zr-final-url" ? "https://www.amazon.eg/s?k=%D9%85%D8%B3%D8%AD%D9%88%D9%82+%D8%BA%D8%B3%D9%8A%D9%84" : null },
+       text: async () => amazonStructuredFixture };
+   }
+ });
+ assert.equal(amazonZenRowsFallback.ok, true, "ZenRows should recover Amazon after ScraperAPI account-credit exhaustion");
+ assert.equal(amazonZenRowsFallback.provider, "zenrows");
+ assert.equal(amazonZenRowsFallback.deals.length, 1);
+ assert.equal(amazonZenRowsCalls.length, 1, "Amazon ZenRows fallback must make exactly one bounded request");
+ assert.equal(amazonZenRowsCalls[0].searchParams.get("apikey"), "zenrows-test-secret");
+ assert.equal(amazonZenRowsCalls[0].searchParams.get("mode"), "auto");
+ assert.equal(amazonZenRowsCalls[0].searchParams.get("url"), "https://www.amazon.eg/s?k=%D9%85%D8%B3%D8%AD%D9%88%D9%82+%D8%BA%D8%B3%D9%8A%D9%84");
  const zenRowsNoFallback = await fetchSearch("noon", "detergent", {
    fetchImpl: async url => ({ ok: false, status: 403, text: async () => creditExhaustedBody })
  });

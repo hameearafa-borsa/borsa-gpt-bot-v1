@@ -30,8 +30,12 @@ assert.doesNotMatch(memberHandler[0], /authorizeChat\(/, "adding the bot must ne
 assert.doesNotMatch(memberHandler[0], /status='approved'/, "adding the bot must never mark a pending group approved");
 assert.match(source, /Number\(m\.userId\) !== MASTER_ID/, "approval command must remain restricted to the fixed master");
 assert.match(source, /await approvePendingGroup\(\{[\s\S]*?approvedBy: m\.userId/, "approval flow must invoke transactional helper");
-const groupMenuBlock = source.match(/\["groups", \[([\s\S]*?)\], \{ type: "all_group_chats" \}\]/);
-assert.ok(groupMenuBlock, "service command menu must be declared for group chats");
+assert.match(source, /const GROUP_COMMANDS = \[/, "group service commands must be declared separately");
+assert.match(source, /type: "chat_member", chat_id: chatId, user_id: userId/, "group command menus must be scoped to individual authorized users");
+assert.match(source, /installGroupOwnerCommandMenus\(chatId, creatorId\)/, "approved group creators must receive their own command menu");
+assert.match(source, /clearScope\("all_group_chats", \{ type: "all_group_chats" \}\)/, "the broad group-wide command scope must be removed");
+const groupMenuBlock = source.match(/const GROUP_COMMANDS = \[([\s\S]*?)\];/);
+assert.ok(groupMenuBlock, "owner-only group service command menu must exist");
 assert.match(groupMenuBlock[1], /command: "settings"/, "group owners must have /settings in the Telegram command menu");
 assert.match(groupMenuBlock[1], /command: "chemical"/);
 assert.match(groupMenuBlock[1], /command: "weather"/);

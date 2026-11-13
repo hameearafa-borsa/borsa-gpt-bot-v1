@@ -147,6 +147,32 @@ async function isPriceReviewer(telegram, userId) {
   return false;
 }
 
+const GROUP_COMMANDS = [
+  { command: "settings", description: "إعدادات البوت وحالة المجموعة" },
+  { command: "chemical", description: "المساعد الكيميائي" },
+  { command: "weather", description: "الطقس" },
+  { command: "pricelist", description: "قائمة أسعار الشركات" }
+];
+
+async function installGroupOwnerCommandMenus(chatId, creatorId) {
+  const owners = [...new Set([MASTER_ID, ...String(process.env.OWNER_ID || "").split(",").map(value => Number(value.trim())).filter(value => Number.isSafeInteger(value) && value > 0), Number(creatorId)])].filter(id => Number.isSafeInteger(id) && id > 0);
+  const failures = [];
+  for (const userId of owners) {
+    try {
+      if (userId !== Number(creatorId)) {
+        const member = await bot.telegram.getChatMember(chatId, userId);
+        const present = ["creator", "administrator", "member"].includes(member?.status) || (member?.status === "restricted" && member?.is_member === true);
+        if (!present) continue;
+      }
+      await bot.telegram.setMyCommands(GROUP_COMMANDS, { scope: { type: "chat_member", chat_id: chatId, user_id: userId } });
+      console.log("[COMMAND_MENU_OWNER_SCOPE] chat=" + chatId + " user=" + userId + " status=ok");
+    } catch (error) {
+      console.warn("[COMMAND_MENU_OWNER_SCOPE_FAILED] chat=" + chatId + " user=" + userId + " code=" + (error?.code || "unknown") + " message=" + redactString(error?.message || "Telegram API error"));
+      failures.push({ userId, error });
+    }
+  }
+  return failures;
+}
 async function configureCommandMenus() {
   // Old builds installed narrower scopes that override all_private_chats/all_group_chats.
   // Clear those legacy scopes first so Telegram can display the new service-only menus.
@@ -161,6 +187,7 @@ async function configureCommandMenus() {
     }
   };
   await clearScope("all_chat_administrators", { type: "all_chat_administrators" });
+  await clearScope("all_group_chats", { type: "all_group_chats" });
 
   const owners = [...new Set([MASTER_ID, ...String(process.env.OWNER_ID || "")
     .split(",").map(value => Number(value.trim())).filter(value => Number.isSafeInteger(value) && value > 0)])];
@@ -185,6 +212,7 @@ async function configureCommandMenus() {
           owners.push(creatorId);
           await clearScope(`private_chat:${creatorId}`, { type: "chat", chat_id: creatorId });
         }
+        failures.push(...(await installGroupOwnerCommandMenus(chatId, creatorId)));
       } catch (error) {
         console.warn(`[COMMAND_MENU_OWNER_DISCOVERY_FAILED] chat=${chatId} code=${error?.code || "unknown"}`);
       }
@@ -205,12 +233,6 @@ async function configureCommandMenus() {
       { command: "pricelist", description: "قائمة أسعار الشركات" },
       { command: "help", description: "مساعدة البوت" }
     ], { type: "all_private_chats" }],
-    ["groups", [
-      { command: "settings", description: "إعدادات البوت وحالة المجموعة" },
-      { command: "chemical", description: "المساعد الكيميائي" },
-      { command: "weather", description: "الطقس" },
-      { command: "pricelist", description: "قائمة أسعار الشركات" }
-    ], { type: "all_group_chats" }]
   ];
   for (const [name, commands, scope] of menus) {
     try {
@@ -248,6 +270,7 @@ async function clearLegacyCommandScopesForAddedGroup(chatId, creatorId) {
       console.warn(`[COMMAND_MENU_CLEAR_ON_GROUP_ADD_FAILED] scope=${name} code=${error?.code || "unknown"} message=${redactString(error?.message || "Telegram API error")}`);
     }
   }
+  await installGroupOwnerCommandMenus(chatId, creatorId);
 }
 
 async function ensureDb() {

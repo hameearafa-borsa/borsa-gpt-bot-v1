@@ -155,7 +155,7 @@ const GROUP_COMMANDS = [
 ];
 
 async function installGroupOwnerCommandMenus(chatId, creatorId) {
-  const owners = [...new Set([MASTER_ID, ...String(process.env.OWNER_ID || "").split(",").map(value => Number(value.trim())).filter(value => Number.isSafeInteger(value) && value > 0), Number(creatorId)])].filter(id => Number.isSafeInteger(id) && id > 0);
+  const owners = [...new Set([MASTER_ID, Number(creatorId)])].filter(id => Number.isSafeInteger(id) && id > 0);
   const failures = [];
   for (const userId of owners) {
     try {
@@ -203,7 +203,7 @@ async function configureCommandMenus() {
 
   // Clear per-chat and per-chat-administrator overrides left by older builds.
   try {
-    const groups = await db.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE");
+    const groups = await db.query("SELECT chat_id, active FROM authorized_chats");
     for (const row of groups.rows || []) {
       const chatId = Number(row.chat_id);
       if (!Number.isSafeInteger(chatId) || chatId >= 0) continue;

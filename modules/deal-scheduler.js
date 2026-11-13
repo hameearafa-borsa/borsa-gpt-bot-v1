@@ -20,6 +20,9 @@ function newsletterKindAt(date = new Date()) {
   return null;
 }
 function isNewsletterWindow(date = new Date()) { return newsletterKindAt(date) !== null; }
+function hasArabicProductTitle(deal) {
+  return /[\u0600-\u06FF]/.test(String(deal?.title || ""));
+}
 function selectNewsletterDeals(recent, kind) {
   const isAmazon = d => {
     try {
@@ -33,7 +36,7 @@ function selectNewsletterDeals(recent, kind) {
   const isMetroCarrefourStore = deal => ["shop.metro-markets.com", "www.carrefouregypt.com", "carrefouregypt.com"].includes(hostOf(deal));
   // Strict source allowlists prevent one edition from leaking into another.
   const editionPool = recent.filter(d =>
-    kind === "amazon" ? isAmazon(d) :
+    kind === "amazon" ? isAmazon(d) && hasArabicProductTitle(d) :
     kind === "online_stores" ? isOnlineStore(d) && !["www.carrefouregypt.com", "carrefouregypt.com"].includes(hostOf(d)) :
     kind === "market_stores" ? isMarketStore(d) :
     kind === "metro_stores" ? isMetroCarrefourStore(d) : false
@@ -377,6 +380,10 @@ async function publishDailyDeals({ pool, telegram, chatId, chatIds, fetcher = co
   await emitDiagnostics({
     ...diagnosticsBase, stage: "filtered", verifiedCount: verified.length,
     recentCount: recent.length, selectedCount: allSelectedItems.length,
+    ...(kind === "amazon" ? {
+      amazonArabicTitleCount: recent.filter(hasArabicProductTitle).length,
+      amazonNonArabicTitleCount: recent.filter(deal => !hasArabicProductTitle(deal)).length
+    } : {}),
     selectedByMerchant: Object.fromEntries([...new Set(allSelectedItems.map(item => String(item.merchant || "unknown")))].map(merchant => [merchant, allSelectedItems.filter(item => String(item.merchant || "unknown") === merchant).length])),
     ...(kind === "market_stores" ? {
       marketStoreGroups: editionPlans.map(plan => ({

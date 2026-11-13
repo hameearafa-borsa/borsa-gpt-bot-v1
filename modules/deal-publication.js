@@ -78,6 +78,17 @@ function cleanAmazonProductUrl(value) {
     return original;
   }
 }
+function isAmazonProductUrl(value) {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return parsed.protocol === "https:" &&
+      ["amazon.eg", "www.amazon.eg"].includes(parsed.hostname.toLowerCase()) &&
+      (!parsed.port || parsed.port === "443") &&
+      /\\/dp\\/[a-z0-9]{10}(?:[/?]|$)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
 function formatNewsletterMessage(deals, title, maxLength = 3900) {
   const safeTitle = escapeHtml(String(title || "عروض بورصة المنظفات").slice(0, 120));
   const header = [`🛍️ ${safeTitle}`, "بورصة المنظفات لأصحاب المحلات", ""];
@@ -90,7 +101,10 @@ function formatNewsletterMessage(deals, title, maxLength = 3900) {
     if (d.merchant) block.push(`🏪 المتجر: ${escapeHtml(String(d.merchant).slice(0, 80))}`);
     block.push(`💰 السعر: ${Number(d.price).toFixed(2)} جنيه`);
     if (Number(d.old_price) > Number(d.price)) block.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه`);
-    if (d.url) block.push(`🔗 <a href="${escapeHtml(cleanAmazonProductUrl(d.url))}">فتح العرض</a>`);
+    if (d.url) {
+      if (isAmazonProductUrl(d.url)) block.push(`🔗 فتح العرض: ${escapeHtml(cleanAmazonProductUrl(d.url))}`);
+      else block.push(`🔗 <a href="${escapeHtml(d.url)}">فتح العرض</a>`);
+    }
     const candidate = render([...blocks, block]);
     if (candidate.length > maxLength) continue;
     blocks.push(block);
@@ -101,4 +115,4 @@ function formatNewsletterMessage(deals, title, maxLength = 3900) {
 function buildNewsletter(deals, title) {
   return formatNewsletterMessage(deals, title).text;
 }
-module.exports = { TARGETS, AMAZON_TARGETS, scoreDeal, rankDeals, distributeDeals, filterRecentDeals, formatNewsletterMessage, buildNewsletter, cleanAmazonProductUrl };
+module.exports = { TARGETS, AMAZON_TARGETS, scoreDeal, rankDeals, distributeDeals, filterRecentDeals, formatNewsletterMessage, buildNewsletter, cleanAmazonProductUrl, isAmazonProductUrl };

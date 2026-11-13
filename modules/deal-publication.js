@@ -84,7 +84,7 @@ function isAmazonProductUrl(value) {
     return parsed.protocol === "https:" &&
       ["amazon.eg", "www.amazon.eg"].includes(parsed.hostname.toLowerCase()) &&
       (!parsed.port || parsed.port === "443") &&
-      /\\/dp\\/[a-z0-9]{10}(?:[/?]|$)/i.test(parsed.pathname);
+      /\/dp\/[a-z0-9]{10}(?:[/?]|$)/i.test(parsed.pathname);
   } catch {
     return false;
   }

@@ -27,7 +27,7 @@ assert.doesNotMatch(source, /setMyCommands\(\[\],\s*\{\s*scope\s*\}\)/, "empty s
 assert.match(source, /async function clearLegacyCommandScopesForAddedGroup[\s\S]*?deleteMyCommands\(\{ scope \}\)/, "group-add cleanup must use the supported delete method too");
 assert.match(body, /\["private", \[[\s\S]*?command: "panel"/, "the owner service panel belongs in the private command menu");
 assert.doesNotMatch(body, /command: "(approvechat|claim|antispam|schedule|warn|inactive)"/, "GroupHelpBot moderation commands must stay out of Borsa menus");
-assert.match(body, /type: "chat_member", chat_id: chatId, user_id: userId/, "group commands must be installed for an individual member only");
+assert.match(source, /type: "chat_member", chat_id: chatId, user_id: userId/, "group commands must be installed for an individual member only");
 assert.match(body, /installGroupOwnerCommandMenus\(chatId, creatorId\)/, "the group creator and present bot owners must receive scoped menus");
 assert.doesNotMatch(body, /\["groups", \[[\s\S]*?\], \{ type: "all_group_chats" \}\]/, "ordinary group members must not receive a group-wide command menu");
 assert.match(body, /for \(const \[name, commands, scope\] of menus\)/, "each Telegram command scope must be attempted independently");

@@ -276,8 +276,12 @@ async function clearLegacyCommandScopesForAddedGroup(chatId, creatorId) {
     }
   }
   if (db.pool) {
-    const authorization = await db.query("SELECT active FROM authorized_chats WHERE chat_id=$1", [chatId]);
-    if (authorization.rows[0]?.active === true) await installGroupOwnerCommandMenus(chatId, creatorId);
+    try {
+      const authorization = await db.query("SELECT active FROM authorized_chats WHERE chat_id=$1", [chatId]);
+      if (authorization.rows[0]?.active === true) await installGroupOwnerCommandMenus(chatId, creatorId);
+    } catch (error) {
+      console.warn("[COMMAND_MENU_OWNER_SCOPE_FAILED] chat=" + chatId + " code=" + (error?.code || "unknown") + " message=" + redactString(error?.message || "group authorization lookup failed"));
+    }
   }
 }
 

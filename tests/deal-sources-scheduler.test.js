@@ -2,7 +2,7 @@
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, createExtractionCounters, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
 const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, selectMarketStoreGroups, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, publishDailyDeals } = require("../modules/deal-scheduler");
-const { formatNewsletterMessage, distributeDeals, AMAZON_TARGETS } = require("../modules/deal-publication");
+const { formatNewsletterMessage, distributeDeals, AMAZON_TARGETS, cleanAmazonProductUrl, isAmazonProductUrl } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
 assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), null);
@@ -216,9 +216,36 @@ assert.equal(formattedNewsletter.items.length, 1, "only complete product blocks 
 assert.ok(formattedNewsletter.text.length <= 300, "newsletter must remain under the Telegram message limit");
 assert.ok(formattedNewsletter.text.includes('<a href="https://www.amazon.eg/dp/B0ABCDEF12">فتح العرض</a>'),
   "the full URL should be retained as a hidden Telegram link, not displayed as a long line");
-assert.ok(!formattedNewsletter.text.includes("https://www.amazon.eg/dp/B0ABCDEF12\\n"),
-  "the product URL must not appear as visible newsletter text");
+assert.ok(formattedNewsletter.text.includes("</a>\nhttps://www.amazon.eg/dp/B0ABCDEF12"),
+  "the clean Amazon URL should appear visibly below its clickable Telegram link");
 assert.ok(!formattedNewsletter.text.includes("x".repeat(100)), "an oversized URL must not be partially published");
+assert.equal(cleanAmazonProductUrl("https://www.amazon.eg/-/en/Bahi-Lavender-Scented-Washing-Powder/dp/B0CMM2C1CY/ref=sr_1_17"),
+  "https://www.amazon.eg/dp/B0CMM2C1CY",
+  "Amazon.eg product links should be reduced to the canonical ASIN URL");
+assert.equal(cleanAmazonProductUrl("https://www.amazon.eg/dp/B0CMM2C1CY?ref=sr_1_17&tag=borsa-20"),
+  "https://www.amazon.eg/dp/B0CMM2C1CY?tag=borsa-20",
+  "Amazon cleanup must retain affiliate attribution when present");
+assert.equal(cleanAmazonProductUrl("https://www.noon.com/egypt-ar/product/N1234567?ref=tracking"),
+  "https://www.noon.com/egypt-ar/product/N1234567?ref=tracking",
+  "non-Amazon retailer links must remain unchanged");
+assert.equal(cleanAmazonProductUrl("https://www.amazon.eg/"),
+  "https://www.amazon.eg/",
+  "Amazon URLs without a valid product ASIN must remain unchanged");
+const cleanLinkNewsletter = formatNewsletterMessage([
+  { title: "باور لافندر", merchant: "Amazon.eg", price: 425,
+    url: "https://www.amazon.eg/-/en/Bahi-Lavender-Scented-Washing-Powder/dp/B0CMM2C1CY/ref=sr_1_17" },
+  { title: "عرض متجر آخر", merchant: "Noon", price: 100,
+    url: "https://www.noon.com/egypt-ar/product/N1234567?ref=tracking" }
+], "اختبار الروابط");
+assert.ok(cleanLinkNewsletter.text.includes('<a href="https://www.amazon.eg/dp/B0CMM2C1CY">فتح العرض</a>'),
+  "Amazon offers should keep the clickable Telegram link");
+assert.ok(cleanLinkNewsletter.text.includes("</a>\nhttps://www.amazon.eg/dp/B0CMM2C1CY"),
+  "Amazon offers should expose the clean URL below the clickable link for Facebook copy/paste");
+assert.equal(isAmazonProductUrl("https://www.amazon.eg/-/en/item/dp/B0CMM2C1CY/ref=sr_1_17"), true);
+assert.equal(isAmazonProductUrl("https://www.noon.com/dp/B0CMM2C1CY"), false);
+assert.ok(cleanLinkNewsletter.text.includes('<a href="https://www.noon.com/egypt-ar/product/N1234567?ref=tracking">فتح العرض</a>'),
+  "other-store Telegram links must be preserved exactly");
+
 const sampleDate = new Date("2026-10-12T09:30:00.000Z");
 assert.equal(batchKey(sampleDate),"2026-10-12");
 assert.equal(newsletterKindAt(new Date("2026-10-12T09:29:00.000Z")),null); // 12:29 Cairo

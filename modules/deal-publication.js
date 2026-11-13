@@ -58,6 +58,37 @@ function escapeHtml(value) {
   return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;")
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+function cleanAmazonProductUrl(value) {
+  const original = String(value || "").trim();
+  try {
+    const parsed = new URL(original);
+    const host = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== "https:" || !["amazon.eg", "www.amazon.eg"].includes(host) ||
+        (parsed.port && parsed.port !== "443")) return original;
+    const match = parsed.pathname.match(/\/dp\/([a-z0-9]{10})(?:[/?]|$)/i);
+    if (!match) return original;
+    const clean = new URL("https://www.amazon.eg/dp/" + match[1].toUpperCase());
+    // Keep attribution parameters if they are ever introduced; discard search/ref tracking noise.
+    for (const key of ["tag", "linkCode", "camp", "creative", "creativeASIN", "ascsubtag"]) {
+      const value = parsed.searchParams.get(key);
+      if (value) clean.searchParams.set(key, value);
+    }
+    return clean.href;
+  } catch {
+    return original;
+  }
+}
+function isAmazonProductUrl(value) {
+  try {
+    const parsed = new URL(String(value || "").trim());
+    return parsed.protocol === "https:" &&
+      ["amazon.eg", "www.amazon.eg"].includes(parsed.hostname.toLowerCase()) &&
+      (!parsed.port || parsed.port === "443") &&
+      /\/dp\/[a-z0-9]{10}(?:[/?]|$)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
 function formatNewsletterMessage(deals, title, maxLength = 3900) {
   const safeTitle = escapeHtml(String(title || "عروض بورصة المنظفات").slice(0, 120));
   const header = [`🛍️ ${safeTitle}`, "بورصة المنظفات لأصحاب المحلات", ""];
@@ -70,7 +101,15 @@ function formatNewsletterMessage(deals, title, maxLength = 3900) {
     if (d.merchant) block.push(`🏪 المتجر: ${escapeHtml(String(d.merchant).slice(0, 80))}`);
     block.push(`💰 السعر: ${Number(d.price).toFixed(2)} جنيه`);
     if (Number(d.old_price) > Number(d.price)) block.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه`);
-    if (d.url) block.push(`🔗 <a href="${escapeHtml(d.url)}">فتح العرض</a>`);
+    if (d.url) {
+      if (isAmazonProductUrl(d.url)) {
+        const cleanUrl = escapeHtml(cleanAmazonProductUrl(d.url));
+        block.push(`🔗 <a href="${cleanUrl}">فتح العرض</a>`);
+        block.push(cleanUrl);
+      } else {
+        block.push(`🔗 <a href="${escapeHtml(d.url)}">فتح العرض</a>`);
+      }
+    }
     const candidate = render([...blocks, block]);
     if (candidate.length > maxLength) continue;
     blocks.push(block);
@@ -81,4 +120,4 @@ function formatNewsletterMessage(deals, title, maxLength = 3900) {
 function buildNewsletter(deals, title) {
   return formatNewsletterMessage(deals, title).text;
 }
-module.exports = { TARGETS, AMAZON_TARGETS, scoreDeal, rankDeals, distributeDeals, filterRecentDeals, formatNewsletterMessage, buildNewsletter };
+module.exports = { TARGETS, AMAZON_TARGETS, scoreDeal, rankDeals, distributeDeals, filterRecentDeals, formatNewsletterMessage, buildNewsletter, cleanAmazonProductUrl, isAmazonProductUrl };

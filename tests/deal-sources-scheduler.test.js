@@ -216,7 +216,7 @@ assert.equal(formattedNewsletter.items.length, 1, "only complete product blocks 
 assert.ok(formattedNewsletter.text.length <= 300, "newsletter must remain under the Telegram message limit");
 assert.ok(formattedNewsletter.text.includes('<a href="https://www.amazon.eg/dp/B0ABCDEF12">فتح العرض</a>'),
   "the full URL should be retained as a hidden Telegram link, not displayed as a long line");
-assert.ok(formattedNewsletter.text.includes("</a>\\nhttps://www.amazon.eg/dp/B0ABCDEF12"),
+assert.ok(formattedNewsletter.text.includes("</a>\nhttps://www.amazon.eg/dp/B0ABCDEF12"),
   "the clean Amazon URL should appear visibly below its clickable Telegram link");
 assert.ok(!formattedNewsletter.text.includes("x".repeat(100)), "an oversized URL must not be partially published");
 assert.equal(cleanAmazonProductUrl("https://www.amazon.eg/-/en/Bahi-Lavender-Scented-Washing-Powder/dp/B0CMM2C1CY/ref=sr_1_17"),
@@ -239,7 +239,7 @@ const cleanLinkNewsletter = formatNewsletterMessage([
 ], "اختبار الروابط");
 assert.ok(cleanLinkNewsletter.text.includes('<a href="https://www.amazon.eg/dp/B0CMM2C1CY">فتح العرض</a>'),
   "Amazon offers should keep the clickable Telegram link");
-assert.ok(cleanLinkNewsletter.text.includes("</a>\\nhttps://www.amazon.eg/dp/B0CMM2C1CY"),
+assert.ok(cleanLinkNewsletter.text.includes("</a>\nhttps://www.amazon.eg/dp/B0CMM2C1CY"),
   "Amazon offers should expose the clean URL below the clickable link for Facebook copy/paste");
 assert.equal(isAmazonProductUrl("https://www.amazon.eg/-/en/item/dp/B0CMM2C1CY/ref=sr_1_17"), true);
 assert.equal(isAmazonProductUrl("https://www.noon.com/dp/B0CMM2C1CY"), false);

@@ -134,7 +134,7 @@ async function isPriceReviewer(telegram, userId) {
   if (isMaster(userId) || isReviewOperator(userId) || ADDITIONAL_PRICE_REVIEWER_IDS.has(Number(userId))) return true;
   if (!db.pool || !telegram || !userId) return false;
   try {
-    const groups = await db.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE");
+    const groups = await db.query("SELECT chat_id, active FROM authorized_chats");
     // Check active group creators concurrently. Serial Telegram admin lookups can
     // outlive Telegram's callback spinner and make review buttons appear unresponsive.
     const ownerChecks = await Promise.all((groups.rows || []).map(row =>
@@ -217,7 +217,7 @@ async function configureCommandMenus() {
           owners.push(creatorId);
           await clearScope(`private_chat:${creatorId}`, { type: "chat", chat_id: creatorId });
         }
-        failures.push(...(await installGroupOwnerCommandMenus(chatId, creatorId)));
+        if (row.active === true) failures.push(...(await installGroupOwnerCommandMenus(chatId, creatorId)));
       } catch (error) {
         console.warn(`[COMMAND_MENU_OWNER_DISCOVERY_FAILED] chat=${chatId} code=${error?.code || "unknown"}`);
       }

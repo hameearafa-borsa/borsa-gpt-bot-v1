@@ -102,7 +102,11 @@ function formatNewsletterMessage(deals, title, maxLength = 3900) {
     block.push(`💰 السعر: ${Number(d.price).toFixed(2)} جنيه`);
     if (Number(d.old_price) > Number(d.price)) block.push(`قبل الخصم: ${Number(d.old_price).toFixed(2)} جنيه`);
     if (d.url) {
-      if (isAmazonProductUrl(d.url)) block.push(`🔗 فتح العرض: ${escapeHtml(cleanAmazonProductUrl(d.url))}`);
+      if (isAmazonProductUrl(d.url)) {
+              const cleanUrl = escapeHtml(cleanAmazonProductUrl(d.url));
+              block.push(`🔗 <a href="${cleanUrl}">فتح العرض</a>`);
+              block.push(cleanUrl);
+            }
       else block.push(`🔗 <a href="${escapeHtml(d.url)}">فتح العرض</a>`);
     }
     const candidate = render([...blocks, block]);

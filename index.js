@@ -275,7 +275,10 @@ async function clearLegacyCommandScopesForAddedGroup(chatId, creatorId) {
       console.warn(`[COMMAND_MENU_CLEAR_ON_GROUP_ADD_FAILED] scope=${name} code=${error?.code || "unknown"} message=${redactString(error?.message || "Telegram API error")}`);
     }
   }
-  await installGroupOwnerCommandMenus(chatId, creatorId);
+  if (db.pool) {
+    const authorization = await db.query("SELECT active FROM authorized_chats WHERE chat_id=$1", [chatId]);
+    if (authorization.rows[0]?.active === true) await installGroupOwnerCommandMenus(chatId, creatorId);
+  }
 }
 
 async function ensureDb() {

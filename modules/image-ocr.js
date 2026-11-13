@@ -1,7 +1,6 @@
 "use strict";
 
 const { spawn } = require("node:child_process");
-const sharp = require("sharp");
 
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
 const MAX_TEXT_CHARS = 30000;
@@ -18,6 +17,7 @@ function normalizeOcrText(value) {
 }
 
 async function preprocessImage(input) {
+  const sharp = require("sharp");
   return sharp(input, { limitInputPixels: 40000000 })
     .rotate()
     .resize({ width: 2400, withoutEnlargement: true })

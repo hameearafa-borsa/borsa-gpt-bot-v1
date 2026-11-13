@@ -2,9 +2,7 @@
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const sharp = require("sharp");
 const { deterministicList, parseListMetadata } = require("../modules/price-list");
-const { renderPriceListImages } = require("../modules/price-list-image");
 
 (async () => {
   const fixture = [
@@ -36,6 +34,18 @@ const { renderPriceListImages } = require("../modules/price-list-image");
   assert.equal(rows[0].weight_g, 60);
   assert.equal(rows[0].package_label, "60 جم · 48 قطعة");
   assert.equal(rows[7].package_label, "2 كجم · 300 جم · 4 قطعة");
+
+  const isTermuxOrAndroid =
+    process.platform === "android" ||
+    /(^|\/)com\.termux(\/|$)/i.test(String(process.env.PREFIX || ""));
+
+  if (isTermuxOrAndroid) {
+    console.log("Bahey parser tests: OK (8 accepted rows). Real PNG rendering skipped on Termux.");
+    return;
+  }
+
+  const sharp = require("sharp");
+  const { renderPriceListImages } = require("../modules/price-list-image");
 
   const logoPath = path.join(__dirname, "..", "1793300250521.jpg");
   assert.ok(fs.existsSync(logoPath), "the main-branch Borsa logo must exist for real rendering");

@@ -8,7 +8,7 @@ for (const file of tests) {
   // Native sharp rasterization is tested on supported CI/server platforms, not Termux/Android.
   // Keep parser, validation, and SVG-content tests enabled in Termux.
   if (file === "price-list-image-real.test.js" && isTermuxOrAndroid) {
-    console.log("SKIP price-list-image-real.test.js: native PNG rasterization is not a Termux/Android release gate; run it on a supported Node server/CI platform.");
+    console.log(`SKIP ${file}: native PNG rasterization requires a supported Node server/CI platform.`);
     continue;
   }
   const r = spawnSync(process.execPath, [path.join(__dirname, file)], { encoding: "utf8" });

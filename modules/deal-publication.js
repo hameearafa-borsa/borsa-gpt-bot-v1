@@ -65,7 +65,7 @@ function cleanAmazonProductUrl(value) {
     const host = parsed.hostname.toLowerCase();
     if (parsed.protocol !== "https:" || !["amazon.eg", "www.amazon.eg"].includes(host) ||
         (parsed.port && parsed.port !== "443")) return original;
-    const match = parsed.pathname.match(/\\/dp\\/([a-z0-9]{10})(?:[/?]|$)/i);
+    const match = parsed.pathname.match(/\/dp\/([a-z0-9]{10})(?:[/?]|$)/i);
     if (!match) return original;
     const clean = new URL("https://www.amazon.eg/dp/" + match[1].toUpperCase());
     // Keep attribution parameters if they are ever introduced; discard search/ref tracking noise.

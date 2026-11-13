@@ -2,7 +2,7 @@
 const assert = require("node:assert/strict");
 const { safeProductUrl, categoryOf, extractCards, extractionDiagnostics, createExtractionCounters, fetchSearch, collectDealCandidates, getScraperKeys } = require("../modules/deal-sources");
 const { verifyProductUrl, verifyDeals, batchKey, newsletterKindAt, isNewsletterWindow, selectNewsletterDeals, selectMarketStoreGroups, cairoParts, shouldBackoffAfterDealAttempt, shouldResetDealBackoff, publishDailyDeals } = require("../modules/deal-scheduler");
-const { formatNewsletterMessage, distributeDeals, AMAZON_TARGETS, cleanAmazonProductUrl } = require("../modules/deal-publication");
+const { formatNewsletterMessage, distributeDeals, AMAZON_TARGETS, cleanAmazonProductUrl, isAmazonProductUrl } = require("../modules/deal-publication");
 assert.equal(safeProductUrl("/dp/B0ABCDEF12?tag=tracking", "amazon"), "https://www.amazon.eg/dp/B0ABCDEF12");
 assert.equal(safeProductUrl("https://evil.example/product", "amazon"), null);
 assert.equal(safeProductUrl("http://www.amazon.eg/dp/B0ABCDEF12", "amazon"), null);
@@ -237,8 +237,12 @@ const cleanLinkNewsletter = formatNewsletterMessage([
   { title: "عرض متجر آخر", merchant: "Noon", price: 100,
     url: "https://www.noon.com/egypt-ar/product/N1234567?ref=tracking" }
 ], "اختبار الروابط");
-assert.ok(cleanLinkNewsletter.text.includes('<a href="https://www.amazon.eg/dp/B0CMM2C1CY">فتح العرض</a>'),
-  "Amazon Telegram links should use the short canonical product URL");
+assert.ok(cleanLinkNewsletter.text.includes("🔗 فتح العرض: https://www.amazon.eg/dp/B0CMM2C1CY"),
+  "Amazon offers should expose the compact URL as visible text so it survives copy/paste into Facebook");
+assert.ok(!cleanLinkNewsletter.text.includes('<a href="https://www.amazon.eg/dp/B0CMM2C1CY">'),
+  "Amazon link must not remain hidden behind anchor text when cross-posting");
+assert.equal(isAmazonProductUrl("https://www.amazon.eg/-/en/item/dp/B0CMM2C1CY/ref=sr_1_17"), true);
+assert.equal(isAmazonProductUrl("https://www.noon.com/dp/B0CMM2C1CY"), false);
 assert.ok(cleanLinkNewsletter.text.includes('<a href="https://www.noon.com/egypt-ar/product/N1234567?ref=tracking">فتح العرض</a>'),
   "other-store Telegram links must be preserved exactly");
 

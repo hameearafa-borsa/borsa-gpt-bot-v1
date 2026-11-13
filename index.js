@@ -160,7 +160,12 @@ async function installGroupOwnerCommandMenus(chatId, creatorId) {
   for (const userId of owners) {
     try {
       if (userId !== Number(creatorId)) {
-        const member = await bot.telegram.getChatMember(chatId, userId);
+        let member;
+        try { member = await bot.telegram.getChatMember(chatId, userId); }
+        catch (error) {
+          console.log("[COMMAND_MENU_OWNER_SCOPE] chat=" + chatId + " user=" + userId + " status=skipped_member_lookup");
+          continue;
+        }
         const present = ["creator", "administrator", "member"].includes(member?.status) || (member?.status === "restricted" && member?.is_member === true);
         if (!present) continue;
       }
@@ -198,7 +203,7 @@ async function configureCommandMenus() {
 
   // Clear per-chat and per-chat-administrator overrides left by older builds.
   try {
-    const groups = await db.query("SELECT chat_id FROM authorized_chats");
+    const groups = await db.query("SELECT chat_id FROM authorized_chats WHERE active=TRUE");
     for (const row of groups.rows || []) {
       const chatId = Number(row.chat_id);
       if (!Number.isSafeInteger(chatId) || chatId >= 0) continue;

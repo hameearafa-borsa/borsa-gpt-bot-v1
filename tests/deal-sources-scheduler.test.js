@@ -234,11 +234,17 @@ assert.equal(newsletterKindAt(new Date("2026-10-12T13:45:00.000Z")),null);
 assert.equal(isNewsletterWindow(new Date("2026-10-12T09:30:00.000Z")),true);
 const makeDeals = (host, prefix) => ["detergent","paper","personal_care"].flatMap(category =>
   Array.from({length: 12}, (_,i) => ({
-    merchant: prefix, title: `${prefix} ${category} product ${i}`,
+    merchant: prefix, title: `${prefix} ${category} منتج ${i}`,
     url: `https://${host}/product-${category}-${i}`, price: 10+i,
     old_price: 15+i, discount_pct: 20, category
   }))
 );
+const amazonArabicLanguageCheck = selectNewsletterDeals([
+  { merchant: "Amazon.eg", title: "Persil laundry detergent 3 kg", category: "detergent", price: 175, url: "https://www.amazon.eg/dp/B0ENGLISH01" },
+  { merchant: "Amazon.eg", title: "مسحوق برسيل للغسالات 3 كيلو", category: "detergent", price: 175, url: "https://www.amazon.eg/dp/B0ARABIC001" }
+], "amazon");
+assert.equal(amazonArabicLanguageCheck.length, 1, "Amazon newsletter must publish only original Arabic product titles, never English-only titles");
+assert.equal(amazonArabicLanguageCheck[0].title, "مسحوق برسيل للغسالات 3 كيلو");
 const editionAmazon = selectNewsletterDeals([...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia")], "amazon");
 const editionOnline = selectNewsletterDeals([
   ...makeDeals("www.amazon.eg","Amazon"), ...makeDeals("www.jumia.com.eg","Jumia"),

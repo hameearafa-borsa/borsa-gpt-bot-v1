@@ -19,7 +19,7 @@ assert.match(body, /clearScope\("all_group_chats"/, "the broad group-wide scope 
 assert.match(body, /all_chat_administrators/, "legacy all-admin command scope must be cleared so it cannot override the group menu");
 assert.match(body, /type: "chat_administrators"/, "legacy per-group administrator command scopes must be cleared");
 assert.match(body, /private_chat:\$\{userId\}.*type: "chat"/, "legacy private-chat command overrides must be cleared with a valid Telegram scope");
-assert.match(body, /SELECT chat_id FROM authorized_chats/, "legacy per-chat command overrides must be discovered from configured groups");
+assert.match(body, /SELECT chat_id, active FROM authorized_chats/, "legacy per-chat command overrides must be discovered from configured groups");
 assert.match(body, /getChatAdministrators\(chatId\)/, "group owners must be discovered so their stale private menu overrides can be cleared");
 assert.match(body, /COMMAND_MENU_CLEAR\]/, "scope cleanup should be visible in startup logs");
 assert.match(body, /deleteMyCommands\(\{ scope \}\)/, "legacy command scopes must be deleted with Telegram deleteMyCommands, not setMyCommands with an empty list");
